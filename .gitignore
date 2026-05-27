@@ -1,0 +1,50 @@
+cat > .gitignore << 'EOF'
+# === Dependencies ===
+node_modules/
+
+# === Build Output ===
+dist/
+dist-ssr/
+build/
+
+# === Tauri ===
+src-tauri/target/
+src-tauri/gen/
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs ===
+*.log
+npm-debug.log*
+
+# === Rust ===
+*.rs.bk
+*.pdb
+
+# === Test/Coverage ===
+coverage/
+.nyc_output/
+
+# === Local Config ===
+*.local
+EOF
+
+# === Coding IDE ===
+.vscode/
+.claude/
+.codex/

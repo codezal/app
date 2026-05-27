@@ -1,0 +1,73 @@
+// Workspace altındaki tüm dosyaları sığ recursive tara — komut paleti için.
+// Bounded: max derinlik + max sayı. node_modules/.git vs. atlanır.
+import { readDir } from "@tauri-apps/plugin-fs"
+
+export type DirEntry = {
+  name: string
+  path: string // absolute
+  rel: string // workspace'a göre relative (alt klasör/dosya.ts)
+  isDir: boolean
+}
+
+const IGNORE = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+  "out",
+  ".turbo",
+  ".cache",
+  "coverage",
+  "target",
+  ".DS_Store",
+  ".venv",
+  "__pycache__",
+  ".idea",
+  ".vscode",
+  "vendor",
+])
+
+const MAX_DEPTH = 6
+const DEFAULT_MAX = 1000
+
+// Workspace altını flat liste olarak döndür (dosya + klasör birlikte).
+export async function listDirShallow(
+  root: string,
+  max: number = DEFAULT_MAX,
+): Promise<DirEntry[]> {
+  const out: DirEntry[] = []
+  await walk(root, root, 0, out, max)
+  out.sort((a, b) => a.rel.localeCompare(b.rel))
+  return out
+}
+
+async function walk(
+  root: string,
+  cur: string,
+  depth: number,
+  out: DirEntry[],
+  max: number,
+): Promise<void> {
+  if (depth > MAX_DEPTH) return
+  if (out.length >= max) return
+  let entries
+  try {
+    entries = await readDir(cur)
+  } catch {
+    return
+  }
+  for (const e of entries) {
+    if (out.length >= max) return
+    if (IGNORE.has(e.name)) continue
+    if (e.name.startsWith(".") && e.name !== ".env.example") continue
+    const abs = cur.replace(/[\\/]+$/, "") + "/" + e.name
+    const rel = abs.startsWith(root)
+      ? abs.slice(root.length).replace(/^[\\/]+/, "")
+      : abs
+    out.push({ name: e.name, path: abs, rel, isDir: !!e.isDirectory })
+    if (e.isDirectory) {
+      await walk(root, abs, depth + 1, out, max)
+    }
+  }
+}

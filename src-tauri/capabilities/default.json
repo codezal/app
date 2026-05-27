@@ -1,0 +1,72 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Codezal default izinleri",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-set-webview-zoom",
+    "core:event:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "opener:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-app-read",
+    "fs:allow-app-write",
+    "fs:allow-app-write-recursive",
+    "fs:allow-app-meta",
+    "fs:allow-app-meta-recursive",
+    "fs:allow-mkdir",
+    "fs:allow-read-dir",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-exists",
+    "fs:allow-remove",
+    "shell:default",
+    "shell:allow-execute",
+    "shell:allow-spawn",
+    "shell:allow-kill",
+    "shell:allow-stdin-write",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCONFIG/**" },
+        { "path": "$HOME/**" }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "bash",
+          "cmd": "bash",
+          "args": ["-lc", { "validator": ".*" }]
+        },
+        {
+          "name": "sh",
+          "cmd": "sh",
+          "args": ["-lc", { "validator": ".*" }]
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "bash",
+          "cmd": "bash",
+          "args": ["-lc", { "validator": ".*" }]
+        },
+        {
+          "name": "sh",
+          "cmd": "sh",
+          "args": ["-lc", { "validator": ".*" }]
+        }
+      ]
+    }
+  ]
+}

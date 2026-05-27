@@ -1,0 +1,180 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Codezal Klasik · Açık tema (amber accent) */
+  :root {
+    --background: 50 14% 96%;
+    --foreground: 36 16% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 36 16% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 36 16% 8%;
+
+    --primary: 35 79% 43%;
+    --primary-foreground: 34 50% 8%;
+
+    --secondary: 48 20% 92%;
+    --secondary-foreground: 36 16% 16%;
+
+    --muted: 48 18% 90%;
+    --muted-foreground: 36 8% 38%;
+
+    --accent: 35 79% 43%;
+    --accent-foreground: 34 50% 8%;
+
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 36 14% 88%;
+    --input: 36 14% 88%;
+    --ring: 35 79% 43%;
+    --radius: 0.5rem;
+
+    /* Codezal özel renkler */
+    --codezal-bg: 50 14% 96%;
+    --codezal-sidebar: 48 24% 93%;
+    --codezal-panel: 0 0% 100%;
+    --codezal-panel-2: 48 22% 92%;
+    --codezal-title-bar: 48 17% 92%;
+    --codezal-input: 0 0% 100%;
+    --codezal-chip: 48 20% 88%;
+    --codezal-code-bg: 0 0% 100%;
+    --codezal-code-chip: 40 18% 92%;
+    --codezal-text: 36 16% 8%;
+    --codezal-text-dim: 36 10% 32%;
+    --codezal-text-mute: 36 6% 52%;
+    --codezal-border: 36 14% 82%;
+    --codezal-hairline: 36 14% 88%;
+    --codezal-accent: 35 79% 43%;
+    --codezal-accent-dim: 35 79% 43%;
+    --codezal-ok: 160 55% 35%;
+    --codezal-diff-add: 160 55% 35%;
+    --codezal-diff-del: 0 50% 50%;
+
+    /* Çizgi/hairline RGB parts (rgb(... / alpha) için) */
+    --codezal-line-rgb: 20 18 12;
+  }
+
+  /* Codezal Klasik · Koyu tema */
+  .dark {
+    --background: 240 7% 6%;
+    --foreground: 0 0% 92%;
+
+    --card: 240 7% 8%;
+    --card-foreground: 0 0% 92%;
+
+    --popover: 240 7% 8%;
+    --popover-foreground: 0 0% 92%;
+
+    --primary: 38 89% 62%;
+    --primary-foreground: 34 50% 8%;
+
+    --secondary: 240 6% 12%;
+    --secondary-foreground: 0 0% 92%;
+
+    --muted: 240 6% 11%;
+    --muted-foreground: 240 4% 55%;
+
+    --accent: 38 89% 62%;
+    --accent-foreground: 34 50% 8%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 6% 14%;
+    --input: 240 6% 14%;
+    --ring: 38 89% 62%;
+
+    --codezal-bg: 240 7% 6%;
+    --codezal-sidebar: 240 9% 4%;
+    --codezal-panel: 240 6% 9%;
+    --codezal-panel-2: 240 6% 11%;
+    --codezal-title-bar: 240 8% 5%;
+    --codezal-input: 240 6% 9%;
+    --codezal-chip: 240 5% 14%;
+    --codezal-code-bg: 240 8% 9%;
+    --codezal-code-chip: 240 6% 14%;
+    --codezal-text: 0 0% 94%;
+    --codezal-text-dim: 0 0% 65%;
+    --codezal-text-mute: 0 0% 42%;
+    --codezal-border: 0 0% 100%;
+    --codezal-hairline: 0 0% 100%;
+    --codezal-accent: 38 89% 62%;
+    --codezal-accent-dim: 38 89% 62%;
+    --codezal-ok: 160 65% 62%;
+    --codezal-diff-add: 160 65% 62%;
+    --codezal-diff-del: 0 60% 70%;
+
+    --codezal-line-rgb: 255 255 255;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Mono — kod blokları + inline code + path için.
+     IBM Plex Mono okunabilir + dengeli x-height. Fallback olarak sistem mono. */
+  .font-mono,
+  code,
+  pre,
+  kbd {
+    font-family: "IBM Plex Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-feature-settings: "liga" 0;
+  }
+}
+
+/* Codezal amber dim/mute helper'lar */
+@layer utilities {
+  .bg-codezal-bg          { background-color: hsl(var(--codezal-bg)); }
+  .bg-codezal-sidebar     { background-color: hsl(var(--codezal-sidebar)); }
+  .bg-codezal-panel       { background-color: hsl(var(--codezal-panel)); }
+  .bg-codezal-panel-2     { background-color: hsl(var(--codezal-panel-2)); }
+  .bg-codezal-code        { background-color: hsl(var(--codezal-code-bg)); }
+  .bg-codezal-code-chip   { background-color: hsl(var(--codezal-code-chip)); }
+  .bg-codezal-title       { background-color: hsl(var(--codezal-title-bar)); }
+  .bg-codezal-input       { background-color: hsl(var(--codezal-input)); }
+  .bg-codezal-chip        { background-color: hsl(var(--codezal-chip)); }
+  .bg-codezal-accent-dim  { background-color: hsl(var(--codezal-accent) / 0.18); }
+  .bg-codezal-diff-add    { background-color: hsl(var(--codezal-diff-add) / 0.10); }
+  .bg-codezal-diff-del    { background-color: hsl(var(--codezal-diff-del) / 0.10); }
+
+  .text-codezal-text      { color: hsl(var(--codezal-text)); }
+  .text-codezal-dim       { color: hsl(var(--codezal-text-dim)); }
+  .text-codezal-mute      { color: hsl(var(--codezal-text-mute)); }
+  .text-codezal-accent    { color: hsl(var(--codezal-accent)); }
+  .text-codezal-ok        { color: hsl(var(--codezal-ok)); }
+  .text-codezal-diff-add  { color: hsl(var(--codezal-diff-add)); }
+  .text-codezal-diff-del  { color: hsl(var(--codezal-diff-del)); }
+
+  /* Çizgiler — light üzerinde koyu, dark üzerinde beyaz, ikisinde de görünür. */
+  .border-codezal         { border-color: rgb(var(--codezal-line-rgb) / 0.10); }
+  .border-codezal-strong  { border-color: rgb(var(--codezal-line-rgb) / 0.18); }
+  .border-codezal-hair    { border-color: rgb(var(--codezal-line-rgb) / 0.06); }
+
+  .ring-accent-glow {
+    box-shadow: 0 0 6px hsl(var(--codezal-accent) / 0.55);
+  }
+}

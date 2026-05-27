@@ -1,0 +1,172 @@
+// Git wrapper — workspace cwd üzerinde `git` çağır, çıktıyı parse et.
+// Tauri shell plugin bash whitelist'i üzerinden çalışır.
+import { Command } from "@tauri-apps/plugin-shell"
+
+export type GitStatusEntry = {
+  // İki harfli porcelain XY kodu (örn "M ", " M", "??")
+  index: string
+  worktree: string
+  path: string
+  // Eski isim (rename için)
+  oldPath?: string
+}
+
+export type GitInfo = {
+  branch: string | null
+  ahead: number
+  behind: number
+  upstream: string | null
+  // Çalışma kopyası temiz mi
+  clean: boolean
+}
+
+export type GitStatus = {
+  info: GitInfo
+  entries: GitStatusEntry[]
+  isRepo: boolean
+}
+
+async function exec(workspace: string, gitArgs: string): Promise<string> {
+  const wrapped = `cd ${shellQuote(workspace)} && git ${gitArgs}`
+  const out = await Command.create("bash", ["-lc", wrapped]).execute()
+  if (out.code !== 0 && !out.stdout) {
+    throw new Error(out.stderr.trim() || `git exit ${out.code}`)
+  }
+  return out.stdout
+}
+
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, `'\\''`) + "'"
+}
+
+// `git status --porcelain=v2 --branch` çıktısını parse et.
+export async function gitStatus(workspace: string): Promise<GitStatus> {
+  if (!workspace) {
+    return {
+      info: { branch: null, ahead: 0, behind: 0, upstream: null, clean: true },
+      entries: [],
+      isRepo: false,
+    }
+  }
+  let raw: string
+  try {
+    raw = await exec(workspace, "status --porcelain=v2 --branch")
+  } catch (e) {
+    // Repo değil veya git yok
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/not a git repository/i.test(msg)) {
+      return {
+        info: { branch: null, ahead: 0, behind: 0, upstream: null, clean: true },
+        entries: [],
+        isRepo: false,
+      }
+    }
+    throw e
+  }
+
+  const info: GitInfo = {
+    branch: null,
+    ahead: 0,
+    behind: 0,
+    upstream: null,
+    clean: true,
+  }
+  const entries: GitStatusEntry[] = []
+
+  for (const line of raw.split("\n")) {
+    if (!line) continue
+    if (line.startsWith("# branch.head ")) {
+      info.branch = line.slice("# branch.head ".length).trim()
+    } else if (line.startsWith("# branch.upstream ")) {
+      info.upstream = line.slice("# branch.upstream ".length).trim()
+    } else if (line.startsWith("# branch.ab ")) {
+      // Örn: "# branch.ab +2 -0"
+      const m = line.match(/\+(\d+)\s+-(\d+)/)
+      if (m) {
+        info.ahead = parseInt(m[1], 10)
+        info.behind = parseInt(m[2], 10)
+      }
+    } else if (line.startsWith("1 ") || line.startsWith("2 ")) {
+      // Normal & rename entry
+      // Format: "1 XY sub mH mI mW hH hI path"
+      // veya:   "2 XY sub mH mI mW hH hI Rxx oldpath\tnewpath"
+      const parts = line.split(" ")
+      const xy = parts[1] ?? "  "
+      const indexChar = xy[0] ?? " "
+      const worktreeChar = xy[1] ?? " "
+      // 2'li tipte son alan tab ile bölünür: "new\told"
+      if (line.startsWith("2 ")) {
+        const tailIdx = line.indexOf("\t")
+        if (tailIdx !== -1) {
+          const newPath = line.slice(line.lastIndexOf(" ", tailIdx - 1) + 1, tailIdx)
+          const oldPath = line.slice(tailIdx + 1)
+          entries.push({
+            index: indexChar,
+            worktree: worktreeChar,
+            path: newPath,
+            oldPath,
+          })
+          continue
+        }
+      }
+      // Path = 9. alandan sonrası (boşluklu yol olabilir)
+      const pathStart = nthSpaceIndex(line, 8) + 1
+      const path = line.slice(pathStart)
+      entries.push({ index: indexChar, worktree: worktreeChar, path })
+    } else if (line.startsWith("? ")) {
+      entries.push({ index: "?", worktree: "?", path: line.slice(2) })
+    } else if (line.startsWith("! ")) {
+      entries.push({ index: "!", worktree: "!", path: line.slice(2) })
+    }
+  }
+
+  info.clean = entries.length === 0
+  return { info, entries, isRepo: true }
+}
+
+function nthSpaceIndex(s: string, n: number): number {
+  let i = -1
+  for (let k = 0; k < n; k++) {
+    i = s.indexOf(" ", i + 1)
+    if (i === -1) return -1
+  }
+  return i
+}
+
+// Bir dosyanın working tree diff'i (staged değilse). staged=true ile staged göster.
+export async function gitDiffFile(
+  workspace: string,
+  path: string,
+  staged = false,
+): Promise<string> {
+  const args = staged
+    ? `diff --staged --no-color -- ${shellQuote(path)}`
+    : `diff --no-color -- ${shellQuote(path)}`
+  try {
+    const out = await exec(workspace, args)
+    return out
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return `# git diff hata: ${msg}`
+  }
+}
+
+// XY porcelain kodlarını insan dostu etikete çevir.
+export function statusLabel(e: GitStatusEntry): {
+  code: string
+  label: string
+  kind: "add" | "mod" | "del" | "ren" | "untracked" | "ignored" | "conflict"
+} {
+  const x = e.index
+  const y = e.worktree
+  if (x === "?" && y === "?") return { code: "??", label: "yeni", kind: "untracked" }
+  if (x === "!" && y === "!") return { code: "!!", label: "yoksay", kind: "ignored" }
+  if (x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D")) {
+    return { code: x + y, label: "çakışma", kind: "conflict" }
+  }
+  if (e.oldPath) return { code: "R ", label: "yeniden adlandır", kind: "ren" }
+  if (x === "A" || y === "A") return { code: "A ", label: "eklendi", kind: "add" }
+  if (x === "D" || y === "D") return { code: "D ", label: "silindi", kind: "del" }
+  if (x === "M" || y === "M") return { code: "M ", label: "değişti", kind: "mod" }
+  return { code: x + y, label: "değişti", kind: "mod" }
+}
