@@ -26,7 +26,9 @@ import {
 import { buildModel, type ProviderId } from "../providers"
 import { useSettingsStore } from "@/store/settings"
 import { useSessionsStore } from "@/store/sessions"
-import { buildMcpTools } from "../mcp"
+import { buildMcpTools, listPluginMcps } from "../mcp"
+import { listPluginHooks } from "../hooks"
+import { listPluginAgents } from "../agents/plugin"
 import { captureFiles, affectedPaths } from "../snapshots"
 import { runHooks } from "../hooks"
 import { loadIndex, queryIndex } from "../semantic-index"
@@ -83,8 +85,10 @@ async function gate(tool: string, input: unknown, workspace?: string): Promise<v
     )
   }
   // PreToolUse hook'ları — blocking=true ise tool durur.
-  const hooks = useSettingsStore.getState().settings.hooks
-  if (hooks && hooks.length > 0) {
+  // Settings + plugin hook'ları birleşik çalışır.
+  const settingsHooks = useSettingsStore.getState().settings.hooks ?? []
+  const hooks = [...settingsHooks, ...listPluginHooks()]
+  if (hooks.length > 0) {
     const r = await runHooks({
       hooks,
       event: "PreToolUse",
@@ -111,8 +115,9 @@ async function postHook(
   workspace: string | undefined,
   isError = false,
 ): Promise<void> {
-  const hooks = useSettingsStore.getState().settings.hooks
-  if (!hooks || hooks.length === 0) return
+  const settingsHooks = useSettingsStore.getState().settings.hooks ?? []
+  const hooks = [...settingsHooks, ...listPluginHooks()]
+  if (hooks.length === 0) return
   try {
     await runHooks({
       hooks,
@@ -212,8 +217,10 @@ export async function buildAllTools(
 ): Promise<ToolSet> {
   const local = buildTools(workspace)
   const merged: ToolSet = { ...local }
-  if (mcpServers.length > 0) {
-    const { tools: mcp } = await buildMcpTools(mcpServers)
+  // Settings'ten + plugin'lerden gelen MCP server'ları birleştir
+  const allMcps = [...mcpServers, ...listPluginMcps()]
+  if (allMcps.length > 0) {
+    const { tools: mcp } = await buildMcpTools(allMcps)
     Object.assign(merged, mcp)
   }
   // dispatch_workers sadece orkestra modunda yayınlanır
@@ -222,14 +229,15 @@ export async function buildAllTools(
     delete merged.dispatch_workers
   }
   // spawn_agent sadece disk'te agent .md varsa yayınlanır — yoksa LLM hayali agent çağırır.
-  // Workspace + global katalog toplamı 0 ise tool seti'nden silinir.
+  // Workspace + global + plugin katalog toplamı 0 ise tool seti'nden silinir.
   if (merged.spawn_agent) {
     try {
       const [proj, user] = await Promise.all([
         readWorkspaceAgents(workspace),
         readUserAgents(),
       ])
-      if (proj.length + user.length === 0) {
+      const pluginCount = listPluginAgents().length
+      if (proj.length + user.length + pluginCount === 0) {
         delete merged.spawn_agent
       }
     } catch {

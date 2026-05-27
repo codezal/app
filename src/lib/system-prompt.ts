@@ -1,7 +1,9 @@
 // System prompt birleştirici — base persona + memory dosyaları + workspace meta.
 import { readProjectMemory, readUserMemory, buildMemorySystemPrompt } from "./memory"
 import { readWorkspaceSkills, readUserSkills, buildSkillsCatalog } from "./skills"
+import { listPluginSkills } from "./skills/plugin"
 import { readWorkspaceAgents, readUserAgents, buildAgentsCatalog } from "./agents"
+import { listPluginAgents } from "./agents/plugin"
 import type { OrchestraConfig } from "./orchestra/types"
 
 const BASE_SYSTEM = `Sen Codezal'sun — bir geliştirme asistanısın.
@@ -92,25 +94,25 @@ export async function buildSystemPrompt({
     // memory okunamazsa sessiz geç
   }
 
-  // Skills katalogu (sadece isim+açıklama; body load_skill ile yüklenir)
+  // Skills katalogu (workspace + user + plugin)
   try {
     const [proj, user] = await Promise.all([
       readWorkspaceSkills(workspacePath),
       readUserSkills(),
     ])
-    const catalog = buildSkillsCatalog([...proj, ...user])
+    const catalog = buildSkillsCatalog([...proj, ...user, ...listPluginSkills()])
     if (catalog) parts.push("\n" + catalog)
   } catch {
     // sessiz geç
   }
 
-  // Agents katalogu (spawn_agent ile delegate edilir)
+  // Agents katalogu (workspace + user + plugin)
   try {
     const [proj, user] = await Promise.all([
       readWorkspaceAgents(workspacePath),
       readUserAgents(),
     ])
-    const catalog = buildAgentsCatalog([...proj, ...user])
+    const catalog = buildAgentsCatalog([...proj, ...user, ...listPluginAgents()])
     if (catalog) parts.push("\n" + catalog)
   } catch {
     // sessiz geç
