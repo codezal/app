@@ -758,6 +758,7 @@ const ko: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "플러그인",
       about: "정보",
     },
     drawer: {

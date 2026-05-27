@@ -758,6 +758,7 @@ const zh_CN: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "插件",
       about: "关于",
     },
     drawer: {

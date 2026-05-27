@@ -758,6 +758,7 @@ const pt_BR: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Plugins",
       about: "Sobre",
     },
     drawer: {

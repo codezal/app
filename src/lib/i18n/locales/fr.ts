@@ -758,6 +758,7 @@ const fr: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Sémantique",
+      plugins: "Extensions",
       about: "À propos",
     },
     drawer: {

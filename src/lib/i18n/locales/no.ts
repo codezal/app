@@ -758,6 +758,7 @@ const no: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Plugins",
       about: "Om",
     },
     drawer: {

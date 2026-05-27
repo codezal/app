@@ -758,6 +758,7 @@ const tr: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Eklentiler",
       about: "Hakkında",
     },
     drawer: {

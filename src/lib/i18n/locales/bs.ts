@@ -758,6 +758,7 @@ const bs: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Dodaci",
       about: "O aplikaciji",
     },
     drawer: {

@@ -11,6 +11,7 @@ import {
   Moon,
   Plug,
   Plus,
+  Puzzle,
   RefreshCcw,
   ShieldCheck,
   Sparkles,
@@ -28,12 +29,13 @@ import { cn } from "@/lib/utils"
 import type { Theme, FontScale } from "@/lib/theme"
 import { LOCALES, type Locale } from "@/lib/i18n"
 import { useT } from "@/lib/i18n/useT"
+import { PluginsTab } from "./PluginsTab"
 
 type Props = {
   onClose: () => void
 }
 
-type Tab = "genel" | "api" | "onay" | "mcp" | "hooks" | "semantic" | "hakkinda"
+type Tab = "genel" | "api" | "onay" | "mcp" | "hooks" | "semantic" | "eklentiler" | "hakkinda"
 
 export function SettingsModal({ onClose }: Props) {
   const t = useT()
@@ -54,6 +56,7 @@ export function SettingsModal({ onClose }: Props) {
     { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug },
     { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook },
     { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles },
+    { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle },
     { id: "hakkinda", label: t("settings.tabs.about"), icon: Info },
   ]
 
@@ -108,6 +111,7 @@ export function SettingsModal({ onClose }: Props) {
             {tab === "mcp" && <McpTab />}
             {tab === "hooks" && <HooksTab />}
             {tab === "semantic" && <SemanticTab />}
+            {tab === "eklentiler" && <PluginsTab />}
             {tab === "hakkinda" && <AboutTab />}
           </div>
         </div>

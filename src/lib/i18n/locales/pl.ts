@@ -758,6 +758,7 @@ const pl: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Wtyczki",
       about: "O aplikacji",
     },
     drawer: {

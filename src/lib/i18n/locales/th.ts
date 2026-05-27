@@ -758,6 +758,7 @@ const th: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "ปลั๊กอิน",
       about: "เกี่ยวกับ",
     },
     drawer: {

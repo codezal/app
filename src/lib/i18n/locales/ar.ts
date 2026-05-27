@@ -758,6 +758,7 @@ const ar: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "ملحقات",
       about: "حول",
     },
     drawer: {

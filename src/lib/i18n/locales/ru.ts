@@ -758,6 +758,7 @@ const ru: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Плагины",
       about: "О программе",
     },
     drawer: {

@@ -758,6 +758,7 @@ const uk: Messages = {
       mcp: "MCP",
       hooks: "Hooks",
       semantic: "Semantic",
+      plugins: "Плагіни",
       about: "Про програму",
     },
     drawer: {

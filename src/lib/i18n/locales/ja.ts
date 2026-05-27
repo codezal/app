@@ -758,6 +758,7 @@ const ja: Messages = {
       mcp: "MCP",
       hooks: "フック",
       semantic: "セマンティック",
+      plugins: "プラグイン",
       about: "このアプリについて",
     },
     drawer: {

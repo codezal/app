@@ -734,6 +734,7 @@ export type Messages = {
       mcp: string
       hooks: string
       semantic: string
+      plugins: string
       about: string
     }
     drawer: {
