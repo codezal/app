@@ -22,6 +22,8 @@ export type McpServerConfig = {
   cwd?: string
   // Yetersiz performans / hata için kapalı tutma
   enabled?: boolean
+  // Plugin kaynaklıysa hangi plugin'den geldiği — UI rozeti + salt-okunur işaretleme
+  pluginId?: string
 }
 
 export type McpToolInfo = {
@@ -238,4 +240,30 @@ export function parseMcpServersJson(text: string): McpServerConfig[] {
     throw new Error("JSON'da hiç sunucu bulunamadı")
   }
   return out
+}
+
+// Plugin kaynaklı MCP server'lar — plugin loader register eder.
+// buildMcpTools çağrılırken settings.mcpServers + listPluginMcps() birleştirilmeli.
+const pluginMcps: McpServerConfig[] = []
+
+export function listPluginMcps(): McpServerConfig[] {
+  return [...pluginMcps]
+}
+
+export function _registerPluginMcp(m: McpServerConfig): void {
+  const idx = pluginMcps.findIndex(
+    (x) => x.name === m.name && x.pluginId === m.pluginId,
+  )
+  if (idx >= 0) pluginMcps.splice(idx, 1, m)
+  else pluginMcps.push(m)
+}
+
+export function _unregisterPluginMcps(pluginId: string): void {
+  for (let i = pluginMcps.length - 1; i >= 0; i--) {
+    if (pluginMcps[i].pluginId === pluginId) pluginMcps.splice(i, 1)
+  }
+}
+
+export function _clearPluginMcps(): void {
+  pluginMcps.length = 0
 }

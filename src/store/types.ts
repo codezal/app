@@ -136,6 +136,8 @@ export type HookConfig = {
   blocking?: boolean
   enabled?: boolean
   description?: string
+  // Plugin kaynaklıysa hangi plugin'den geldiği — UI rozeti + salt-okunur işaretleme
+  pluginId?: string
 }
 
 // Semantic index — embedding tabanlı kod arama. code_query tool buradaki cfg'i kullanır.

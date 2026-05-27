@@ -121,3 +121,27 @@ export async function runHooks(args: {
   }
   return { ranCount: list.length, blocked: false, extraContext: extraContext || undefined }
 }
+
+// Plugin kaynaklı hook'lar — plugin loader register eder.
+// runHooks çağrılırken settings.hooks + listPluginHooks() birleştirilmeli.
+const pluginHooks: HookConfig[] = []
+
+export function listPluginHooks(): HookConfig[] {
+  return [...pluginHooks]
+}
+
+export function _registerPluginHook(h: HookConfig): void {
+  const idx = pluginHooks.findIndex((x) => x.id === h.id)
+  if (idx >= 0) pluginHooks.splice(idx, 1, h)
+  else pluginHooks.push(h)
+}
+
+export function _unregisterPluginHooks(pluginId: string): void {
+  for (let i = pluginHooks.length - 1; i >= 0; i--) {
+    if (pluginHooks[i].pluginId === pluginId) pluginHooks.splice(i, 1)
+  }
+}
+
+export function _clearPluginHooks(): void {
+  pluginHooks.length = 0
+}
