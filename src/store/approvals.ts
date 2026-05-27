@@ -10,20 +10,45 @@ export type ApprovalRequest = {
   id: string
   tool: string
   input: unknown
+  // Worker context — orkestra modunda hangi worker tool'u çağırıyor (etiket için)
+  workerLabel?: string
   // Decide(decision) çağrılınca queue'dan düşer
   resolve: (d: ApprovalDecision) => void
 }
 
 type ApprovalsState = {
   queue: ApprovalRequest[]
-  request: (tool: string, input: unknown) => Promise<ApprovalDecision>
+  // Bypass aktif worker ID'leri — orkestra modunda YOLO=true worker'lar burada
+  bypassWorkerIds: Set<string>
+  request: (
+    tool: string,
+    input: unknown,
+    opts?: { workerId?: string; workerLabel?: string },
+  ) => Promise<ApprovalDecision>
   decide: (id: string, decision: ApprovalDecision) => void
+  // Worker bypass set yönetimi
+  addBypassWorker: (workerId: string) => void
+  removeBypassWorker: (workerId: string) => void
+  clearBypassWorkers: () => void
 }
 
 export const useApprovalsStore = create<ApprovalsState>((set, get) => ({
   queue: [],
+  bypassWorkerIds: new Set<string>(),
 
-  request: (tool, input) => {
+  request: (tool, input, opts) => {
+    // Worker-scoped YOLO bypass — orkestra worker'ı YOLO=true ise direkt allow.
+    // opts.workerId verilmişse spesifik worker kontrolü; verilmemişse global "herhangi YOLO worker aktif mi" kontrolü.
+    // MVP not: çağırma tarafı workerId iletemediğinde, herhangi bir YOLO worker aktifken
+    // tüm tool çağrıları auto-approve olur (parent dahil). v2'de async context'le düzelt.
+    const bypassIds = get().bypassWorkerIds
+    if (opts?.workerId && bypassIds.has(opts.workerId)) {
+      return Promise.resolve("allow")
+    }
+    if (!opts?.workerId && bypassIds.size > 0) {
+      return Promise.resolve("allow")
+    }
+
     // Bypass / kural eşleşmesi → hızlı yol
     const settings = useSettingsStore.getState().settings
     if (settings.approvalMode === "bypass") return Promise.resolve("allow")
@@ -41,7 +66,7 @@ export const useApprovalsStore = create<ApprovalsState>((set, get) => ({
     return new Promise<ApprovalDecision>((resolve) => {
       const id = crypto.randomUUID()
       set((st) => ({
-        queue: [...st.queue, { id, tool, input, resolve }],
+        queue: [...st.queue, { id, tool, input, workerLabel: opts?.workerLabel, resolve }],
       }))
     })
   },
@@ -51,6 +76,26 @@ export const useApprovalsStore = create<ApprovalsState>((set, get) => ({
     if (!req) return
     req.resolve(decision)
     set((st) => ({ queue: st.queue.filter((r) => r.id !== id) }))
+  },
+
+  addBypassWorker: (workerId) => {
+    set((st) => {
+      const next = new Set(st.bypassWorkerIds)
+      next.add(workerId)
+      return { bypassWorkerIds: next }
+    })
+  },
+
+  removeBypassWorker: (workerId) => {
+    set((st) => {
+      const next = new Set(st.bypassWorkerIds)
+      next.delete(workerId)
+      return { bypassWorkerIds: next }
+    })
+  },
+
+  clearBypassWorkers: () => {
+    set({ bypassWorkerIds: new Set<string>() })
   },
 }))
 

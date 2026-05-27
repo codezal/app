@@ -2,6 +2,7 @@
 import { readProjectMemory, readUserMemory, buildMemorySystemPrompt } from "./memory"
 import { readWorkspaceSkills, readUserSkills, buildSkillsCatalog } from "./skills"
 import { readWorkspaceAgents, readUserAgents, buildAgentsCatalog } from "./agents"
+import type { OrchestraConfig } from "./orchestra/types"
 
 const BASE_SYSTEM = `Sen Codezal'sun — bir geliştirme asistanısın.
 Kullanıcı sana bir görev verdiğinde, doğru sonucu üretmek için araçları kullan.
@@ -18,7 +19,33 @@ Yönergeler:
 export type SystemPromptInput = {
   workspacePath?: string
   modelLabel?: string
-  mode?: "plan" | "build"
+  mode?: "plan" | "build" | "orchestra"
+  orchestra?: OrchestraConfig
+}
+
+// Orkestra modu için worker havuzu kataloğu — parent LLM dispatch_workers çağrırken bu listeyi kullanır.
+function buildOrchestraCatalog(cfg: OrchestraConfig): string {
+  const lines = [
+    "## ORKESTRA MODU AKTİF",
+    "Sen bir orkestra şefisin — kendi tool döngün yanında worker havuzundan paralel iş çıkarabilirsin.",
+    "Worker havuzunda mevcut ajanlar:",
+    "",
+  ]
+  for (const w of cfg.workers) {
+    const modelInfo =
+      w.kind === "sdk"
+        ? `${w.provider ?? "?"}/${w.model ?? "?"}`
+        : `${w.kind} CLI${w.model ? ` (model hint: ${w.model})` : ""}`
+    const yoloTag = w.yolo ? " · YOLO" : ""
+    const presetTag = w.presetAgent ? ` · preset: ${w.presetAgent}` : ""
+    lines.push(`- **worker-${w.idx}** (${modelInfo}${yoloTag}${presetTag})`)
+  }
+  lines.push("")
+  lines.push(
+    "Görev karmaşıksa `dispatch_workers([{workerIdx, task}, ...])` ile 1-5 worker'a paralel iş ver. " +
+      "Tool dönüşü her worker için status/output JSON'ı içerir. Sen sentezi yap, gerekirse yeni dispatch çağır.",
+  )
+  return lines.join("\n")
 }
 
 // İstemi tek string olarak üret — streamText({ system }) için.
@@ -26,6 +53,7 @@ export async function buildSystemPrompt({
   workspacePath,
   modelLabel,
   mode = "build",
+  orchestra,
 }: SystemPromptInput): Promise<string> {
   const parts: string[] = [BASE_SYSTEM]
 
@@ -46,6 +74,10 @@ export async function buildSystemPrompt({
         "3. Bir uygulama planı yaz: hangi dosyalar, hangi değişiklik, hangi sırayla.\n" +
         "4. Kullanıcı planı onaylayıp build moduna geçince (⌘M) uygulamaya başla.",
     )
+  }
+
+  if (mode === "orchestra" && orchestra) {
+    parts.push("\n" + buildOrchestraCatalog(orchestra))
   }
 
   // Memory dosyaları (proje + global)

@@ -15,6 +15,7 @@ import { SearchOverlay } from "@/components/SearchOverlay"
 import { ApprovalModal } from "@/components/ApprovalModal"
 import { QuestionModal } from "@/components/QuestionModal"
 import { RoutinesOverlay } from "@/components/RoutinesOverlay"
+import { OrchestraConfigModal } from "@/components/OrchestraConfigModal"
 import type { ProviderId } from "@/lib/providers"
 import { buildModel } from "@/lib/providers"
 import { buildAllTools } from "@/lib/tools"
@@ -65,6 +66,7 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showRoutines, setShowRoutines] = useState(false)
+  const [showOrchestra, setShowOrchestra] = useState(false)
   const [panelMode, setPanelMode] = useState<PanelMode | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -463,6 +465,7 @@ export default function App() {
         workspacePath: active.workspacePath,
         modelLabel: `${active.provider}/${active.model}`,
         mode: active.mode ?? "build",
+        orchestra: active.orchestra,
       })
       const result = streamText({
         model,
@@ -714,6 +717,7 @@ export default function App() {
                   onAbort={onAbort}
                   disabled={!active}
                   onSlashAction={(a, args) => void onSlashAction(a, args)}
+                  onOpenOrchestra={() => setShowOrchestra(true)}
                 />
               </>
             )}
@@ -754,6 +758,10 @@ export default function App() {
           setTimeout(() => void onSend(prompt), 30)
         }}
       />
+
+      {showOrchestra && (
+        <OrchestraConfigModal onClose={() => setShowOrchestra(false)} />
+      )}
 
       <ApprovalModal />
       <QuestionModal />

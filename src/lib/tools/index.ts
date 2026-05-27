@@ -210,6 +210,11 @@ export async function buildAllTools(
     const { tools: mcp } = await buildMcpTools(mcpServers)
     Object.assign(merged, mcp)
   }
+  // dispatch_workers sadece orkestra modunda yayınlanır
+  const mode = useSessionsStore.getState().active?.mode ?? "build"
+  if (mode !== "orchestra" && merged.dispatch_workers) {
+    delete merged.dispatch_workers
+  }
   return wrapWithPostHook(merged, workspace)
 }
 
@@ -516,6 +521,59 @@ export function buildTools(workspace: string | undefined): ToolSet {
         const s = await loadSkillByName(workspace, name)
         if (!s) return `Skill bulunamadı: ${name}`
         return `# ${s.name} (${s.scope})\n${s.description}\n\n---\n\n${s.body}`
+      },
+    }),
+
+    // dispatch_workers — sadece orkestra modu için. buildAllTools tarafından mod kontrolü
+    // yapılır (mode !== "orchestra" ise tool set'ten silinir).
+    dispatch_workers: tool({
+      description:
+        "ORKESTRA MODU — worker havuzundan bir veya birden fazla worker'a PARALEL görev dağıt. " +
+        "Tüm worker'lar bitince sonuçlar JSON listesi olarak döner. Worker'lar bağımsız çalışır, " +
+        "aralarında doğrudan iletişim yoktur — sentezi sen yapacaksın. Mevcut worker havuzu " +
+        "system prompt katalogundadır.",
+      inputSchema: z.object({
+        dispatches: z
+          .array(
+            z.object({
+              workerIdx: z
+                .number()
+                .int()
+                .min(1)
+                .max(5)
+                .describe("Havuzdaki worker indeksi (1-5)"),
+              task: z
+                .string()
+                .describe("Worker'a verilecek görev — net, self-contained, kısa"),
+            }),
+          )
+          .min(1)
+          .max(5),
+      }),
+      execute: async ({ dispatches }, ctx) => {
+        const sess = useSessionsStore.getState().active
+        if (!sess?.orchestra || sess.mode !== "orchestra") {
+          throw new Error("Orkestra modu aktif değil — dispatch_workers çağrılamaz")
+        }
+        // Parent assistant mesajı (pending) — agent kartları buraya bağlanır
+        const pendingMsg = [...sess.messages]
+          .reverse()
+          .find((m) => m.role === "assistant" && m.pending)
+        if (!pendingMsg) throw new Error("Pending assistant mesajı bulunamadı")
+
+        // Parent streamText'in abort sinyalini worker'lara propagate et (Composer "stop")
+        const parentSignal = (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal
+
+        // dispatchWorkers runtime'ı dinamik import — döngüsel bağımlılık riskine karşı
+        const { dispatchWorkers } = await import("../orchestra/runtime")
+        const results = await dispatchWorkers(
+          sess.orchestra,
+          dispatches,
+          pendingMsg.id,
+          sess.workspacePath,
+          parentSignal,
+        )
+        return JSON.stringify(results, null, 2)
       },
     }),
 

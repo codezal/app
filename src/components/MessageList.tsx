@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { Markdown } from "./Markdown"
 import { CodezalMark } from "./icons"
+import { AgentCard } from "./AgentCard"
 import type { Message, Part } from "@/store/types"
 import { useSessionsStore } from "@/store/sessions"
 import { hunksForEdit, type DiffLine } from "@/lib/diff"
@@ -489,11 +490,13 @@ function PartsRender({ parts }: { parts: Part[] }) {
     if (p.type === "tool-result") resultMap.set(p.toolCallId, p)
   }
 
-  // Ardışık tool-call'ları tek grup haline getir
+  // Ardışık tool-call'ları tek grup haline getir; agent-card'lar kendi başlarına
   type ToolCallPart = Extract<Part, { type: "tool-call" }>
+  type AgentCardPart = Extract<Part, { type: "agent-card" }>
   type Block =
     | { kind: "text"; key: string; text: string }
     | { kind: "tools"; key: string; calls: ToolCallPart[] }
+    | { kind: "agent-card"; key: string; card: AgentCardPart }
 
   const blocks: Block[] = []
   parts.forEach((p, i) => {
@@ -504,6 +507,8 @@ function PartsRender({ parts }: { parts: Part[] }) {
       const last = blocks[blocks.length - 1]
       if (last && last.kind === "tools") last.calls.push(p)
       else blocks.push({ kind: "tools", key: `g${i}`, calls: [p] })
+    } else if (p.type === "agent-card") {
+      blocks.push({ kind: "agent-card", key: `a${i}-${p.workerId}`, card: p })
     }
     // reasoning ve tool-result tek başına gösterilmez
   })
@@ -519,6 +524,9 @@ function PartsRender({ parts }: { parts: Part[] }) {
               className="text-[13px] leading-[1.55]"
             />
           )
+        }
+        if (b.kind === "agent-card") {
+          return <AgentCard key={b.key} part={b.card} />
         }
         if (b.calls.length === 1) {
           const c = b.calls[0]

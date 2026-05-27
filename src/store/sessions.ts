@@ -7,6 +7,7 @@ import {
 import { restoreMessage } from "@/lib/snapshots"
 import type { ProviderId } from "@/lib/providers"
 import type { ModelMessage } from "ai"
+import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
 import type { AgentMode, Message, Session, SessionMeta } from "./types"
 
 // Persist edilen index: hangi sessionlar var, hangi sırada.
@@ -108,8 +109,32 @@ type SessionsState = {
   // Aktif dosya tab'ı (null = sohbet görünümü)
   setActiveFile: (path: string | null) => void
 
-  // Aktif session'ın agent modunu değiştir (plan/build)
+  // Aktif session'ın agent modunu değiştir (plan/build/orchestra)
   setMode: (mode: AgentMode) => void
+
+  // Orkestra modu için worker havuzu konfigürasyonu ata/güncelle
+  setOrchestra: (cfg: OrchestraConfig | undefined) => void
+
+  // Bir assistant mesajının parts[] dizisindeki belirli bir agent-card'ı patch'le.
+  // Worker runtime canlı stream sırasında bunu çağırır.
+  patchAgentCard: (
+    messageId: string,
+    workerId: string,
+    patch: Partial<AgentCardPart>,
+  ) => void
+
+  // Bir assistant mesajının parts[] dizisine yeni bir agent-card ekle (henüz yoksa).
+  // dispatchWorkers spawn anında çağırır.
+  pushAgentCard: (messageId: string, card: AgentCardPart) => void
+
+  // Bir assistant mesajının parts[] içindeki bir agent-card'ın outputLog ring buffer'ına
+  // satır ekle (max logBufferLines).
+  appendAgentCardLog: (
+    messageId: string,
+    workerId: string,
+    line: string,
+    maxLines: number,
+  ) => void
 
   // Bir assistant mesajına snapshot path'leri iliştir (mutasyon tool'ları çağırınca)
   addSnapshotPaths: (messageId: string, paths: string[]) => void
@@ -356,6 +381,81 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     set((st) => {
       if (!st.active) return st
       return { active: { ...st.active, mode, updatedAt: Date.now() } }
+    })
+  },
+
+  setOrchestra: (cfg) => {
+    set((st) => {
+      if (!st.active) return st
+      return { active: { ...st.active, orchestra: cfg, updatedAt: Date.now() } }
+    })
+  },
+
+  patchAgentCard: (messageId, workerId, patch) => {
+    set((st) => {
+      if (!st.active) return st
+      return {
+        active: {
+          ...st.active,
+          messages: st.active.messages.map((m) => {
+            if (m.id !== messageId || !m.parts) return m
+            return {
+              ...m,
+              parts: m.parts.map((p) => {
+                if (p.type !== "agent-card" || p.workerId !== workerId) return p
+                return { ...p, ...patch }
+              }),
+            }
+          }),
+          updatedAt: Date.now(),
+        },
+      }
+    })
+  },
+
+  pushAgentCard: (messageId, card) => {
+    set((st) => {
+      if (!st.active) return st
+      return {
+        active: {
+          ...st.active,
+          messages: st.active.messages.map((m) => {
+            if (m.id !== messageId) return m
+            const parts = m.parts ?? []
+            // Aynı workerId'li kart varsa ekleme — duplicate koruması
+            if (parts.some((p) => p.type === "agent-card" && p.workerId === card.workerId)) {
+              return m
+            }
+            return { ...m, parts: [...parts, card] }
+          }),
+          updatedAt: Date.now(),
+        },
+      }
+    })
+  },
+
+  appendAgentCardLog: (messageId, workerId, line, maxLines) => {
+    set((st) => {
+      if (!st.active) return st
+      return {
+        active: {
+          ...st.active,
+          messages: st.active.messages.map((m) => {
+            if (m.id !== messageId || !m.parts) return m
+            return {
+              ...m,
+              parts: m.parts.map((p) => {
+                if (p.type !== "agent-card" || p.workerId !== workerId) return p
+                const next = [...p.outputLog, line]
+                const overflow = next.length - maxLines
+                const trimmed = overflow > 0 ? next.slice(overflow) : next
+                return { ...p, outputLog: trimmed }
+              }),
+            }
+          }),
+          updatedAt: Date.now(),
+        },
+      }
     })
   },
 

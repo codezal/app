@@ -10,6 +10,7 @@ import {
   FolderPlus,
   GitBranch,
   HandIcon,
+  Music,
   Paperclip,
   Plus,
   Send,
@@ -38,6 +39,8 @@ type Props = {
   placeholder?: string
   // App tarafına devredilen built-in slash aksiyonları
   onSlashAction?: (action: NonNullable<SlashCommand["action"]>, args: string) => void
+  // Composer "Orkestra modu" tıklanınca App üst seviyesinde modal aç
+  onOpenOrchestra?: () => void
 }
 
 type Effort = "low" | "medium" | "high"
@@ -49,6 +52,7 @@ export function Composer({
   disabled,
   placeholder,
   onSlashAction,
+  onOpenOrchestra,
 }: Props) {
   const [text, setText] = useState("")
   const [effort, setEffort] = useState<Effort>("high")
@@ -378,6 +382,7 @@ export function Composer({
           onChange={(m) => void updateSettings({ approvalMode: m })}
           agentMode={mode}
           onAgentModeChange={setMode}
+          onOpenOrchestra={onOpenOrchestra}
         />
         <span
           className="ml-auto"
@@ -427,11 +432,13 @@ function ApprovalModeMenu({
   onChange,
   agentMode,
   onAgentModeChange,
+  onOpenOrchestra,
 }: {
   mode: ApprovalMode
   onChange: (m: ApprovalMode) => void
-  agentMode: "build" | "plan"
-  onAgentModeChange: (m: "build" | "plan") => void
+  agentMode: "build" | "plan" | "orchestra"
+  onAgentModeChange: (m: "build" | "plan" | "orchestra") => void
+  onOpenOrchestra?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -446,15 +453,21 @@ function ApprovalModeMenu({
     return () => document.removeEventListener("mousedown", onDoc)
   }, [open])
 
-  // Plan modu aktifken approval mode görünmez — salt-okunur olduğundan
-  // izin seviyesinin pratik karşılığı yok. Label/icon "Plan modu" olur.
+  // Plan/orkestra modu aktifken approval mode görünmez — özel mod etiketi gösterilir.
   const planActive = agentMode === "plan"
-  const Icon = planActive ? Eye : current.Icon
-  const buttonLabel = planActive ? "Plan modu" : current.label
-  const buttonHint = planActive
-    ? "Plan modu aktif — salt-okunur. Menüden kapatabilirsin (⌘M)."
-    : current.hint
-  const accent = planActive || current.danger
+  const orchestraActive = agentMode === "orchestra"
+  const Icon = orchestraActive ? Music : planActive ? Eye : current.Icon
+  const buttonLabel = orchestraActive
+    ? "Orkestra modu"
+    : planActive
+      ? "Plan modu"
+      : current.label
+  const buttonHint = orchestraActive
+    ? "Orkestra modu aktif — parent worker havuzuna dispatch eder. Menüden kapatabilirsin."
+    : planActive
+      ? "Plan modu aktif — salt-okunur. Menüden kapatabilirsin (⌘M)."
+      : current.hint
+  const accent = planActive || orchestraActive || current.danger
   return (
     <div ref={wrapRef} className="relative">
       <button
@@ -475,8 +488,8 @@ function ApprovalModeMenu({
       {open && (
         <div className="absolute bottom-[32px] left-0 z-50 w-[240px] overflow-hidden rounded-md border border-codezal bg-codezal-sidebar py-1 shadow-lg">
           {APPROVAL_OPTIONS.map((opt) => {
-            // Plan aktifken approval item'ları pasif gözükür — radio gibi.
-            const active = !planActive && opt.value === mode
+            // Plan/orkestra aktifken approval item'ları pasif gözükür — radio gibi.
+            const active = !planActive && !orchestraActive && opt.value === mode
             const OptIcon = opt.Icon
             return (
               <button
@@ -484,8 +497,8 @@ function ApprovalModeMenu({
                 type="button"
                 onClick={() => {
                   onChange(opt.value)
-                  // Approval seçimi build moduna döndürür (plan'dan çıkar)
-                  if (agentMode === "plan") onAgentModeChange("build")
+                  // Approval seçimi build moduna döndürür (plan/orkestra'dan çıkar)
+                  if (agentMode !== "build") onAgentModeChange("build")
                   setOpen(false)
                 }}
                 className={cn(
@@ -521,6 +534,29 @@ function ApprovalModeMenu({
           >
             <Eye className={cn("h-3 w-3 shrink-0", planActive && "text-codezal-accent")} />
             <span className="flex-1">Plan modu</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              if (orchestraActive) {
+                // Aktifse build'e dön
+                onAgentModeChange("build")
+              } else {
+                // Aktif değilse konfigürasyon modal'ı aç (modal "Başlat" → orchestra moduna geçer)
+                onOpenOrchestra?.()
+              }
+            }}
+            title="Orkestra modu — 1-5 worker'a paralel görev dağıtan orkestra şefi. Konfigürasyon modal'ı açılır."
+            className={cn(
+              "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px]",
+              orchestraActive
+                ? "bg-codezal-panel-2/60 text-codezal-accent"
+                : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
+            )}
+          >
+            <Music className={cn("h-3 w-3 shrink-0", orchestraActive && "text-codezal-accent")} />
+            <span className="flex-1">Orkestra modu{orchestraActive ? " (kapat)" : "…"}</span>
           </button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import type { ProviderId, ApiKeys } from "@/lib/providers"
 import type { McpServerConfig } from "@/lib/mcp"
 import type { ModelMessage } from "ai"
+import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
 
 export type Role = "user" | "assistant" | "system" | "tool"
 
@@ -16,6 +17,7 @@ export type Part =
       output: string
       isError?: boolean
     }
+  | AgentCardPart
 
 export type Message = {
   id: string
@@ -70,7 +72,9 @@ export type AutoCompactSettings = {
 // Agent çalışma modu.
 // "build" → tam erişim (write/edit/bash/patch dahil tüm araçlar)
 // "plan" → salt-okunur (list_dir/read_file/grep/web/question), write/edit/bash/patch reddedilir
-export type AgentMode = "build" | "plan"
+// "orchestra" → parent LLM dispatch_workers ile havuzdaki worker'lara görev dağıtır;
+//                kendi tool seti aynı zamanda build modundadır
+export type AgentMode = "build" | "plan" | "orchestra"
 
 export type Session = {
   id: string
@@ -93,6 +97,8 @@ export type Session = {
   usage?: SessionUsage
   // Agent çalışma modu — geriye dönük uyumluluk için opsiyonel, default "build"
   mode?: AgentMode
+  // Orkestra modu aktifken worker havuzu konfigürasyonu
+  orchestra?: OrchestraConfig
 }
 
 export type ApprovalDecision = "allow" | "deny"
