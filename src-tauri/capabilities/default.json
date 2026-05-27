@@ -35,7 +35,11 @@
       "allow": [
         { "path": "$APPDATA/**" },
         { "path": "$APPCONFIG/**" },
-        { "path": "$HOME/**" }
+        { "path": "$HOME/**" },
+        { "path": "$HOME/.codezal" },
+        { "path": "$HOME/.codezal/**" },
+        { "path": "$HOME/**/.codezal" },
+        { "path": "$HOME/**/.codezal/**" }
       ]
     },
     {

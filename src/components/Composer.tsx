@@ -8,7 +8,6 @@ import {
   Eye,
   Folder,
   FolderPlus,
-  GitBranch,
   HandIcon,
   Music,
   Paperclip,
@@ -29,7 +28,9 @@ import {
   type SlashCommand,
 } from "@/lib/commands"
 import { SlashMenu, filterCommands } from "./SlashMenu"
+import { BranchPicker } from "./BranchPicker"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
 
 type Props = {
   streaming: boolean
@@ -54,6 +55,7 @@ export function Composer({
   onSlashAction,
   onOpenOrchestra,
 }: Props) {
+  const t = useT()
   const [text, setText] = useState("")
   const [effort, setEffort] = useState<Effort>("high")
   const [commands, setCommands] = useState<SlashCommand[]>([])
@@ -120,9 +122,9 @@ export function Composer({
   async function pickWorkspace() {
     const path = await pickWorkspaceFolder()
     if (!path) return
-    // Aktif session'a bağla
-    updateActiveMeta({ workspacePath: path })
-    // Varsayılan da güncellensin → sonraki yeni session aynı klasörle açılsın
+    // Aktif session varsa bağla
+    if (active) updateActiveMeta({ workspacePath: path })
+    // Varsayılan da güncellensin → lazy create / sonraki session aynı klasörle açılır
     void updateSettings({ defaultWorkspacePath: path })
   }
 
@@ -176,7 +178,7 @@ export function Composer({
     active?.usage?.effectiveContextTokens ??
     active?.usage?.lastInputTokens ??
     estimateTokens(active?.messages ?? [])
-  const effortLabel = effort === "high" ? "Yüksek" : effort === "medium" ? "Orta" : "Düşük"
+  const effortLabel = effort === "high" ? t("composer.effortHigh") : effort === "medium" ? t("composer.effortMedium") : t("composer.effortLow")
 
   return (
     <footer className="border-t border-codezal bg-codezal-bg px-8 pb-4 pt-2.5">
@@ -227,7 +229,7 @@ export function Composer({
                 trySend()
               }
             }}
-            placeholder={placeholder ?? "Bir görev tanımla ya da / ile komut…"}
+            placeholder={placeholder ?? t("composer.defaultPlaceholder")}
             rows={rowCount}
             disabled={disabled}
             // height: auto inline — HMR/önceki versiyondan kalan stale height override edilsin
@@ -246,71 +248,43 @@ export function Composer({
             onPickFolder={() => void pickWorkspace()}
           />
 
-          {/* Klasör/branch sadece boş sohbette — devam edende session zaten bağlı */}
+          {/* Workspace seçici sadece boş sohbette — session başlayınca zaten bağlı */}
           {(active?.messages.length ?? 0) === 0 && (
-            <>
-              <WorkspacePicker
-                current={active?.workspacePath}
-                onPick={(p) => {
-                  updateActiveMeta({ workspacePath: p })
-                  void updateSettings({ defaultWorkspacePath: p })
-                }}
-                onPickNew={pickWorkspace}
-              />
-
-              <Chip>
-                <GitBranch className="h-2.5 w-2.5" />
-                <span>main</span>
-                <ChevronDown className="h-2 w-2" />
-              </Chip>
-            </>
+            <WorkspacePicker
+              current={active?.workspacePath ?? settings.defaultWorkspacePath}
+              onPick={(p) => {
+                if (active) updateActiveMeta({ workspacePath: p })
+                void updateSettings({ defaultWorkspacePath: p })
+              }}
+              onPickNew={pickWorkspace}
+            />
           )}
+
+          {/* Branch chip sohbet sırasında da görünür — kullanıcı mid-conversation switch edebilsin */}
+          <BranchPicker
+            workspace={active?.workspacePath ?? settings.defaultWorkspacePath}
+          />
 
           <div className="flex-1" />
 
-          {/* Model picker: provider + model native select, chip görünümünde */}
-          <div className="relative flex h-[26px] items-center gap-1.5 rounded-md border border-codezal px-2 text-[12px] font-medium text-codezal-dim hover:border-codezal-strong">
-            <select
-              value={active?.provider ?? "openai"}
-              onChange={(e) => {
-                const id = e.target.value as ProviderId
-                updateActiveMeta({
-                  provider: id,
-                  model: defaultModelFor(
-                    id,
-                    settings.providerCatalog?.data as ProvidersCatalog | undefined,
-                  ),
-                })
-              }}
-              className="cursor-pointer appearance-none bg-transparent pr-1 text-codezal-dim outline-none"
-              title="Provider"
-            >
-              {Object.values(PROVIDERS).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <span className="text-codezal-mute">·</span>
-            <select
-              value={active?.model ?? ""}
-              onChange={(e) => updateActiveMeta({ model: e.target.value })}
-              className="cursor-pointer appearance-none bg-transparent pr-1 text-codezal-text outline-none"
-              title="Model"
-            >
-              {(active?.provider
-                ? modelsFor(
-                    active.provider as ProviderId,
-                    settings.providerCatalog?.data as ProvidersCatalog | undefined,
-                  )
-                : []
-              )?.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Model picker — yukarı açılan custom popover. Native select Tauri'de aşağı açılıyordu. */}
+          <ModelPicker
+            providerId={(active?.provider ?? settings.defaultProvider) as ProviderId}
+            modelId={active?.model ?? settings.defaultModel}
+            catalog={settings.providerCatalog?.data as ProvidersCatalog | undefined}
+            onPickProvider={(id) => {
+              const defaultModel = defaultModelFor(
+                id,
+                settings.providerCatalog?.data as ProvidersCatalog | undefined,
+              )
+              if (active) updateActiveMeta({ provider: id, model: defaultModel })
+              else void updateSettings({ defaultProvider: id, defaultModel })
+            }}
+            onPickModel={(m) => {
+              if (active) updateActiveMeta({ model: m })
+              else void updateSettings({ defaultModel: m })
+            }}
+          />
 
           <Chip
             onClick={() => {
@@ -318,7 +292,7 @@ export function Composer({
                 effort === "high" ? "medium" : effort === "medium" ? "low" : "high",
               )
             }}
-            title="Akıl yürütme seviyesi"
+            title={t("composer.effortTitle")}
           >
             <span className="text-codezal-accent">{effortLabel}</span>
             <ChevronDown className="h-2 w-2" />
@@ -330,7 +304,7 @@ export function Composer({
           <button
             type="button"
             onClick={onAbort}
-            title="Durdur"
+            title={t("composer.stop")}
             className="group/stop absolute bottom-2 right-2 flex h-7 w-[30px] items-center justify-center rounded-lg bg-codezal-accent/10 text-codezal-accent hover:bg-destructive/15 hover:text-destructive"
           >
             <svg
@@ -363,7 +337,7 @@ export function Composer({
             type="button"
             onClick={trySend}
             disabled={!text.trim() || disabled}
-            title="Gönder · ⌘⏎"
+            title={t("composer.sendHint")}
             className={cn(
               "absolute bottom-2 right-2 z-10 flex h-7 w-[30px] items-center justify-center rounded-lg transition-transform hover:scale-[1.04]",
               !text.trim() || disabled
@@ -386,7 +360,7 @@ export function Composer({
         />
         <span
           className="ml-auto"
-          title="Composer giriş token tahmini / aktif modelin bağlam kapasitesi"
+          title={t("composer.contextUsedTitle")}
         >
           {formatK(tokenCount)} / {formatK(contextCap(active?.model ?? ""))}
         </span>
@@ -405,27 +379,32 @@ type ApprovalModeOption = {
   danger?: boolean
 }
 
-const APPROVAL_OPTIONS: ApprovalModeOption[] = [
-  {
-    value: "ask",
-    label: "Varsayılan izinler",
-    hint: "Her tool çağrısında onay sorulur",
-    Icon: HandIcon,
-  },
-  {
-    value: "auto-review",
-    label: "Otomatik inceleme",
-    hint: "Dosya okuma/yazma otomatik, sadece bash sorulur",
-    Icon: Eye,
-  },
-  {
-    value: "bypass",
-    label: "Tam erişim",
-    hint: "Tüm tool çağrıları otomatik onaylanır",
-    Icon: AlertCircle,
-    danger: true,
-  },
-]
+// Etiketleri runtime'da türet — locale değişikliği menüyü etkiler.
+function buildApprovalOptions(
+  tt: (k: Parameters<ReturnType<typeof useT>>[0]) => string,
+): ApprovalModeOption[] {
+  return [
+    {
+      value: "ask",
+      label: tt("composer.approvalAsk"),
+      hint: tt("composer.approvalAskHint"),
+      Icon: HandIcon,
+    },
+    {
+      value: "auto-review",
+      label: tt("composer.approvalAutoReview"),
+      hint: tt("composer.approvalAutoReviewHint"),
+      Icon: Eye,
+    },
+    {
+      value: "bypass",
+      label: tt("composer.approvalBypass"),
+      hint: tt("composer.approvalBypassHint"),
+      Icon: AlertCircle,
+      danger: true,
+    },
+  ]
+}
 
 function ApprovalModeMenu({
   mode,
@@ -440,8 +419,10 @@ function ApprovalModeMenu({
   onAgentModeChange: (m: "build" | "plan" | "orchestra") => void
   onOpenOrchestra?: () => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const APPROVAL_OPTIONS = buildApprovalOptions(t)
   const current = APPROVAL_OPTIONS.find((o) => o.value === mode) ?? APPROVAL_OPTIONS[0]
 
   useEffect(() => {
@@ -458,14 +439,14 @@ function ApprovalModeMenu({
   const orchestraActive = agentMode === "orchestra"
   const Icon = orchestraActive ? Music : planActive ? Eye : current.Icon
   const buttonLabel = orchestraActive
-    ? "Orkestra modu"
+    ? t("composer.modeOrchestra")
     : planActive
-      ? "Plan modu"
+      ? t("composer.planMode")
       : current.label
   const buttonHint = orchestraActive
-    ? "Orkestra modu aktif — parent worker havuzuna dispatch eder. Menüden kapatabilirsin."
+    ? t("composer.orchestraModeTitle")
     : planActive
-      ? "Plan modu aktif — salt-okunur. Menüden kapatabilirsin (⌘M)."
+      ? t("composer.planModeTitle")
       : current.hint
   const accent = planActive || orchestraActive || current.danger
   return (
@@ -524,7 +505,7 @@ function ApprovalModeMenu({
               onAgentModeChange("plan")
               setOpen(false)
             }}
-            title="Plan modu — salt-okunur. Standart okuma/yazma izni yeterli, ek erişim seviyesine gerek yok. ⌘M ile kapat."
+            title={t("composer.planModeTitle")}
             className={cn(
               "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px]",
               planActive
@@ -533,7 +514,7 @@ function ApprovalModeMenu({
             )}
           >
             <Eye className={cn("h-3 w-3 shrink-0", planActive && "text-codezal-accent")} />
-            <span className="flex-1">Plan modu</span>
+            <span className="flex-1">{t("composer.planMode")}</span>
           </button>
           <button
             type="button"
@@ -547,7 +528,7 @@ function ApprovalModeMenu({
                 onOpenOrchestra?.()
               }
             }}
-            title="Orkestra modu — 1-5 worker'a paralel görev dağıtan orkestra şefi. Konfigürasyon modal'ı açılır."
+            title={t("composer.orchestraModeTitle")}
             className={cn(
               "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px]",
               orchestraActive
@@ -556,7 +537,7 @@ function ApprovalModeMenu({
             )}
           >
             <Music className={cn("h-3 w-3 shrink-0", orchestraActive && "text-codezal-accent")} />
-            <span className="flex-1">Orkestra modu{orchestraActive ? " (kapat)" : "…"}</span>
+            <span className="flex-1">{orchestraActive ? t("composer.orchestraModeClose") : `${t("composer.modeOrchestra")}…`}</span>
           </button>
         </div>
       )}
@@ -571,6 +552,7 @@ function AttachMenu({
   onPickFile: () => void
   onPickFolder: () => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
@@ -588,7 +570,7 @@ function AttachMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="Ekle"
+        title={t("common.add")}
         className="flex h-[26px] shrink-0 items-center justify-center rounded-md border border-codezal px-1.5 text-codezal-dim hover:border-codezal-strong"
       >
         <Plus className="h-3.5 w-3.5" />
@@ -604,7 +586,7 @@ function AttachMenu({
             className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text"
           >
             <Paperclip className="h-3 w-3 shrink-0" />
-            <span className="flex-1">Fotoğraf veya dosya ekle</span>
+            <span className="flex-1">{t("composer.attachFileOrPhoto")}</span>
           </button>
           <button
             type="button"
@@ -615,7 +597,7 @@ function AttachMenu({
             className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text"
           >
             <FolderPlus className="h-3 w-3 shrink-0" />
-            <span className="flex-1">Klasör ekle</span>
+            <span className="flex-1">{t("composer.attachFolder")}</span>
           </button>
         </div>
       )}
@@ -663,6 +645,7 @@ function WorkspacePicker({
   onPick: (path: string) => void
   onPickNew: () => Promise<void>
 }) {
+  const t = useT()
   const index = useSessionsStore((s) => s.index)
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
@@ -698,9 +681,9 @@ function WorkspacePicker({
 
   return (
     <div ref={wrapRef} className="relative">
-      <Chip onClick={() => setOpen((v) => !v)} title={current ?? "Proje seç"}>
+      <Chip onClick={() => setOpen((v) => !v)} title={current ?? t("composer.pickProject")}>
         <Folder className="h-2.5 w-2.5" />
-        <span>{basename(current) || "proje seç"}</span>
+        <span>{basename(current) || t("composer.pickProjectShort")}</span>
         <ChevronDown className="h-2 w-2" />
       </Chip>
       {open && (
@@ -710,14 +693,14 @@ function WorkspacePicker({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Proje ara"
+              placeholder={t("composer.searchProject")}
               className="w-full bg-transparent px-1.5 py-1 text-[12px] text-codezal-text placeholder:text-codezal-mute outline-none"
             />
           </div>
           <div className="max-h-[240px] overflow-y-auto py-1">
             {filtered.length === 0 && (
               <div className="px-2.5 py-2 text-[11.5px] text-codezal-mute">
-                {projects.length === 0 ? "Henüz proje yok" : "Sonuç yok"}
+                {projects.length === 0 ? t("composer.noProjects") : t("common.noResults")}
               </div>
             )}
             {filtered.map((p) => (
@@ -752,8 +735,130 @@ function WorkspacePicker({
               className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[12px] text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text"
             >
               <FolderPlus className="h-2.5 w-2.5" />
-              Yeni proje ekle…
+              {t("composer.addNewProject")}
             </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ModelPicker({
+  providerId,
+  modelId,
+  catalog,
+  onPickProvider,
+  onPickModel,
+}: {
+  providerId: ProviderId
+  modelId: string
+  catalog: ProvidersCatalog | undefined
+  onPickProvider: (id: ProviderId) => void
+  onPickModel: (m: string) => void
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState("")
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) setQ("")
+  }, [open])
+
+  const models = useMemo(
+    () => modelsFor(providerId, catalog),
+    [providerId, catalog],
+  )
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    if (!t) return models
+    return models.filter((m) => m.toLowerCase().includes(t))
+  }, [models, q])
+
+  const providerLabel = PROVIDERS[providerId]?.label ?? providerId
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-[26px] items-center gap-1.5 rounded-md border border-codezal px-2 text-[12px] font-medium hover:border-codezal-strong"
+        title={`${providerLabel} · ${modelId}`}
+      >
+        <span className="text-codezal-dim">{providerLabel}</span>
+        <span className="text-codezal-mute">·</span>
+        <span className="text-codezal-text">{modelId}</span>
+        <ChevronDown className="h-2 w-2 text-codezal-mute" />
+      </button>
+      {open && (
+        <div className="absolute bottom-[32px] right-0 z-50 w-[320px] overflow-hidden rounded-md border border-codezal bg-codezal-sidebar shadow-lg">
+          {/* Provider sekmeleri */}
+          <div className="flex border-b border-codezal-hair">
+            {Object.values(PROVIDERS).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onPickProvider(p.id)}
+                className={cn(
+                  "flex-1 px-2 py-1.5 text-[11.5px] font-medium transition-colors",
+                  p.id === providerId
+                    ? "bg-codezal-panel-2/60 text-codezal-text"
+                    : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {/* Arama */}
+          <div className="border-b border-codezal-hair p-1.5">
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("composer.searchModel")}
+              className="w-full bg-transparent px-1.5 py-1 text-[12px] text-codezal-text outline-none placeholder:text-codezal-mute"
+            />
+          </div>
+          {/* Liste */}
+          <div className="max-h-[280px] overflow-y-auto py-1">
+            {filtered.length === 0 && (
+              <div className="px-2.5 py-2 text-[11.5px] text-codezal-mute">
+                {t("common.noResults")}
+              </div>
+            )}
+            {filtered.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  onPickModel(m)
+                  setOpen(false)
+                }}
+                className={cn(
+                  "flex w-full items-center gap-1.5 px-2.5 py-1 text-left text-[12px]",
+                  m === modelId
+                    ? "bg-codezal-panel-2/60 text-codezal-text"
+                    : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
+                )}
+                title={m}
+              >
+                <span className="truncate font-mono text-[11.5px]">{m}</span>
+                {m === modelId && (
+                  <Check className="ml-auto h-3 w-3 shrink-0 text-codezal-accent" />
+                )}
+              </button>
+            ))}
           </div>
         </div>
       )}

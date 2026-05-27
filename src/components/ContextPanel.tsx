@@ -10,15 +10,19 @@ import { GitPanel } from "./GitPanel"
 import { TerminalPanel } from "./TerminalPanel"
 import type { PanelMode } from "./TabBar"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStaticCtx } from "@/lib/i18n"
 
-const TITLES: Record<PanelMode, string> = {
-  files: "Dosyalar",
-  git: "Git",
-  agents: "Ajan tanımları",
-  skills: "Skill paketleri",
-  memory: "Bellek dosyaları",
-  rules: "Kurallar",
-  terminal: "Terminal",
+function titleFor(mode: PanelMode, tt: ReturnType<typeof useT>): string {
+  switch (mode) {
+    case "files": return tt("contextPanel.titleFiles")
+    case "git": return tt("contextPanel.titleGit")
+    case "agents": return tt("contextPanel.titleAgents")
+    case "skills": return tt("contextPanel.titleSkills")
+    case "memory": return tt("contextPanel.titleMemory")
+    case "rules": return tt("contextPanel.titleRules")
+    case "terminal": return tt("contextPanel.titleTerminal")
+  }
 }
 
 type Props = {
@@ -32,6 +36,7 @@ const PANEL_W_MAX = 800
 const PANEL_W_DEFAULT = 320
 
 export function ContextPanel({ mode, onClose }: Props) {
+  const t = useT()
   const active = useSessionsStore((s) => s.active)
   const ws = active?.workspacePath
   // Terminal kendi scroll'u olur — diğerlerinde overflow + padding kullan
@@ -79,20 +84,20 @@ export function ContextPanel({ mode, onClose }: Props) {
       <div
         onMouseDown={startResize}
         className="group absolute left-0 top-0 z-20 h-full w-[6px] -translate-x-[3px] cursor-col-resize"
-        title="Sürükle: paneli genişlet/daralt"
+        title={t("contextPanel.resizeTitle")}
       >
         <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-transparent transition-colors group-hover:bg-codezal-accent" />
       </div>
       <header className="flex shrink-0 items-center gap-2 border-b border-codezal px-3 py-2">
         <span className="text-[12px] font-semibold uppercase tracking-wider text-codezal-dim">
-          {TITLES[mode]}
+          {titleFor(mode, t)}
         </span>
         <div className="flex-1" />
         <button
           type="button"
           onClick={onClose}
           className="rounded p-1 text-codezal-mute hover:text-codezal-text"
-          title="Paneli kapat"
+          title={t("contextPanel.panelClose")}
         >
           <X className="h-3 w-3" />
         </button>
@@ -130,12 +135,13 @@ function SectionHead({ label, right }: { label: string; right?: string }) {
 }
 
 function FilesSection({ workspacePath }: { workspacePath?: string }) {
+  const t = useT()
   return (
     <div>
-      <SectionHead label="Çalışma klasörü" />
+      <SectionHead label={t("contextPanel.workspaceFolder")} />
       {!workspacePath ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">
-          Klasör bağlı değil. Composer'dan klasör seç.
+          {t("contextPanel.notConnectedTreeMsg")}
         </div>
       ) : (
         <FileTree root={workspacePath} />
@@ -190,7 +196,7 @@ function TreeLevel({
     return <div className="px-2 py-1 text-[11px] text-codezal-mute">…</div>
   }
   if (entries.length === 0) {
-    return <div className="px-2 py-1 text-[11px] text-codezal-mute">(boş)</div>
+    return <div className="px-2 py-1 text-[11px] text-codezal-mute">{tStaticCtx("contextPanel.treeEmpty")}</div>
   }
 
   return (
@@ -251,6 +257,7 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
 }
 
 function AgentsSection({ workspacePath }: { workspacePath?: string }) {
+  const t = useT()
   const [agents, setAgents] = useState<AgentDef[] | null>(null)
   const openFile = useSessionsStore((s) => s.openFile)
 
@@ -271,12 +278,12 @@ function AgentsSection({ workspacePath }: { workspacePath?: string }) {
 
   return (
     <div>
-      <SectionHead label="Ajanlar" right={String(agents?.length ?? 0)} />
+      <SectionHead label={t("contextPanel.agentsHeading")} right={String(agents?.length ?? 0)} />
       {!agents ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">…</div>
       ) : agents.length === 0 ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">
-          Ajan tanımı yok.
+          {t("contextPanel.noAgents")}
           <br />
           <code className="text-codezal-text">.codezal/agents/&lt;name&gt;.md</code> (workspace) veya{" "}
           <code className="text-codezal-text">~/.codezal/agents/&lt;name&gt;.md</code> ekle.
@@ -302,7 +309,7 @@ function AgentsSection({ workspacePath }: { workspacePath?: string }) {
                 <Bot className="h-3 w-3 shrink-0 text-codezal-accent" />
                 <span className="truncate text-[12px] text-codezal-text">{a.name}</span>
                 <span className="ml-auto shrink-0 text-[10.5px] text-codezal-mute">
-                  {a.scope === "project" ? "proje" : "global"}
+                  {a.scope === "project" ? t("contextPanel.scopeProject") : t("contextPanel.scopeGlobal")}
                 </span>
               </span>
               {a.description && (
@@ -325,6 +332,7 @@ function AgentsSection({ workspacePath }: { workspacePath?: string }) {
 }
 
 function SkillsSection({ workspacePath }: { workspacePath?: string }) {
+  const t = useT()
   const [skills, setSkills] = useState<Skill[] | null>(null)
   const openFile = useSessionsStore((s) => s.openFile)
 
@@ -345,12 +353,12 @@ function SkillsSection({ workspacePath }: { workspacePath?: string }) {
 
   return (
     <div>
-      <SectionHead label="Skill paketleri" right={String(skills?.length ?? 0)} />
+      <SectionHead label={t("contextPanel.skillsHeading")} right={String(skills?.length ?? 0)} />
       {!skills ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">…</div>
       ) : skills.length === 0 ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">
-          Skill yok.
+          {t("contextPanel.noSkills2")}
           <br />
           <code className="text-codezal-text">.codezal/skills/&lt;name&gt;/SKILL.md</code> (workspace) veya{" "}
           <code className="text-codezal-text">~/.codezal/skills/&lt;name&gt;/SKILL.md</code> ekle.
@@ -371,7 +379,7 @@ function SkillsSection({ workspacePath }: { workspacePath?: string }) {
                 <Sparkles className="h-3 w-3 shrink-0 text-codezal-accent" />
                 <span className="truncate text-[12px] text-codezal-text">{s.name}</span>
                 <span className="ml-auto shrink-0 text-[10.5px] text-codezal-mute">
-                  {s.scope === "project" ? "proje" : "global"}
+                  {s.scope === "project" ? t("contextPanel.scopeProject") : t("contextPanel.scopeGlobal")}
                 </span>
               </span>
               {s.description && (
@@ -388,20 +396,21 @@ function SkillsSection({ workspacePath }: { workspacePath?: string }) {
 }
 
 function MemorySection({ workspacePath }: { workspacePath?: string }) {
+  const t = useT()
   const files = useMemoryFiles(workspacePath, "memory")
   const openFile = useSessionsStore((s) => s.openFile)
 
   return (
     <div>
       <SectionHead
-        label="Bellek dosyaları"
+        label={t("contextPanel.memoryHeading")}
         right={String(files?.length ?? 0)}
       />
       {!files ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">…</div>
       ) : files.length === 0 ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">
-          Bellek dosyası yok. <br />
+          {t("contextPanel.noMemoryFiles")} <br />
           Workspace içine <code className="text-codezal-text">CODEZAL.md</code> veya{" "}
           <code className="text-codezal-text">CLAUDE.md</code> ekle; system prompt'a otomatik enjekte edilir.
         </div>
@@ -418,7 +427,7 @@ function MemorySection({ workspacePath }: { workspacePath?: string }) {
               <FileText className="h-3 w-3 shrink-0 text-codezal-accent" />
               <span className="flex-1 truncate">{f.name}</span>
               <span className="shrink-0 text-[10.5px] text-codezal-mute">
-                {f.scope === "project" ? "proje" : "global"}
+                {f.scope === "project" ? t("contextPanel.scopeProject") : t("contextPanel.scopeGlobal")}
               </span>
               <span className="shrink-0 text-[10.5px] text-codezal-mute">
                 {Math.ceil(f.bytes / 1024)}K
@@ -432,17 +441,18 @@ function MemorySection({ workspacePath }: { workspacePath?: string }) {
 }
 
 function RulesSection({ workspacePath }: { workspacePath?: string }) {
+  const t = useT()
   const files = useMemoryFiles(workspacePath, "rules")
   const openFile = useSessionsStore((s) => s.openFile)
 
   return (
     <div>
-      <SectionHead label="Aktif kurallar" right={String(files?.length ?? 0)} />
+      <SectionHead label={t("contextPanel.rulesHeading")} right={String(files?.length ?? 0)} />
       {!files ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">…</div>
       ) : files.length === 0 ? (
         <div className="px-1 py-3 text-[12px] text-codezal-mute">
-          Kural dosyası yok. <br />
+          {t("contextPanel.noRulesFiles")} <br />
           <code className="text-codezal-text">.codezal/rules/*.md</code> (workspace) veya{" "}
           <code className="text-codezal-text">~/.codezal/rules/*.md</code> (global) altına ekle.
         </div>
@@ -459,7 +469,7 @@ function RulesSection({ workspacePath }: { workspacePath?: string }) {
               <ShieldCheck className="h-3 w-3 shrink-0 text-codezal-accent" />
               <span className="truncate">{f.name}</span>
               <span className="ml-auto shrink-0 text-[10.5px] text-codezal-mute">
-                {f.scope === "project" ? "proje" : "global"}
+                {f.scope === "project" ? t("contextPanel.scopeProject") : t("contextPanel.scopeGlobal")}
               </span>
             </button>
           ))}

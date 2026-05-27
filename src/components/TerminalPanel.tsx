@@ -8,12 +8,15 @@ import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-react"
 import { useTerminalsStore, type TerminalSession } from "@/store/terminals"
 import { spawnPty, type PtyHandle } from "@/lib/pty"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 type Props = {
   workspacePath?: string
 }
 
 export function TerminalPanel({ workspacePath }: Props) {
+  const t = useT()
   const sessions = useTerminalsStore((s) => s.sessions)
   const activeId = useTerminalsStore((s) => s.activeId)
   const ensureOne = useTerminalsStore((s) => s.ensureOne)
@@ -49,7 +52,7 @@ export function TerminalPanel({ workspacePath }: Props) {
         ))}
         {sessions.length === 0 && (
           <div className="flex h-full items-center justify-center text-[12px] text-codezal-mute">
-            Terminal yok — yenisini ekle.
+            {t("terminal.noTerminals")}
           </div>
         )}
       </div>
@@ -72,6 +75,7 @@ function HeaderBar({
   onClose: (id: string) => void
   onRename: (id: string, name: string) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [renameId, setRenameId] = useState<string | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -103,14 +107,14 @@ function HeaderBar({
               active?.running ? "bg-codezal-accent" : "bg-codezal-mute/50",
             )}
           />
-          <span className="truncate">{active?.name ?? "Terminal"}</span>
+          <span className="truncate">{active?.name ?? t("terminal.title")}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-codezal-mute" />
         </button>
 
         {open && (
           <div className="absolute left-1 top-[30px] z-50 min-w-[220px] rounded-md border border-codezal bg-codezal-sidebar py-1 shadow-lg">
             <div className="px-2.5 pb-1 text-[10px] uppercase tracking-wide text-codezal-mute">
-              Terminaller
+              {t("terminal.terminalsHeading")}
             </div>
             {sessions.map((s) => {
               const isActive = s.id === activeId
@@ -169,7 +173,7 @@ function HeaderBar({
                       e.stopPropagation()
                       setRenameId(s.id)
                     }}
-                    title="Adlandır"
+                    title={t("terminal.renameTitle")}
                     className="opacity-0 group-hover:opacity-70 hover:opacity-100"
                   >
                     <Pencil className="h-3 w-3" />
@@ -181,7 +185,7 @@ function HeaderBar({
                         e.stopPropagation()
                         onClose(s.id)
                       }}
-                      title="Kapat"
+                      title={t("terminal.closeTitle")}
                       className="text-codezal-mute opacity-0 group-hover:opacity-70 hover:text-destructive hover:opacity-100"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -200,7 +204,7 @@ function HeaderBar({
               className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[11.5px] text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text"
             >
               <Plus className="h-3 w-3" />
-              Yeni terminal
+              {t("terminal.newTerminal")}
             </button>
           </div>
         )}
@@ -208,7 +212,7 @@ function HeaderBar({
       <button
         type="button"
         onClick={() => onNew()}
-        title="Yeni terminal"
+        title={t("terminal.newTerminal")}
         className="flex h-full w-7 shrink-0 items-center justify-center border-l border-codezal-hair text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
       >
         <Plus className="h-3 w-3" />
@@ -284,7 +288,7 @@ function TerminalView({
           term.write(chunk)
         })
         await handle.onExit(() => {
-          term.write("\r\n\x1b[31m[süreç sonlandı]\x1b[0m\r\n")
+          term.write(`\r\n\x1b[31m${tStatic("terminal.ptyExited")}\x1b[0m\r\n`)
           patch(session.id, { running: false })
         })
         // xterm input → PTY stdin
@@ -298,7 +302,7 @@ function TerminalView({
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setError(msg)
-        term.write(`\r\n\x1b[31mPTY başlatılamadı: ${msg}\x1b[0m\r\n`)
+        term.write(`\r\n\x1b[31m${tStatic("terminal.ptyFailed", { message: msg })}\x1b[0m\r\n`)
         patch(session.id, { running: false })
       }
     })()

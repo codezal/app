@@ -2,8 +2,10 @@
 import { useSessionsStore } from "@/store/sessions"
 import { contextCap } from "@/lib/pricing"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
 
 export function StatusBar() {
+  const t = useT()
   const active = useSessionsStore((s) => s.active)
   if (!active) return null
 
@@ -16,7 +18,7 @@ export function StatusBar() {
 
   return (
     <div className="flex h-[22px] shrink-0 items-center gap-3 border-t border-codezal bg-codezal-sidebar px-3 text-[10.5px] text-codezal-mute">
-      <span title={`${used.toLocaleString()} / ${cap.toLocaleString()} tahmini efektif bağlam`}>
+      <span title={t("statusBar.ctxTitle", { used: used.toLocaleString(), cap: cap.toLocaleString() })}>
         ctx{" "}
         <span
           className={cn(
@@ -55,7 +57,7 @@ export function StatusBar() {
           <span className="text-codezal-mute">·</span>
           <span>
             ${usage.costUsd.toFixed(4)}{" "}
-            <span className="text-codezal-mute">({usage.turns} tur)</span>
+            <span className="text-codezal-mute">{t("statusBar.turnsLabel", { n: usage.turns })}</span>
           </span>
         </>
       )}

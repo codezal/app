@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react"
 import { Bot, FileText, Globe, MessageSquarePlus, RefreshCcw, Search, Settings, Sparkles, Square, Trash2, Zap } from "lucide-react"
 import type { SlashCommand } from "@/lib/commands"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
 
 type Props = {
   open: boolean
@@ -15,6 +16,7 @@ type Props = {
 }
 
 export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex, onPick }: Props) {
+  const t = useT()
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query])
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -30,7 +32,7 @@ export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex,
     <div className="absolute bottom-full left-0 right-0 mb-1 max-h-[280px] overflow-hidden rounded-md border border-codezal bg-codezal-panel shadow-xl">
       <div ref={listRef} className="max-h-[260px] overflow-y-auto p-1">
         {filtered.length === 0 ? (
-          <div className="px-3 py-3 text-[12px] text-codezal-mute">Eşleşen komut yok</div>
+          <div className="px-3 py-3 text-[12px] text-codezal-mute">{t("slashMenu.noMatchingCommands")}</div>
         ) : (
           filtered.map((c, i) => {
             const Icon = iconFor(c)
@@ -54,7 +56,7 @@ export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex,
                   {c.description}
                 </span>
                 <span className="ml-auto rounded bg-codezal-chip px-1.5 py-0.5 text-[10px] text-codezal-dim">
-                  {c.scope === "builtin" ? "yerleşik" : c.scope === "project" ? "proje" : "global"}
+                  {c.scope === "builtin" ? t("slashMenu.builtin") : c.scope === "project" ? t("slashMenu.project") : t("slashMenu.global")}
                 </span>
               </button>
             )
@@ -62,7 +64,7 @@ export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex,
         )}
       </div>
       <div className="border-t border-codezal px-3 py-1 text-[10.5px] text-codezal-mute">
-        ↑↓ gez · ⏎ seç · esc kapat
+        {t("slashMenu.footerHelp")}
       </div>
     </div>
   )

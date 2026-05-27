@@ -21,17 +21,21 @@ import type {
   WorkerKind,
 } from "@/lib/orchestra/types"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 type Props = {
   onClose: () => void
 }
 
-const KIND_OPTIONS: { value: WorkerKind; label: string; hint: string }[] = [
-  { value: "sdk", label: "SDK (in-process)", hint: "Codezal'ın kendi AI SDK'ı — Anthropic/OpenAI/Google/DeepSeek" },
-  { value: "claude-cli", label: "Claude Code CLI", hint: "claude binary, --print --output-format stream-json" },
-  { value: "codex-cli", label: "Codex CLI", hint: "codex exec --json" },
-  { value: "opencode-cli", label: "OpenCode CLI", hint: "opencode run --json" },
-]
+function buildKindOptions(): { value: WorkerKind; label: string; hint: string }[] {
+  return [
+    { value: "sdk", label: tStatic("orchestraModal.kindSdk"), hint: tStatic("orchestraModal.kindSdkHint") },
+    { value: "claude-cli", label: tStatic("orchestraModal.kindClaude"), hint: tStatic("orchestraModal.kindClaudeHint") },
+    { value: "codex-cli", label: tStatic("orchestraModal.kindCodex"), hint: tStatic("orchestraModal.kindCodexHint") },
+    { value: "opencode-cli", label: tStatic("orchestraModal.kindOpencode"), hint: tStatic("orchestraModal.kindOpencodeHint") },
+  ]
+}
 
 function makeDefaultWorker(idx: number, defProvider: ProviderId, defModel: string): WorkerConfig {
   return {
@@ -45,6 +49,7 @@ function makeDefaultWorker(idx: number, defProvider: ProviderId, defModel: strin
 }
 
 export function OrchestraConfigModal({ onClose }: Props) {
+  const t = useT()
   const active = useSessionsStore((s) => s.active)
   const setMode = useSessionsStore((s) => s.setMode)
   const setOrchestra = useSessionsStore((s) => s.setOrchestra)
@@ -149,10 +154,10 @@ export function OrchestraConfigModal({ onClose }: Props) {
         <header className="flex items-center gap-2 border-b border-codezal px-3 py-2.5">
           <Music className="h-4 w-4 text-codezal-accent" />
           <span className="text-[13px] font-medium text-codezal-text">
-            Orkestra havuzu konfigürasyonu
+            {t("orchestraModal.headerTitle")}
           </span>
           <span className="text-[11px] text-codezal-mute">
-            ({workers.length}/5 worker)
+            {t("orchestraModal.workerCount", { count: workers.length })}
           </span>
           <div className="flex-1" />
           <button
@@ -168,7 +173,7 @@ export function OrchestraConfigModal({ onClose }: Props) {
           {/* Parent satırı */}
           <section className="rounded-md border border-codezal-strong bg-codezal-input/30 p-3">
             <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-codezal-dim">
-              Orkestra şefi (parent LLM)
+              {t("orchestraModal.parentTitle")}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -198,7 +203,7 @@ export function OrchestraConfigModal({ onClose }: Props) {
                 ))}
               </select>
               <span className="text-[11px] text-codezal-mute">
-                Bu model dispatch_workers ile worker'lara görev verecek
+                {t("orchestraModal.parentHint")}
               </span>
             </div>
           </section>
@@ -206,7 +211,7 @@ export function OrchestraConfigModal({ onClose }: Props) {
           {/* Worker satırları */}
           <section>
             <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-codezal-dim">
-              Worker havuzu (1-5)
+              {t("orchestraModal.workerHeading")}
               <div className="flex-1" />
               <button
                 type="button"
@@ -219,7 +224,7 @@ export function OrchestraConfigModal({ onClose }: Props) {
                     : "text-codezal-dim hover:border-codezal-strong hover:text-codezal-text",
                 )}
               >
-                <Plus className="h-3 w-3" /> Worker ekle
+                <Plus className="h-3 w-3" /> {t("orchestraModal.addWorker")}
               </button>
             </div>
 
@@ -247,21 +252,17 @@ export function OrchestraConfigModal({ onClose }: Props) {
                 {yoloCount > 0 && (
                   <div>
                     <span className="font-semibold text-amber-900 dark:text-amber-200">
-                      {yoloCount} worker YOLO modunda
+                      {t("orchestraModal.yoloCountWarn", { count: yoloCount })}
                     </span>{" "}
-                    — tool çağrıları otomatik onaylanır. Orkestra çalışırken parent'ın çağrıları
-                    da bypass olur (v1 sınırı).
+                    {t("orchestraModal.yoloMsg")}
                   </div>
                 )}
                 {cliCount > 0 && (
                   <div>
                     <span className="font-semibold text-amber-900 dark:text-amber-200">
-                      {cliCount} CLI worker
+                      {t("orchestraModal.cliCountWarn", { count: cliCount })}
                     </span>{" "}
-                    — <code className="rounded bg-amber-600/25 px-1 font-mono text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">claude</code>,{" "}
-                    <code className="rounded bg-amber-600/25 px-1 font-mono text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">codex</code>,{" "}
-                    <code className="rounded bg-amber-600/25 px-1 font-mono text-amber-950 dark:bg-amber-500/30 dark:text-amber-100">opencode</code>{" "}
-                    binary'leri PATH'te kurulu olmalı.
+                    {t("orchestraModal.cliMsg")}
                   </div>
                 )}
               </div>
@@ -270,23 +271,22 @@ export function OrchestraConfigModal({ onClose }: Props) {
         </div>
 
         <footer className="flex items-center gap-2 border-t border-codezal px-3 py-2">
-          <span className="text-[11px] text-codezal-mute">
-            Başlat → orkestra modu aktif, parent system prompt'una worker havuzu enjekte edilir
+          <span className="min-w-0 flex-1 truncate text-[11px] text-codezal-mute">
+            {t("orchestraModal.startHint")}
           </span>
-          <div className="flex-1" />
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-codezal px-3 py-1 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
+            className="shrink-0 rounded-md border border-codezal px-3 py-1 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
           >
-            İptal
+            {t("orchestraModal.cancel")}
           </button>
           <button
             type="button"
             onClick={handleStart}
-            className="flex items-center gap-1 rounded-md bg-codezal-accent px-3 py-1 text-[12px] font-medium text-[#1a1106] hover:scale-[1.02]"
+            className="flex shrink-0 items-center gap-1 rounded-md bg-codezal-accent px-3 py-1 text-[12px] font-medium text-[#1a1106] hover:scale-[1.02]"
           >
-            <Music className="h-3 w-3" /> Başlat
+            <Music className="h-3 w-3" /> {t("orchestraModal.start")}
           </button>
         </footer>
       </div>
@@ -313,6 +313,8 @@ function WorkerRow({
   onRemove,
   onPickPreset,
 }: WorkerRowProps) {
+  const t = useT()
+  const kindOptions = useMemo(() => buildKindOptions(), [])
   const isSdk = config.kind === "sdk"
   const provider = (config.provider ?? "anthropic") as ProviderId
   const models = useMemo(() => modelsFor(provider, catalog), [provider, catalog])
@@ -328,7 +330,7 @@ function WorkerRow({
         onChange={(e) => onChange({ kind: e.target.value as WorkerKind })}
         className="shrink-0 rounded border border-codezal bg-codezal-input px-2 py-1 text-[11.5px] text-codezal-text"
       >
-        {KIND_OPTIONS.map((o) => (
+        {kindOptions.map((o) => (
           <option key={o.value} value={o.value} title={o.hint}>
             {o.label}
           </option>
@@ -370,7 +372,7 @@ function WorkerRow({
           type="text"
           value={config.model ?? ""}
           onChange={(e) => onChange({ model: e.target.value })}
-          placeholder="model (CLI hint, opsiyonel)"
+          placeholder={t("orchestraModal.cliModelPlaceholder")}
           className="min-w-[140px] flex-1 rounded border border-codezal bg-codezal-input px-2 py-1 text-[11.5px] text-codezal-text"
         />
       )}
@@ -379,9 +381,9 @@ function WorkerRow({
         value={config.presetAgent ?? ""}
         onChange={(e) => onPickPreset(e.target.value)}
         className="shrink-0 rounded border border-codezal bg-codezal-input px-2 py-1 text-[11.5px] text-codezal-text"
-        title="Preset AgentDef (workspace/global) — system prompt + policy buradan gelir. Custom için boş."
+        title={t("orchestraModal.presetTitle")}
       >
-        <option value="">Preset yok</option>
+        <option value="">{t("orchestraModal.presetEmpty")}</option>
         {agentPresets.map((p) => (
           <option key={p.path} value={p.name}>
             {p.name}
@@ -396,14 +398,14 @@ function WorkerRow({
           onChange={(e) => onChange({ yolo: e.target.checked })}
           className="accent-codezal-accent"
         />
-        YOLO
+        {t("orchestraModal.yoloLabel")}
       </label>
 
       {canRemove && (
         <button
           type="button"
           onClick={onRemove}
-          title="Worker'ı sil"
+          title={t("orchestraModal.removeWorkerTitle")}
           className="shrink-0 rounded p-1 text-codezal-mute hover:text-destructive"
         >
           <Trash2 className="h-3 w-3" />

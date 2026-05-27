@@ -19,6 +19,7 @@ import { useSettingsStore } from "@/store/settings"
 import { basename } from "@/lib/workspace"
 import type { SessionMeta } from "@/store/types"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
 
 type Props = {
   onOpenSettings: () => void
@@ -31,6 +32,7 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
   const { index, activeId, create, open, remove } = useSessionsStore()
   const settings = useSettingsStore((s) => s.settings)
   const [query, setQuery] = useState("")
+  const t = useT()
 
   const filtered = useMemo(() => {
     return query.trim()
@@ -69,7 +71,7 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
           className="flex w-full items-center gap-2 rounded-lg border border-codezal bg-codezal-panel px-2.5 py-2 text-[13px] font-medium text-codezal-text hover:border-codezal-strong"
         >
           <Plus className="h-3.5 w-3.5 text-codezal-accent" />
-          Yeni oturum
+          {t("sidebar.newSession")}
           <span className="ml-auto rounded border border-codezal px-1.5 py-0.5 text-[11px] text-codezal-mute">
             ⌘N
           </span>
@@ -83,7 +85,7 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ara"
+            placeholder={t("common.searchPlaceholder")}
             className="w-full rounded-md border border-codezal bg-transparent py-1.5 pl-7 pr-2 text-[13px] text-codezal-text placeholder:text-codezal-mute outline-none focus:border-codezal-strong"
           />
         </div>
@@ -93,12 +95,12 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
       <nav className="flex flex-col gap-0.5 px-2.5">
         <NavItem
           icon={<Zap className="h-3 w-3" />}
-          label="Rutinler"
+          label={t("sidebar.routines")}
           onClick={onOpenRoutines}
         />
         <NavItem
           icon={<Sliders className="h-3 w-3" />}
-          label="Özelleştir"
+          label={t("sidebar.customize")}
           onClick={onOpenSettings}
         />
       </nav>
@@ -107,13 +109,13 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
       <div className="flex-1 overflow-y-auto px-2.5 pt-3">
         {filtered.length === 0 ? (
           <div className="px-3 py-3 text-[12px] text-codezal-mute">
-            {query ? "Sonuç yok" : "Henüz oturum yok"}
+            {query ? t("sidebar.noSearchResults") : t("sidebar.noSessions")}
           </div>
         ) : (
           groupByWorkspace(filtered).map(([wsKey, items]) => (
             <ProjectGroup
               key={wsKey}
-              name={wsKey === "" ? "Sohbetler" : basename(wsKey)}
+              name={wsKey === "" ? t("sidebar.chats") : basename(wsKey)}
               isLoose={wsKey === ""}
             >
               <ul className="flex flex-col gap-0.5">
@@ -148,7 +150,7 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
                           type="button"
                           onClick={() => onReplay(m.id)}
                           className="rounded p-0.5 opacity-0 hover:bg-codezal-panel-2 hover:text-codezal-accent group-hover:opacity-100"
-                          title="Replay — yeni session'da user mesajlarını yeniden çalıştır"
+                          title={t("sidebar.replaySession")}
                         >
                           <Play className="h-3 w-3" />
                         </button>
@@ -157,7 +159,7 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
                         type="button"
                         onClick={() => onRemove(m.id)}
                         className="rounded p-0.5 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                        title="Sil"
+                        title={t("sidebar.deleteSession")}
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -180,14 +182,14 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
             Erhan Erbaş
           </div>
           <div className="text-[11px] text-codezal-mute">
-            Max · local
+            {t("sidebar.accountTier")}
           </div>
         </div>
         <button
           type="button"
           onClick={onOpenSettings}
           className="rounded p-1 text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
-          title="Ayarlar"
+          title={t("sidebar.settings")}
         >
           <Settings className="h-3.5 w-3.5" />
         </button>

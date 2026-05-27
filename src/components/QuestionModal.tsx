@@ -4,8 +4,10 @@
 import { useEffect, useRef, useState } from "react"
 import { HelpCircle, Send, X } from "lucide-react"
 import { useQuestionsStore } from "@/store/questions"
+import { useT } from "@/lib/i18n/useT"
 
 export function QuestionModal() {
+  const t = useT()
   const queue = useQuestionsStore((s) => s.queue)
   const answer = useQuestionsStore((s) => s.answer)
   const cancel = useQuestionsStore((s) => s.cancel)
@@ -39,16 +41,16 @@ export function QuestionModal() {
       <div className="w-[520px] overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl">
         <header className="flex items-center gap-2 border-b border-codezal px-3 py-2.5">
           <HelpCircle className="h-4 w-4 text-codezal-accent" />
-          <span className="text-[13px] font-medium text-codezal-text">Agent soruyor</span>
+          <span className="text-[13px] font-medium text-codezal-text">{t("questionModal.agentAsking")}</span>
           <div className="flex-1" />
           {queue.length > 1 && (
-            <span className="text-[11px] text-codezal-mute">+{queue.length - 1} bekliyor</span>
+            <span className="text-[11px] text-codezal-mute">{t("questionModal.pendingMore", { count: queue.length - 1 })}</span>
           )}
           <button
             type="button"
             onClick={() => cancel(req.id)}
             className="rounded p-1 text-codezal-dim hover:text-codezal-text"
-            title="Cevap vermeden kapat"
+            title={t("questionModal.closeNoAnswerTitle")}
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -82,7 +84,7 @@ export function QuestionModal() {
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKey}
               rows={3}
-              placeholder="Cevabını yaz... (⌘/Ctrl + Enter ile gönder)"
+              placeholder={t("questionModal.placeholder")}
               className="w-full resize-none rounded-md border border-codezal bg-codezal-code px-3 py-2 font-mono text-[12px] leading-[1.55] text-codezal-text outline-none focus:border-codezal-strong"
             />
           )}
@@ -96,7 +98,7 @@ export function QuestionModal() {
               disabled={!text.trim()}
               className="flex items-center gap-1 rounded-md bg-codezal-accent px-3 py-1.5 text-[12px] font-medium text-[#1a1106] disabled:opacity-50"
             >
-              <Send className="h-3 w-3" /> Gönder
+              <Send className="h-3 w-3" /> {t("questionModal.submit")}
             </button>
           </footer>
         )}

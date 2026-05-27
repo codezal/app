@@ -13,12 +13,25 @@ import {
 } from "lucide-react"
 import type { AgentCardPart, AgentCardStatus, WorkerKind } from "@/lib/orchestra/types"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 const KIND_LABEL: Record<WorkerKind, string> = {
   sdk: "SDK",
   "claude-cli": "Claude CLI",
   "codex-cli": "Codex CLI",
   "opencode-cli": "OpenCode CLI",
+}
+
+function statusLabel(status: AgentCardStatus): string {
+  switch (status) {
+    case "pending": return tStatic("agentCard.statusPending")
+    case "running": return tStatic("agentCard.statusRunning")
+    case "waiting-approval": return tStatic("agentCard.statusWaitingApproval")
+    case "done": return tStatic("agentCard.statusDone")
+    case "error": return tStatic("agentCard.statusError")
+    case "aborted": return tStatic("agentCard.statusAborted")
+  }
 }
 
 function statusStyle(status: AgentCardStatus): {
@@ -84,6 +97,7 @@ function formatDuration(start: number | undefined, end: number | undefined): str
 }
 
 export function AgentCard({ part }: { part: AgentCardPart }) {
+  const t = useT()
   const [open, setOpen] = useState(part.status === "error" || part.status === "waiting-approval")
   const style = statusStyle(part.status)
   const kindLabel = KIND_LABEL[part.kind]
@@ -123,12 +137,12 @@ export function AgentCard({ part }: { part: AgentCardPart }) {
         </span>
         {part.configSnapshot.yolo && (
           <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] text-amber-400">
-            YOLO
+            {t("agentCard.yolo")}
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-2 text-[10.5px]">
           {part.tokensIn != null && (
-            <span className="text-codezal-mute" title="input · output token">
+            <span className="text-codezal-mute" title={t("agentCard.tokensTitle")}>
               {formatTok(part.tokensIn)}↓ {formatTok(part.tokensOut)}↑
             </span>
           )}
@@ -142,7 +156,7 @@ export function AgentCard({ part }: { part: AgentCardPart }) {
           >
             <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
             <StatusIcon status={part.status} />
-            <span className="capitalize">{part.status.replace("-", " ")}</span>
+            <span className="capitalize">{statusLabel(part.status)}</span>
           </span>
         </span>
       </button>

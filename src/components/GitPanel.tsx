@@ -11,12 +11,15 @@ import {
 } from "lucide-react"
 import { gitDiffFile, gitStatus, statusLabel, type GitStatus, type GitStatusEntry } from "@/lib/git"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 type Props = {
   workspacePath?: string
 }
 
 export function GitPanel({ workspacePath }: Props) {
+  const t = useT()
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -43,7 +46,7 @@ export function GitPanel({ workspacePath }: Props) {
   if (!workspacePath) {
     return (
       <div className="px-1 py-3 text-[12px] text-codezal-mute">
-        Klasör bağlı değil — git durumu için workspace seç.
+        {t("gitPanel.notConnectedHint")}
       </div>
     )
   }
@@ -54,7 +57,7 @@ export function GitPanel({ workspacePath }: Props) {
       <div className="flex items-center gap-2">
         <GitBranch className="h-3.5 w-3.5 text-codezal-accent" />
         <span className="truncate text-[13px] font-medium text-codezal-text">
-          {status?.info.branch ?? (status?.isRepo === false ? "(repo değil)" : "…")}
+          {status?.info.branch ?? (status?.isRepo === false ? t("gitPanel.notRepoLabel") : "…")}
         </span>
         {status?.info.upstream && (
           <span className="truncate text-[11px] text-codezal-mute">
@@ -78,7 +81,7 @@ export function GitPanel({ workspacePath }: Props) {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          title="Yenile"
+          title={t("gitPanel.refresh")}
           className="rounded p-1 text-codezal-mute hover:text-codezal-text disabled:opacity-50"
         >
           <RefreshCcw className={cn("h-3 w-3", loading && "animate-spin")} />
@@ -94,11 +97,11 @@ export function GitPanel({ workspacePath }: Props) {
       {/* Dosya listesi — staged + unstaged grupları */}
       {status?.isRepo === false ? (
         <div className="px-1 py-2 text-[12px] text-codezal-mute">
-          Bu klasör git deposu değil. <code className="text-codezal-text">git init</code> ile başlat.
+          {t("gitPanel.notARepoHint", { gitinit: "git init" })}
         </div>
       ) : status?.entries.length === 0 ? (
         <div className="px-1 py-2 text-[12px] text-codezal-mute">
-          Çalışma kopyası temiz.
+          {t("gitPanel.cleanWorktree")}
         </div>
       ) : status ? (
         <FileGroups entries={status.entries} onPick={setDiffFor} />
@@ -132,14 +135,14 @@ function FileGroups({
   return (
     <div className="space-y-3">
       {staged.length > 0 && (
-        <Group label="Staged" count={staged.length}>
+        <Group label={tStatic("gitPanel.stagedLabel")} count={staged.length}>
           {staged.map((e) => (
             <FileRow key={"s" + e.path} entry={e} onClick={() => onPick(e)} staged />
           ))}
         </Group>
       )}
       {unstaged.length > 0 && (
-        <Group label="Değişti" count={unstaged.length}>
+        <Group label={tStatic("gitPanel.modifiedLabel")} count={unstaged.length}>
           {unstaged.map((e) => (
             <FileRow key={"u" + e.path} entry={e} onClick={() => onPick(e)} />
           ))}
@@ -226,6 +229,7 @@ function DiffModal({
   entry: GitStatusEntry
   onClose: () => void
 }) {
+  const t = useT()
   const [diff, setDiff] = useState<string | null>(null)
   const [staged, setStaged] = useState(false)
 
@@ -233,7 +237,7 @@ function DiffModal({
     let alive = true
     setDiff(null)
     void gitDiffFile(workspace, entry.path, staged).then((d) => {
-      if (alive) setDiff(d || "(diff boş — yeni dosya veya silinmiş olabilir)")
+      if (alive) setDiff(d || tStatic("gitPanel.diffEmpty"))
     })
     return () => {
       alive = false
@@ -263,7 +267,7 @@ function DiffModal({
                 !staged ? "bg-codezal-chip text-codezal-text" : "text-codezal-dim",
               )}
             >
-              Worktree
+              {t("gitPanel.worktreeTab")}
             </button>
             <button
               type="button"
@@ -273,7 +277,7 @@ function DiffModal({
                 staged ? "bg-codezal-chip text-codezal-text" : "text-codezal-dim",
               )}
             >
-              Staged
+              {t("gitPanel.stagedTab")}
             </button>
           </div>
           <button

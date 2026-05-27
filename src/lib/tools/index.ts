@@ -16,7 +16,13 @@ import {
 import { useApprovalsStore } from "@/store/approvals"
 import { useQuestionsStore } from "@/store/questions"
 import { loadSkillByName } from "../skills"
-import { findAgent, checkSubagentPolicy, type SubagentPolicy } from "../agents"
+import {
+  findAgent,
+  checkSubagentPolicy,
+  readWorkspaceAgents,
+  readUserAgents,
+  type SubagentPolicy,
+} from "../agents"
 import { buildModel, type ProviderId } from "../providers"
 import { useSettingsStore } from "@/store/settings"
 import { useSessionsStore } from "@/store/sessions"
@@ -214,6 +220,22 @@ export async function buildAllTools(
   const mode = useSessionsStore.getState().active?.mode ?? "build"
   if (mode !== "orchestra" && merged.dispatch_workers) {
     delete merged.dispatch_workers
+  }
+  // spawn_agent sadece disk'te agent .md varsa yayınlanır — yoksa LLM hayali agent çağırır.
+  // Workspace + global katalog toplamı 0 ise tool seti'nden silinir.
+  if (merged.spawn_agent) {
+    try {
+      const [proj, user] = await Promise.all([
+        readWorkspaceAgents(workspace),
+        readUserAgents(),
+      ])
+      if (proj.length + user.length === 0) {
+        delete merged.spawn_agent
+      }
+    } catch {
+      // Okuma hatası → güvenli tarafta kal, tool'u sil
+      delete merged.spawn_agent
+    }
   }
   return wrapWithPostHook(merged, workspace)
 }

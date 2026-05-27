@@ -4,6 +4,7 @@ import { FileText, Regex, Search, X } from "lucide-react"
 import { useSessionsStore } from "@/store/sessions"
 import { searchWorkspace, type SearchHit } from "@/lib/search"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
 
 type Props = {
   open: boolean
@@ -11,6 +12,7 @@ type Props = {
 }
 
 export function SearchOverlay({ open, onClose }: Props) {
+  const t = useT()
   const [query, setQuery] = useState("")
   const [regex, setRegex] = useState(false)
   const [caseSensitive, setCaseSensitive] = useState(false)
@@ -34,7 +36,7 @@ export function SearchOverlay({ open, onClose }: Props) {
     if (!open) return
     if (!active?.workspacePath) {
       setHits([])
-      setError("Klasör bağlı değil")
+      setError(t("searchOverlay.folderNotConnected"))
       return
     }
     const q = query.trim()
@@ -45,7 +47,7 @@ export function SearchOverlay({ open, onClose }: Props) {
     }
     setError(null)
     setLoading(true)
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       void searchWorkspace(active.workspacePath!, q, {
         regex,
         caseSensitive,
@@ -55,7 +57,8 @@ export function SearchOverlay({ open, onClose }: Props) {
         .catch((e) => setError(e instanceof Error ? e.message : String(e)))
         .finally(() => setLoading(false))
     }, 250)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, query, regex, caseSensitive, glob, active?.workspacePath])
 
   // Dosya bazında grupla
@@ -82,13 +85,13 @@ export function SearchOverlay({ open, onClose }: Props) {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Workspace içinde ara…"
+              placeholder={t("commandPalette.workspaceSearch")}
               className="flex-1 bg-transparent text-[14px] text-codezal-text placeholder:text-codezal-mute focus:outline-none"
             />
             <button
               type="button"
               onClick={() => setRegex((v) => !v)}
-              title="Regex"
+              title={t("searchOverlay.regex")}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded border",
                 regex
@@ -101,7 +104,7 @@ export function SearchOverlay({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => setCaseSensitive((v) => !v)}
-              title="Büyük/küçük duyarlı"
+              title={t("searchOverlay.caseSensitive")}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded border font-mono text-[10.5px] font-semibold",
                 caseSensitive
@@ -120,15 +123,15 @@ export function SearchOverlay({ open, onClose }: Props) {
             </button>
           </div>
           <div className="mt-2 flex items-center gap-2 text-[11px]">
-            <span className="text-codezal-mute">glob:</span>
+            <span className="text-codezal-mute">{t("searchOverlay.globLabel")}</span>
             <input
               value={glob}
               onChange={(e) => setGlob(e.target.value)}
-              placeholder="örn *.ts veya src/**"
+              placeholder={t("searchOverlay.globPlaceholder")}
               className="h-6 flex-1 rounded border border-codezal bg-transparent px-2 text-[11.5px] text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none"
             />
             <span className="text-codezal-mute">
-              {loading ? "…" : `${hits.length} sonuç`}
+              {loading ? t("searchOverlay.loadingDots") : t("searchOverlay.resultsCount", { count: hits.length })}
             </span>
           </div>
         </header>
@@ -141,7 +144,7 @@ export function SearchOverlay({ open, onClose }: Props) {
           )}
           {!error && hits.length === 0 && query.trim() && !loading && (
             <div className="px-4 py-8 text-center text-[12px] text-codezal-mute">
-              Sonuç yok
+              {t("searchOverlay.noResults")}
             </div>
           )}
           {groups.map((g) => (
@@ -183,8 +186,8 @@ export function SearchOverlay({ open, onClose }: Props) {
         </div>
 
         <footer className="flex items-center justify-between border-t border-codezal px-3 py-1.5 text-[10.5px] text-codezal-mute">
-          <span>⌘⇧F ile aç · esc kapa</span>
-          <span>ripgrep varsa daha hızlı</span>
+          <span>{t("searchOverlay.footerHelp")}</span>
+          <span>{t("searchOverlay.rgFaster")}</span>
         </footer>
       </div>
     </div>

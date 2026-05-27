@@ -237,7 +237,22 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       return {
         active: {
           ...st.active,
-          messages: st.active.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+          messages: st.active.messages.map((m) => {
+            if (m.id !== id) return m
+            // parts patch'i geldiyse mevcut agent-card'ları koru — stream loop'unda
+            // local parts dizisi agentCard'ları içermez; üzerine yazılırsa dispatch_workers
+            // ile push edilen kartlar silinir.
+            if (patch.parts && m.parts) {
+              const existingCards = m.parts.filter((p) => p.type === "agent-card")
+              if (existingCards.length > 0) {
+                const incomingHasCards = patch.parts.some((p) => p.type === "agent-card")
+                if (!incomingHasCards) {
+                  return { ...m, ...patch, parts: [...patch.parts, ...existingCards] }
+                }
+              }
+            }
+            return { ...m, ...patch }
+          }),
           updatedAt: Date.now(),
         },
       }

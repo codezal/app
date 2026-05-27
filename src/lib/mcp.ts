@@ -24,14 +24,22 @@ export type McpServerConfig = {
   enabled?: boolean
 }
 
+export type McpToolInfo = {
+  name: string
+  description?: string
+}
+
 export type McpStatus = {
   name: string
   ok: boolean
   toolCount: number
   error?: string
+  // Bağlantı başarılıysa modele sunulan tool listesi (prefix'siz isim + açıklama).
+  // UI önizleme için kullanılır — undefined = liste çekilmedi.
+  tools?: McpToolInfo[]
 }
 
-type Cached = { client: Client; tools: ToolSet }
+type Cached = { client: Client; tools: ToolSet; toolInfos: McpToolInfo[] }
 const CACHE = new Map<string, Cached>() // key = name + connection-id
 
 function cacheKey(c: McpServerConfig): string {
@@ -75,11 +83,13 @@ export async function connectMcp(config: McpServerConfig): Promise<Cached> {
   )
   await client.connect(transport)
 
-  // Tool listesi → AI SDK ToolSet
+  // Tool listesi → AI SDK ToolSet + paralel info listesi (UI önizleme için)
   const list = await client.listTools()
   const tools: ToolSet = {}
+  const toolInfos: McpToolInfo[] = []
   for (const t of list.tools) {
     const prefixed = `${config.name}__${t.name}`
+    toolInfos.push({ name: t.name, description: t.description })
     tools[prefixed] = tool({
       description: t.description ?? `(MCP ${config.name})`,
       inputSchema: jsonSchema(t.inputSchema as Record<string, unknown>),
@@ -99,7 +109,7 @@ export async function connectMcp(config: McpServerConfig): Promise<Cached> {
     })
   }
 
-  const cached = { client, tools }
+  const cached = { client, tools, toolInfos }
   CACHE.set(key, cached)
   return cached
 }
@@ -123,9 +133,14 @@ export async function buildMcpTools(servers: McpServerConfig[]): Promise<{
       continue
     }
     try {
-      const { tools: t } = await connectMcp(s)
+      const { tools: t, toolInfos } = await connectMcp(s)
       Object.assign(tools, t)
-      statuses.push({ name: s.name, ok: true, toolCount: Object.keys(t).length })
+      statuses.push({
+        name: s.name,
+        ok: true,
+        toolCount: Object.keys(t).length,
+        tools: toolInfos,
+      })
     } catch (e) {
       statuses.push({
         name: s.name,
@@ -152,4 +167,75 @@ export async function disconnectAll(): Promise<void> {
 export async function listMcpStatus(servers: McpServerConfig[]): Promise<McpStatus[]> {
   const { statuses } = await buildMcpTools(servers)
   return statuses
+}
+
+// Claude Desktop / Cursor / VSCode tarzı mcpServers JSON'unu parse eder.
+// Kabul edilen iki kök şekli:
+//   { "mcpServers": { "ad": { command/args/env | url/headers } } }
+//   { "ad": { ... } }                       (üst kapsayıcısız)
+// Her entry için transport otomatik tespit edilir:
+//   command varsa → stdio, url varsa → http (alanlarda type="sse" varsa sse).
+// Hata fırlatır: geçersiz JSON, beklenen alanlar yok.
+export function parseMcpServersJson(text: string): McpServerConfig[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (e) {
+    throw new Error(`Geçersiz JSON: ${e instanceof Error ? e.message : String(e)}`, {
+      cause: e,
+    })
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("JSON kök bir nesne olmalı")
+  }
+  const root = parsed as Record<string, unknown>
+  const map =
+    root.mcpServers && typeof root.mcpServers === "object"
+      ? (root.mcpServers as Record<string, unknown>)
+      : root
+  const out: McpServerConfig[] = []
+  for (const [name, raw] of Object.entries(map)) {
+    if (!raw || typeof raw !== "object") continue
+    const r = raw as Record<string, unknown>
+    const hasCommand = typeof r.command === "string" && r.command.length > 0
+    const hasUrl = typeof r.url === "string" && r.url.length > 0
+    if (!hasCommand && !hasUrl) {
+      throw new Error(`'${name}': command veya url alanı zorunlu`)
+    }
+    const explicitType =
+      typeof r.type === "string"
+        ? (r.type as string).toLowerCase()
+        : typeof r.transport === "string"
+          ? (r.transport as string).toLowerCase()
+          : undefined
+    let transport: McpServerConfig["transport"]
+    if (explicitType === "stdio" || explicitType === "sse" || explicitType === "http") {
+      transport = explicitType
+    } else {
+      transport = hasCommand ? "stdio" : "http"
+    }
+    const cfg: McpServerConfig = {
+      name,
+      url: typeof r.url === "string" ? r.url : "",
+      transport,
+      enabled: r.disabled === true ? false : true,
+    }
+    if (transport === "stdio") {
+      cfg.command = (r.command as string | undefined) ?? ""
+      cfg.args = Array.isArray(r.args) ? (r.args as unknown[]).map(String) : undefined
+      if (r.env && typeof r.env === "object") {
+        cfg.env = r.env as Record<string, string>
+      }
+      if (typeof r.cwd === "string") cfg.cwd = r.cwd
+    } else {
+      if (r.headers && typeof r.headers === "object") {
+        cfg.headers = r.headers as Record<string, string>
+      }
+    }
+    out.push(cfg)
+  }
+  if (out.length === 0) {
+    throw new Error("JSON'da hiç sunucu bulunamadı")
+  }
+  return out
 }

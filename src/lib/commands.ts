@@ -25,6 +25,8 @@ export type SlashCommand = {
     | "search"
     | "routines"
     | "settings"
+    | "orchestra"
+    | "agents-init"
   // builtin: alt-menü açar mı (örn /model → model picker)
   needsArg?: boolean
   path?: string
@@ -39,6 +41,8 @@ const BUILTINS: SlashCommand[] = [
   { name: "workspace", description: "Workspace klasörü seç", scope: "builtin", action: "workspace" },
   { name: "search", description: "Workspace içinde ara", scope: "builtin", action: "search" },
   { name: "routines", description: "Rutinleri aç", scope: "builtin", action: "routines" },
+  { name: "orchestra", description: "Orkestra modu — worker havuzu konfigüre et", scope: "builtin", action: "orchestra" },
+  { name: "agents-init", description: "Workspace'e default agent havuzu yaz (.codezal/agents/)", scope: "builtin", action: "agents-init" },
   { name: "settings", description: "Ayarları aç", scope: "builtin", action: "settings" },
   { name: "stop", description: "Devam eden stream'i durdur", scope: "builtin", action: "stop" },
   { name: "help", description: "Tüm komutları göster", scope: "builtin", action: "help" },

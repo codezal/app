@@ -2,6 +2,7 @@ import type { ProviderId, ApiKeys } from "@/lib/providers"
 import type { McpServerConfig } from "@/lib/mcp"
 import type { ModelMessage } from "ai"
 import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
+import type { Locale } from "@/lib/i18n/types"
 
 export type Role = "user" | "assistant" | "system" | "tool"
 
@@ -170,6 +171,8 @@ export type Settings = {
   theme: "light" | "dark" | "system"
   // Arayüz yazı ölçeği — S/M/L/XL (S=13px, M=14px, L=15px, XL=16px)
   fontScale?: "s" | "m" | "l" | "xl"
+  // Arayüz dili — i18n locale kodu. Yoksa default ('tr') kullanılır.
+  language?: Locale
   // Yeni session açılınca otomatik bağlanacak klasör (boş = bağlı değil)
   defaultWorkspacePath?: string
   // Tool izin modu

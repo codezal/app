@@ -22,6 +22,8 @@ import { useSettingsStore } from "@/store/settings"
 import { PROVIDERS, type ProviderId } from "@/lib/providers"
 import { pickWorkspaceFolder } from "@/lib/workspace"
 import { listDirShallow, type DirEntry } from "@/lib/fs-browse"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStaticCp } from "@/lib/i18n"
 
 type Props = {
   open: boolean
@@ -33,6 +35,7 @@ type Props = {
 type Page = "root" | "model" | "session" | "file" | "theme"
 
 export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: Props) {
+  const t = useT()
   const [page, setPage] = useState<Page>("root")
   const [query, setQuery] = useState("")
 
@@ -102,7 +105,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
         className="mt-[15vh] w-[640px] overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl"
       >
         <Command
-          label="Komut paleti"
+          label={t("commandPalette.label")}
           className="flex flex-col"
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -124,14 +127,14 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
           <div className="flex items-center gap-2 border-b border-codezal px-3 py-2.5">
             {page !== "root" && (
               <span className="flex items-center gap-1 rounded bg-codezal-chip px-1.5 py-0.5 text-[10.5px] text-codezal-dim">
-                {pageLabel(page)}
+                {pageLabel(page, t)}
               </span>
             )}
             <Command.Input
               autoFocus
               value={query}
               onValueChange={setQuery}
-              placeholder={placeholderFor(page)}
+              placeholder={placeholderFor(page, t)}
               className="flex-1 bg-transparent text-[14px] text-codezal-text placeholder:text-codezal-mute focus:outline-none"
             />
             <span className="text-[10.5px] text-codezal-mute">esc</span>
@@ -139,15 +142,15 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
 
           <Command.List className="max-h-[420px] overflow-y-auto p-1">
             <Command.Empty className="px-3 py-6 text-center text-[12px] text-codezal-mute">
-              Sonuç yok
+              {t("commandPalette.noResults")}
             </Command.Empty>
 
             {page === "root" && (
               <>
-                <Command.Group heading="Aksiyon" className="cmd-group">
+                <Command.Group heading={t("commandPalette.actionsGroup")} className="cmd-group">
                   <Item
                     icon={<MessageSquarePlus className="h-3.5 w-3.5" />}
-                    label="Yeni sohbet"
+                    label={t("commandPalette.newChat")}
                     shortcut="⌘N"
                     onSelect={() =>
                       runAndClose(() =>
@@ -161,7 +164,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                   />
                   <Item
                     icon={<Folder className="h-3.5 w-3.5" />}
-                    label="Workspace seç"
+                    label={t("commandPalette.workspaceSelect")}
                     onSelect={() =>
                       runAndClose(async () => {
                         const p = await pickWorkspaceFolder()
@@ -174,7 +177,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                   {active && (
                     <Item
                       icon={<GitBranch className="h-3.5 w-3.5" />}
-                      label="Son mesajdan çatal"
+                      label={t("commandPalette.forkLast")}
                       disabled={!active.messages.length}
                       onSelect={() =>
                         runAndClose(async () => {
@@ -186,23 +189,23 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                   )}
                   <Item
                     icon={<Search className="h-3.5 w-3.5" />}
-                    label="Workspace içinde ara…"
+                    label={t("commandPalette.workspaceSearch")}
                     shortcut="⌘⇧F"
                     disabled={!onOpenSearch || !active?.workspacePath}
                     onSelect={() => onOpenSearch && runAndClose(onOpenSearch)}
                   />
                   <Item
                     icon={<SettingsIcon className="h-3.5 w-3.5" />}
-                    label="Ayarlar"
+                    label={t("commandPalette.settings")}
                     shortcut="⌘,"
                     onSelect={() => runAndClose(onOpenSettings)}
                   />
                 </Command.Group>
 
-                <Command.Group heading="Git" className="cmd-group">
+                <Command.Group heading={t("commandPalette.navigateGroup")} className="cmd-group">
                   <Item
                     icon={<Zap className="h-3.5 w-3.5" />}
-                    label="Model değiştir…"
+                    label={t("commandPalette.switchModel")}
                     shortcut="→"
                     onSelect={() => {
                       setPage("model")
@@ -211,7 +214,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                   />
                   <Item
                     icon={<MessageSquarePlus className="h-3.5 w-3.5" />}
-                    label="Sohbete geç…"
+                    label={t("commandPalette.switchSession")}
                     shortcut="→"
                     onSelect={() => {
                       setPage("session")
@@ -221,7 +224,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                   {active?.workspacePath && (
                     <Item
                       icon={<FileText className="h-3.5 w-3.5" />}
-                      label="Dosya aç…"
+                      label={t("commandPalette.openFile")}
                       shortcut="→"
                       onSelect={() => {
                         setPage("file")
@@ -239,7 +242,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                         <Brain className="h-3.5 w-3.5" />
                       )
                     }
-                    label="Tema değiştir…"
+                    label={t("commandPalette.changeTheme")}
                     shortcut="→"
                     onSelect={() => {
                       setPage("theme")
@@ -276,7 +279,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
                   right={
                     <button
                       type="button"
-                      title="Sil"
+                      title={t("commandPalette.deleteHint")}
                       onClick={(e) => {
                         e.stopPropagation()
                         void remove(s.id)
@@ -306,19 +309,19 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
               <>
                 <Item
                   icon={<Sun className="h-3.5 w-3.5" />}
-                  label="Açık"
+                  label={t("commandPalette.themeLight")}
                   active={settings.theme === "light"}
                   onSelect={() => runAndClose(() => updateSettings({ theme: "light" }))}
                 />
                 <Item
                   icon={<Moon className="h-3.5 w-3.5" />}
-                  label="Koyu"
+                  label={t("commandPalette.themeDark")}
                   active={settings.theme === "dark"}
                   onSelect={() => runAndClose(() => updateSettings({ theme: "dark" }))}
                 />
                 <Item
                   icon={<Brain className="h-3.5 w-3.5" />}
-                  label="Sistem"
+                  label={t("commandPalette.themeSystem")}
                   active={settings.theme === "system"}
                   onSelect={() => runAndClose(() => updateSettings({ theme: "system" }))}
                 />
@@ -327,7 +330,7 @@ export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch }: 
           </Command.List>
 
           <div className="flex items-center justify-between border-t border-codezal px-3 py-1.5 text-[10.5px] text-codezal-mute">
-            <span>↑↓ gez · ⏎ seç · esc geri</span>
+            <span>{t("commandPalette.footerHelp")}</span>
             <span>Codezal</span>
           </div>
         </Command>
@@ -382,43 +385,43 @@ function Item({
   )
 }
 
-function pageLabel(p: Page): string {
+function pageLabel(p: Page, tt: ReturnType<typeof useT>): string {
   switch (p) {
     case "model":
-      return "Model"
+      return tt("commandPalette.pageModel")
     case "session":
-      return "Sohbet"
+      return tt("commandPalette.pageSession")
     case "file":
-      return "Dosya"
+      return tt("commandPalette.pageFile")
     case "theme":
-      return "Tema"
+      return tt("commandPalette.pageTheme")
     case "root":
       return ""
   }
 }
 
-function placeholderFor(p: Page): string {
+function placeholderFor(p: Page, tt: ReturnType<typeof useT>): string {
   switch (p) {
     case "root":
-      return "Komut ara…"
+      return tt("commandPalette.placeholderRoot")
     case "model":
-      return "Model ara…"
+      return tt("commandPalette.placeholderModel")
     case "session":
-      return "Sohbet ara…"
+      return tt("commandPalette.placeholderSession")
     case "file":
-      return "Dosya ara…"
+      return tt("commandPalette.placeholderFile")
     case "theme":
-      return "Tema seç…"
+      return tt("commandPalette.placeholderTheme")
   }
 }
 
 function relTime(ts: number): string {
   const diff = Date.now() - ts
   const m = Math.floor(diff / 60_000)
-  if (m < 1) return "az önce"
-  if (m < 60) return `${m}d önce`
+  if (m < 1) return tStaticCp("commandPalette.relJustNow")
+  if (m < 60) return tStaticCp("commandPalette.relMin", { n: m })
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h}s önce`
+  if (h < 24) return tStaticCp("commandPalette.relHour", { n: h })
   const d = Math.floor(h / 24)
-  return `${d}g önce`
+  return tStaticCp("commandPalette.relDay", { n: d })
 }

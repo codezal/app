@@ -6,6 +6,7 @@ import { readWorkspaceRoutines, readUserRoutines, type Routine } from "@/lib/rou
 import { nextFireAt, parseCron, validateCron } from "@/lib/cron"
 import { useSessionsStore } from "@/store/sessions"
 import { useSettingsStore } from "@/store/settings"
+import { useT } from "@/lib/i18n/useT"
 
 type Props = {
   open: boolean
@@ -15,6 +16,7 @@ type Props = {
 }
 
 export function RoutinesOverlay({ open, onClose, onRun }: Props) {
+  const t = useT()
   const [routines, setRoutines] = useState<Routine[] | null>(null)
   const active = useSessionsStore((s) => s.active)
   const settings = useSettingsStore((s) => s.settings)
@@ -50,7 +52,7 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
       >
         <header className="flex items-center gap-2 border-b border-codezal px-3 py-2.5">
           <Zap className="h-4 w-4 text-codezal-accent" />
-          <span className="text-[13px] font-medium text-codezal-text">Rutinler</span>
+          <span className="text-[13px] font-medium text-codezal-text">{t("routinesOverlay.title")}</span>
           <span className="text-[11px] text-codezal-mute">
             ({routines?.length ?? 0})
           </span>
@@ -69,17 +71,7 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
             <div className="px-2 py-3 text-[12px] text-codezal-mute">…</div>
           ) : routines.length === 0 ? (
             <div className="px-2 py-8 text-center text-[12px] text-codezal-mute">
-              Rutin yok.
-              <br />
-              <code className="text-codezal-text">~/.codezal/routines/&lt;name&gt;.md</code> (global) veya{" "}
-              <code className="text-codezal-text">&lt;ws&gt;/.codezal/routines/&lt;name&gt;.md</code> ekle.
-              <br />
-              Frontmatter: <code className="text-codezal-text">name</code>,{" "}
-              <code className="text-codezal-text">description</code>, opsiyonel{" "}
-              <code className="text-codezal-text">model</code>,{" "}
-              <code className="text-codezal-text">provider</code>.
-              <br />
-              Body = prompt.
+              {t("routinesOverlay.noRoutinesBlock")}
             </div>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -93,7 +85,7 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
                       {r.name}
                     </span>
                     <span className="rounded bg-codezal-chip px-1.5 py-0.5 text-[10.5px] text-codezal-dim">
-                      {r.scope === "project" ? "proje" : "global"}
+                      {r.scope === "project" ? t("routinesOverlay.scopeProject") : t("routinesOverlay.scopeGlobal")}
                     </span>
                     {r.model && (
                       <span className="font-mono text-[10.5px] text-codezal-mute">
@@ -108,7 +100,7 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
                             className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10.5px] text-destructive"
                             title={err}
                           >
-                            cron geçersiz
+                            {t("routinesOverlay.cronInvalid")}
                           </span>
                         )
                       }
@@ -116,9 +108,9 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
                       return (
                         <span
                           className="rounded bg-codezal-accent-dim px-1.5 py-0.5 text-[10.5px] text-codezal-accent"
-                          title={next ? `Sıradaki: ${next.toLocaleString()}` : undefined}
+                          title={next ? t("routinesOverlay.cronNextLabel", { next: next.toLocaleString() }) : undefined}
                         >
-                          cron: {r.schedule}
+                          {t("routinesOverlay.cronLabel", { schedule: r.schedule })}
                         </span>
                       )
                     })()}
@@ -133,9 +125,9 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
                         onClose()
                       }}
                       className="flex items-center gap-1 rounded-md bg-codezal-accent px-2 py-1 text-[11.5px] font-medium text-[#1a1106]"
-                      title="Yeni session açıp çalıştır"
+                      title={t("routinesOverlay.runTitle")}
                     >
-                      <Play className="h-3 w-3" /> Çalıştır
+                      <Play className="h-3 w-3" /> {t("routinesOverlay.runNow")}
                     </button>
                   </div>
                   {r.description && (
@@ -154,7 +146,7 @@ export function RoutinesOverlay({ open, onClose, onRun }: Props) {
         </div>
 
         <footer className="border-t border-codezal px-3 py-1.5 text-[10.5px] text-codezal-mute">
-          Cron alanı dolu rutinler uygulama açıkken otomatik tetiklenir (kaçırılan tetiklemeler telafi edilmez).
+          {t("routinesOverlay.footerNote")}
         </footer>
       </div>
     </div>

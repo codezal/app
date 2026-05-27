@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { loadSettingsFile, saveSettingsFile } from "@/lib/storage"
 import { PROVIDERS } from "@/lib/providers"
+import { DEFAULT_LOCALE, useI18nStore } from "@/lib/i18n"
 import type { Settings } from "./types"
 
 const DEFAULT: Settings = {
@@ -9,6 +10,7 @@ const DEFAULT: Settings = {
   defaultModel: PROVIDERS.openai.defaultModel,
   theme: "system",
   fontScale: "m",
+  language: DEFAULT_LOCALE,
   approvalMode: "bypass",
   approvalRules: [],
   mcpServers: [],
@@ -52,12 +54,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       autoCompact: { ...DEFAULT.autoCompact, ...(loaded.autoCompact ?? {}) },
     }
     set({ settings: merged, loaded: true })
+    // i18n: kaydedilmiş locale'i uygula (yoksa default tr)
+    void useI18nStore.getState().setLocale(merged.language ?? DEFAULT_LOCALE)
   },
 
   update: async (patch) => {
-    const next = { ...get().settings, ...patch }
+    const prev = get().settings
+    const next = { ...prev, ...patch }
     set({ settings: next })
     await saveSettingsFile(next)
+    // Dil değişti mi → i18n store'a uygula
+    if (patch.language && patch.language !== prev.language) {
+      void useI18nStore.getState().setLocale(patch.language)
+    }
   },
 
   setApiKey: async (provider, key) => {
@@ -96,7 +105,7 @@ useSettingsStore.subscribe((state, prev) => {
       const { isCatalogStale } = await import("@/lib/providers-catalog")
       const stale = isCatalogStale(
         state.settings.providerCatalog as
-          | { data: Record<string, unknown>; fetchedAt: number }
+          | import("@/lib/providers-catalog").CachedCatalog
           | undefined,
       )
       if (stale) await state.refreshProviderCatalog()

@@ -2,12 +2,15 @@
 import { useEffect, useState } from "react"
 import { readTextFile } from "@tauri-apps/plugin-fs"
 import { Markdown } from "./Markdown"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 type Props = {
   path: string
 }
 
 export function FileViewer({ path }: Props) {
+  const t = useT()
   const [content, setContent] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -16,13 +19,13 @@ export function FileViewer({ path }: Props) {
     setContent(null)
     setError(null)
     readTextFile(path)
-      .then((t) => {
+      .then((txt) => {
         if (!alive) return
-        if (t.length > 500_000) {
-          setContent(t.slice(0, 500_000))
-          setError(`Dosya büyük — ilk 500K char gösteriliyor (toplam ${t.length})`)
+        if (txt.length > 500_000) {
+          setContent(txt.slice(0, 500_000))
+          setError(tStatic("fileViewer.largeFileTruncated", { total: txt.length }))
         } else {
-          setContent(t)
+          setContent(txt)
         }
       })
       .catch((e) => {
@@ -50,7 +53,7 @@ export function FileViewer({ path }: Props) {
       <div className="w-full px-8 pt-5">
         <div className="flex items-center gap-2 border-b border-codezal pb-3 text-[12px] text-codezal-mute">
           <span className="truncate text-codezal-text">{path}</span>
-          {content && <span className="ml-auto">{content.length} char</span>}
+          {content && <span className="ml-auto">{content.length} {t("fileViewer.charsLabel")}</span>}
         </div>
         <div className="py-5">
           {error && (
@@ -59,7 +62,7 @@ export function FileViewer({ path }: Props) {
             </div>
           )}
           {content === null && !error ? (
-            <div className="text-[12px] text-codezal-mute">Yükleniyor…</div>
+            <div className="text-[12px] text-codezal-mute">{t("fileViewer.loading")}</div>
           ) : (
             <Markdown content={md} className="text-[12.5px] leading-[1.55]" />
           )}

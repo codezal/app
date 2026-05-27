@@ -157,6 +157,7 @@
   .bg-codezal-title       { background-color: hsl(var(--codezal-title-bar)); }
   .bg-codezal-input       { background-color: hsl(var(--codezal-input)); }
   .bg-codezal-chip        { background-color: hsl(var(--codezal-chip)); }
+  .bg-codezal-accent      { background-color: hsl(var(--codezal-accent)); }
   .bg-codezal-accent-dim  { background-color: hsl(var(--codezal-accent) / 0.18); }
   .bg-codezal-diff-add    { background-color: hsl(var(--codezal-diff-add) / 0.10); }
   .bg-codezal-diff-del    { background-color: hsl(var(--codezal-diff-del) / 0.10); }

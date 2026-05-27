@@ -68,14 +68,61 @@ export async function fetchProviderCatalog(): Promise<ProvidersCatalog> {
   return data
 }
 
-// Katalogdan bir provider'ın model id listesini çıkar.
-// Deprecated modelleri at, release_date varsa yenilik sırasıyla sırala.
+// Programlama görevine uygun olmayan model id pattern'ları —
+// embedding/TTS/STT/image/moderation/realtime ses modelleri vs.
+const NON_CHAT_PATTERNS = [
+  /embed/i,
+  /embedding/i,
+  /whisper/i,
+  /\btts\b/i,
+  /text-to-speech/i,
+  /speech-to-text/i,
+  /-stt-/i,
+  /moderation/i,
+  /dall-?e/i,
+  /image/i,
+  /^gpt-image/i,
+  /^omni-moderation/i,
+  /-search-/i,
+  /-realtime-/i,
+  /-audio-preview/i,
+  /-transcribe/i,
+  /sora/i,
+  /imagen/i,
+  /veo/i,
+  /^gemini-embedding/i,
+]
+
+// Chat/coding modeli mi? — id pattern + modalite kontrolü.
+function isChatCodingModel(m: ModelsDevModel): boolean {
+  if (m.deprecated) return false
+  // Bilinen non-chat pattern'lar
+  if (NON_CHAT_PATTERNS.some((re) => re.test(m.id))) return false
+  const name = m.name
+  if (name && NON_CHAT_PATTERNS.some((re) => re.test(name))) return false
+  // Modalite varsa: çıktı text içermeli, sadece audio/image çıkışı olmamalı
+  const out = m.modalities?.output
+  if (out && out.length > 0) {
+    if (!out.includes("text")) return false
+    // Sadece ses/görüntü çıktısı varsa text yoksa zaten elendi; text varsa multi-modal OK
+  }
+  const inp = m.modalities?.input
+  if (inp && inp.length > 0 && !inp.includes("text")) {
+    // Text girdisi alamayan model chat değil
+    return false
+  }
+  return true
+}
+
+// Katalogdan bir provider'ın chat/coding modeli id listesini çıkar.
+// Deprecated + non-chat modeller (embedding/TTS/image/realtime vb.) elenir.
+// release_date varsa yenilik sırasıyla sıralanır.
 export function modelsForProvider(catalog: ProvidersCatalog | undefined, id: ProviderId): string[] {
   if (!catalog) return []
   const mdId = PROVIDER_ID_MAP[id]
   const p = catalog[mdId]
   if (!p) return []
-  const entries = Object.values(p.models).filter((m) => !m.deprecated)
+  const entries = Object.values(p.models).filter(isChatCodingModel)
   entries.sort((a, b) => {
     // Yenisi önce — release_date varsa onunla, yoksa id alfabetik
     const da = a.release_date ?? ""

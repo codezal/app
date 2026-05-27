@@ -16,6 +16,9 @@ import { ApprovalModal } from "@/components/ApprovalModal"
 import { QuestionModal } from "@/components/QuestionModal"
 import { RoutinesOverlay } from "@/components/RoutinesOverlay"
 import { OrchestraConfigModal } from "@/components/OrchestraConfigModal"
+import { HelpOverlay } from "@/components/HelpOverlay"
+import { seedDefaultAgents, autoSeedOnFirstRun } from "@/lib/agents-seed"
+import { readWorkspaceAgents, readUserAgents } from "@/lib/agents"
 import type { ProviderId } from "@/lib/providers"
 import { buildModel } from "@/lib/providers"
 import { buildAllTools } from "@/lib/tools"
@@ -37,15 +40,15 @@ import { pickWorkspaceFolder } from "@/lib/workspace"
 import { useSessionsStore } from "@/store/sessions"
 import { useSettingsStore } from "@/store/settings"
 import type { Message, Part } from "@/store/types"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 export default function App() {
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const settings = useSettingsStore((s) => s.settings)
   const loadSettings = useSettingsStore((s) => s.load)
 
-  const sessionsLoaded = useSessionsStore((s) => s.loaded)
   const active = useSessionsStore((s) => s.active)
-  const activeId = useSessionsStore((s) => s.activeId)
   const loadAll = useSessionsStore((s) => s.loadAll)
   const create = useSessionsStore((s) => s.create)
   const pushMessage = useSessionsStore((s) => s.pushMessage)
@@ -67,14 +70,19 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false)
   const [showRoutines, setShowRoutines] = useState(false)
   const [showOrchestra, setShowOrchestra] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const [panelMode, setPanelMode] = useState<PanelMode | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [agentCatalogEmpty, setAgentCatalogEmpty] = useState(false)
+  const [agentHintDismissed, setAgentHintDismissed] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   // Scheduler fire callback'i mevcut state'i okumalı — useEffect closure'lardan kaçınmak için ref.
   const runRoutineRef = useRef<(r: Routine) => Promise<void>>(async () => {})
 
   // Replay durumu — overlay göster, ilerleme bildir, iptal.
+  const t = useT()
+
   const [replayState, setReplayState] = useState<{
     running: boolean
     current: number
@@ -88,6 +96,30 @@ export default function App() {
   useEffect(() => {
     streamingRef.current = streaming
   }, [streaming])
+
+  // Agent katalog kontrol — workspace değişince proje+global toplamı 0 mı?
+  // /agents-init hint banner görünürlüğü için.
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const [proj, user] = await Promise.all([
+          readWorkspaceAgents(active?.workspacePath),
+          readUserAgents(),
+        ])
+        if (alive) {
+          setAgentCatalogEmpty(proj.length + user.length === 0)
+          // Workspace değişince dismiss reset
+          setAgentHintDismissed(false)
+        }
+      } catch {
+        if (alive) setAgentCatalogEmpty(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [active?.workspacePath])
   async function waitUntilIdle(signal: AbortSignal): Promise<void> {
     // İlk dispatch'in streaming=true'ya gelmesi için kısa bekleme
     await new Promise((r) => setTimeout(r, 50))
@@ -117,10 +149,10 @@ export default function App() {
         },
       })
       if (result.aborted) {
-        setError(`Replay iptal edildi (${result.replayed}/${result.total} tamamlandı)`)
+        setError(tStatic("app.replayCancelled", { replayed: result.replayed, total: result.total }))
       }
     } catch (e) {
-      setError(`Replay hatası: ${e instanceof Error ? e.message : String(e)}`)
+      setError(tStatic("app.replayError", { message: e instanceof Error ? e.message : String(e) }))
     } finally {
       setReplayState({ running: false, current: 0, total: 0, prompt: "" })
     }
@@ -130,6 +162,9 @@ export default function App() {
   useEffect(() => {
     void loadSettings()
     void loadAll()
+    // İlk açılışta ~/.codezal/agents/ altına default agentleri seed et.
+    // Idempotent — mevcut dosyalar atlanır, sadece eksikleri ekler.
+    void autoSeedOnFirstRun()
   }, [loadSettings, loadAll])
 
   // Scheduler — uygulama açıkken cron alanı dolu rutinleri tetikler.
@@ -182,16 +217,8 @@ export default function App() {
     }
   }, [settingsLoaded, settings.apiKeys])
 
-  // Hiç session yoksa otomatik oluştur
-  useEffect(() => {
-    if (sessionsLoaded && !activeId && useSessionsStore.getState().index.length === 0) {
-      void create(
-        settings.defaultProvider,
-        settings.defaultModel,
-        settings.defaultWorkspacePath,
-      )
-    }
-  }, [sessionsLoaded, activeId, create, settings])
+  // İlk açılışta otomatik session oluşturma — Welcome ekranı + Composer aktif kalır.
+  // Kullanıcı yazıp gönderince onSend lazy session yaratır (seçilen workspace ile).
 
   // Kısayollar: ⌘N yeni · ⌘K palet · ⌘, ayarlar
   useEffect(() => {
@@ -267,14 +294,29 @@ export default function App() {
     } catch (e) {
       console.error("[compact] başarısız:", e)
       const msg = e instanceof Error ? e.message : String(e)
-      setError(`Sıkıştırma başarısız: ${msg}`)
+      setError(tStatic("app.compactFailed", { message: msg }))
       return false
     }
   }
 
   async function onSend(text: string) {
-    if (!active) return
     setError(null)
+
+    // Aktif session yoksa lazy oluştur — Composer'da seçilmiş provider/model/workspace
+    // settings defaults'a yazıldığı için create() bunlarla başlar.
+    if (!active) {
+      await create(
+        settings.defaultProvider,
+        settings.defaultModel,
+        settings.defaultWorkspacePath,
+      )
+      // create() state'i atomik günceller ama bu closure'daki `active` hâlâ null.
+      // Bir tick bekle, ardından store snapshot'tan devam et.
+      await new Promise((r) => setTimeout(r, 30))
+    }
+
+    const activeNow = useSessionsStore.getState().active
+    if (!activeNow) return
 
     // UserPromptSubmit hook'ları — stdout ile prompt'a ek bağlam injekte edilebilir.
     let effectiveText = text
@@ -283,7 +325,7 @@ export default function App() {
         hooks: settings.hooks,
         event: "UserPromptSubmit",
         payload: { prompt: text },
-        workspace: active.workspacePath,
+        workspace: activeNow.workspacePath,
       })
       if (hookRes.extraContext) {
         effectiveText = `${text}\n\n<hook-context>\n${hookRes.extraContext}\n</hook-context>`
@@ -370,7 +412,7 @@ export default function App() {
   }
 
   async function onRevert(messageId: string) {
-    if (!window.confirm("Bu mesajın yaptığı dosya değişiklikleri geri alınacak ve mesaj silinecek. Devam et?")) {
+    if (!window.confirm(tStatic("app.revertConfirm"))) {
       return
     }
     try {
@@ -378,7 +420,7 @@ export default function App() {
       console.info(`[revert] ${r.restored} dosya restore, ${r.deleted} silindi`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      setError(`Revert başarısız: ${msg}`)
+      setError(tStatic("app.revertFailed", { message: msg }))
     }
   }
 
@@ -422,7 +464,7 @@ export default function App() {
         const name = sp === -1 ? args : args.slice(0, sp)
         const task = sp === -1 ? "" : args.slice(sp + 1).trim()
         if (!name) {
-          setError("/agent <name> [görev] — agent adı gerekli")
+          setError(tStatic("app.agentNameRequired"))
           return
         }
         const text = task
@@ -436,7 +478,7 @@ export default function App() {
         const name = sp === -1 ? args : args.slice(0, sp)
         const rest = sp === -1 ? "" : args.slice(sp + 1).trim()
         if (!name) {
-          setError("/skill <name> [görev] — skill adı gerekli")
+          setError(tStatic("app.skillNameRequired"))
           return
         }
         const text = rest
@@ -446,26 +488,53 @@ export default function App() {
         return
       }
       case "help":
-        void onSend(
-          "Slash komutları: `/clear /branch /model /agent <ad> [görev] /skill <ad> [görev] /workspace /search /routines /settings /stop /help`. Kullanıcı tanımlı komutlar `.codezal/commands/<ad>.md` ile eklenir.",
-        )
+        setShowHelp(true)
         return
+      case "orchestra":
+        setShowOrchestra(true)
+        return
+      case "agents-init": {
+        try {
+          const r = await seedDefaultAgents()
+          const lines: string[] = []
+          if (r.created.length > 0) {
+            lines.push(`✓ ${r.created.length} agent oluşturuldu: ${r.created.join(", ")}`)
+          }
+          if (r.skipped.length > 0) {
+            lines.push(`↷ ${r.skipped.length} mevcut, atlandı: ${r.skipped.join(", ")}`)
+          }
+          lines.push(`Konum: ${r.root}`)
+          lines.push("Artık `spawn_agent('<name>', '<görev>')` ile çağırabilirsin veya orkestra modalında preset olarak seçebilirsin.")
+          pushMessage({
+            id: crypto.randomUUID(),
+            role: "system",
+            content: lines.join("\n"),
+            createdAt: Date.now(),
+          })
+          setAgentCatalogEmpty(false)
+        } catch (e) {
+          setError(`Agent seed başarısız: ${e instanceof Error ? e.message : String(e)}`)
+        }
+        return
+      }
     }
   }
 
   async function runStream(asstMsgId: string, history: ModelMessage[]) {
-    if (!active) return
+    // Closure'daki `active` lazy-create sonrası stale olabilir — taze snap çek.
+    const cur = useSessionsStore.getState().active
+    if (!cur) return
     const ac = new AbortController()
     abortRef.current = ac
     setStreaming(true)
     try {
-      const model = buildModel(active.provider, active.model, settings.apiKeys)
-      const tools = await buildAllTools(active.workspacePath, settings.mcpServers ?? [])
+      const model = buildModel(cur.provider, cur.model, settings.apiKeys)
+      const tools = await buildAllTools(cur.workspacePath, settings.mcpServers ?? [])
       const system = await buildSystemPrompt({
-        workspacePath: active.workspacePath,
-        modelLabel: `${active.provider}/${active.model}`,
-        mode: active.mode ?? "build",
-        orchestra: active.orchestra,
+        workspacePath: cur.workspacePath,
+        modelLabel: `${cur.provider}/${cur.model}`,
+        mode: cur.mode ?? "build",
+        orchestra: cur.orchestra,
       })
       const result = streamText({
         model,
@@ -588,7 +657,7 @@ export default function App() {
             outputTokens: output,
             cacheReadTokens: cacheRead,
             reasoningTokens: reasoning,
-            costUsd: costUsd(active.model, {
+            costUsd: costUsd(cur.model, {
               input,
               output,
               cacheRead,
@@ -625,7 +694,7 @@ export default function App() {
           hooks: settings.hooks,
           event: "Stop",
           payload: { reason: aborted ? "abort" : "finish" },
-          workspace: active?.workspacePath,
+          workspace: cur.workspacePath,
         })
       } catch (e) {
         console.warn("[hook] Stop error:", e)
@@ -680,7 +749,7 @@ export default function App() {
             onClick={() => replayState.abort?.()}
             className="ml-2 rounded border border-codezal px-1.5 py-0.5 text-[10.5px] text-codezal-dim hover:text-destructive"
           >
-            iptal
+            {t("app.replayCancel")}
           </button>
         </div>
       )}
@@ -711,11 +780,26 @@ export default function App() {
                   </div>
                 )}
 
+                {agentCatalogEmpty && !agentHintDismissed && (
+                  <div className="flex items-center gap-2 border-t border-codezal-accent/30 bg-codezal-accent/10 px-4 py-2 text-[12px] text-codezal-accent">
+                    <span className="flex-1">
+                      Agent havuzu boş. <code className="rounded bg-codezal-panel-2/60 px-1">/agents-init</code> ile <code>~/.codezal/agents/</code> altına 5 default agent yaz (code-reviewer, test-runner, debugger, doc-writer, refactorer).
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAgentHintDismissed(true)}
+                      className="rounded px-1.5 py-0.5 text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
+                      title="Kapat"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
                 <Composer
                   streaming={streaming}
                   onSend={onSend}
                   onAbort={onAbort}
-                  disabled={!active}
                   onSlashAction={(a, args) => void onSlashAction(a, args)}
                   onOpenOrchestra={() => setShowOrchestra(true)}
                 />
@@ -762,6 +846,8 @@ export default function App() {
       {showOrchestra && (
         <OrchestraConfigModal onClose={() => setShowOrchestra(false)} />
       )}
+
+      <HelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
 
       <ApprovalModal />
       <QuestionModal />

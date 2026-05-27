@@ -18,12 +18,14 @@ import {
   X,
 } from "lucide-react"
 import { Markdown } from "./Markdown"
-import { CodezalMark } from "./icons"
+import { CodezalGlyph, CodezalMark } from "./icons"
 import { AgentCard } from "./AgentCard"
 import type { Message, Part } from "@/store/types"
 import { useSessionsStore } from "@/store/sessions"
 import { hunksForEdit, type DiffLine } from "@/lib/diff"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 type Props = {
   messages: Message[]
@@ -46,6 +48,7 @@ export function MessageList({
   onDelete,
   onRevert,
 }: Props) {
+  const t = useT()
   const active = useSessionsStore((s) => s.active)
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -189,14 +192,14 @@ export function MessageList({
             <CodezalMark size={13} />
           </span>
           <span className="text-[13px] font-medium text-codezal-text">
-            {active?.title ?? "Oturum"}
+            {active?.title ?? t("messageList.sessionFallback")}
           </span>
           <span className="text-[12px] text-codezal-mute">
             · {active?.provider ?? "—"} / {active?.model ?? "—"}
           </span>
           <div className="flex-1" />
           <span className="text-[11px] text-codezal-mute">
-            {messages.length} mesaj · {formatK(tokenEstimate)} token
+            {t("messageList.messageCount", { count: messages.length, tokens: formatK(tokenEstimate) })}
           </span>
         </div>
 
@@ -238,13 +241,13 @@ export function MessageList({
         <button
           type="button"
           onClick={jumpToBottom}
-          title="En alta in"
+          title={t("messageList.jumpToBottom")}
           className="absolute bottom-4 right-6 z-20 flex h-8 items-center gap-1.5 rounded-full border border-codezal bg-codezal-sidebar/95 px-3 text-[11.5px] text-codezal-dim shadow-lg backdrop-blur hover:border-codezal-strong hover:text-codezal-text"
         >
           {streaming && (
             <span className="inline-flex h-1.5 w-1.5 animate-breathe rounded-full bg-codezal-accent" />
           )}
-          <span>En alta in</span>
+          <span>{t("messageList.jumpToBottom")}</span>
           <ChevronDown className="h-3 w-3" />
         </button>
       )}
@@ -286,6 +289,7 @@ function BubbleImpl({
   onDelete,
   onRevert,
 }: BubbleProps) {
+  const t = useT()
   const isUser = m.role === "user"
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(m.content)
@@ -349,7 +353,7 @@ function BubbleImpl({
 
       <div className="min-w-0 flex-1">
         <div className="mb-1 text-[11px] text-codezal-dim">
-          {isUser ? "Sen" : "Codezal"}
+          {isUser ? t("messageList.you") : t("messageList.codezalSpeaker")}
         </div>
 
         {editing ? (
@@ -381,7 +385,7 @@ function BubbleImpl({
                 onClick={cancelEdit}
                 className="flex items-center gap-1 rounded-md border border-codezal px-2 py-1 text-codezal-dim hover:border-codezal-strong"
               >
-                <X className="h-3 w-3" /> İptal
+                <X className="h-3 w-3" /> {t("messageList.cancel")}
               </button>
               <button
                 type="button"
@@ -389,11 +393,11 @@ function BubbleImpl({
                 disabled={!draft.trim()}
                 className="flex items-center gap-1 rounded-md bg-codezal-accent px-2 py-1 text-[#1a1106] disabled:opacity-50"
               >
-                <RefreshCcw className="h-3 w-3" /> Kaydet & yenile
+                <RefreshCcw className="h-3 w-3" /> {t("messageList.saveAndRerun")}
               </button>
             </div>
             <div className="mt-1 text-right text-[10.5px] text-codezal-mute">
-              ⌘⏎ kaydet · Esc iptal
+              {t("messageList.saveCancelHint")}
             </div>
           </div>
         ) : m.pending && (!m.parts || m.parts.length === 0) && m.content === "" ? (
@@ -410,34 +414,34 @@ function BubbleImpl({
 
         {showActions && (
           <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover/bubble:opacity-100">
-            <ActionBtn onClick={copyContent} title="Kopyala">
+            <ActionBtn onClick={copyContent} title={t("messageList.copy")}>
               {copied ? <Check className="h-3 w-3 text-codezal-accent" /> : <Copy className="h-3 w-3" />}
             </ActionBtn>
             {isUser && onEditUser && (
-              <ActionBtn onClick={startEdit} title="Düzenle ve yeniden gönder">
+              <ActionBtn onClick={startEdit} title={t("messageList.editAndResend")}>
                 <Pencil className="h-3 w-3" />
               </ActionBtn>
             )}
             {!isUser && onRegenerate && (
-              <ActionBtn onClick={onRegenerate} title="Yeniden üret">
+              <ActionBtn onClick={onRegenerate} title={t("messageList.rerunTitle")}>
                 <RefreshCcw className="h-3 w-3" />
               </ActionBtn>
             )}
             {onBranch && (
-              <ActionBtn onClick={onBranch} title="Buradan çatal (yeni session)">
+              <ActionBtn onClick={onBranch} title={t("messageList.forkTitle")}>
                 <GitBranch className="h-3 w-3" />
               </ActionBtn>
             )}
             {onRevert && (
               <ActionBtn
                 onClick={onRevert}
-                title={`Dosya değişikliklerini geri al (${m.snapshotPaths?.length ?? 0} dosya)`}
+                title={t("messageList.revertFilesTitle", { count: m.snapshotPaths?.length ?? 0 })}
               >
                 <Undo2 className="h-3 w-3" />
               </ActionBtn>
             )}
             {onDelete && (
-              <ActionBtn onClick={onDelete} title="Mesajı sil" danger>
+              <ActionBtn onClick={onDelete} title={t("messageList.deleteMsg")} danger>
                 <Trash2 className="h-3 w-3" />
               </ActionBtn>
             )}
@@ -546,6 +550,7 @@ function ToolGroup({
   calls: Extract<Part, { type: "tool-call" }>[]
   resultMap: Map<string, Extract<Part, { type: "tool-result" }>>
 }) {
+  const t = useT()
   const errorCount = calls.reduce((n, c) => {
     const r = resultMap.get(c.toolCallId)
     return n + (r?.isError ? 1 : 0)
@@ -576,21 +581,21 @@ function ToolGroup({
         />
         <Wrench className="h-3 w-3 shrink-0 text-codezal-accent" />
         <span className="font-medium text-codezal-text">
-          {calls.length} araç çağrısı
+          {t("messageList.toolCallsCount", { count: calls.length })}
         </span>
         <span className="truncate text-codezal-mute">{summary}</span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {runningCount > 0 && (
-            <span className="text-[10.5px] text-codezal-mute">{runningCount} çalışıyor</span>
+            <span className="text-[10.5px] text-codezal-mute">{t("messageList.toolRunning", { count: runningCount })}</span>
           )}
           {errorCount > 0 && (
             <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10.5px] text-destructive">
-              {errorCount} hata
+              {t("messageList.toolError", { count: errorCount })}
             </span>
           )}
           {errorCount === 0 && runningCount === 0 && (
             <span className="rounded bg-codezal-accent-dim px-1.5 py-0.5 text-[10.5px] text-codezal-accent">
-              tamam
+              {t("messageList.toolDone")}
             </span>
           )}
         </span>
@@ -678,6 +683,7 @@ function ToolBody({
   call: Extract<Part, { type: "tool-call" }>
   result?: Extract<Part, { type: "tool-result" }>
 }) {
+  const t = useT()
   const input = call.input as Record<string, unknown>
 
   if (call.toolName === "edit_file") {
@@ -690,7 +696,7 @@ function ToolBody({
     return (
       <>
         <FileLine path={String(input.path ?? "")} />
-        <OutputBlock label="diff" copyText={diffText}>
+        <OutputBlock label={t("messageList.diffLabel")} copyText={diffText}>
           <DiffBlock lines={hunks} />
         </OutputBlock>
         {result?.isError && <ErrorBlock text={result.output} />}
@@ -703,11 +709,11 @@ function ToolBody({
     const lines = content.split(/\r?\n/)
     const preview = lines.slice(0, 40).join("\n")
     const moreLines = Math.max(0, lines.length - 40)
-    const body = preview + (moreLines > 0 ? `\n… ${moreLines} satır daha` : "")
+    const body = preview + (moreLines > 0 ? `\n${t("messageList.moreLines", { count: moreLines })}` : "")
     return (
       <>
         <FileLine path={String(input.path ?? "")} meta={`${content.length} char`} />
-        <OutputBlock label="yeni içerik" copyText={content}>
+        <OutputBlock label={t("messageList.newContentLabel")} copyText={content}>
           <pre className="m-0 overflow-x-auto whitespace-pre-wrap bg-codezal-code px-4 py-3 font-mono text-[12px] leading-[1.65] text-codezal-text">
             {body}
           </pre>
@@ -721,7 +727,7 @@ function ToolBody({
     const cmd = String(input.command ?? "")
     return (
       <>
-        <OutputBlock label="komut" copyText={cmd}>
+        <OutputBlock label={t("messageList.commandLabel")} copyText={cmd}>
           <pre className="m-0 overflow-x-auto whitespace-pre-wrap bg-codezal-code px-4 py-3 font-mono text-[12px] leading-[1.65] text-codezal-text">
             <span className="text-codezal-mute">$ </span>
             {cmd}
@@ -729,7 +735,7 @@ function ToolBody({
         </OutputBlock>
         {result && (
           <OutputBlock
-            label="çıktı"
+            label={t("messageList.outputLabel")}
             copyText={result.output}
             tone={result.isError ? "error" : "default"}
           >
@@ -751,14 +757,14 @@ function ToolBody({
   const inputJson = JSON.stringify(call.input, null, 2)
   return (
     <>
-      <OutputBlock label="input" copyText={inputJson}>
+      <OutputBlock label={t("messageList.inputLabel")} copyText={inputJson}>
         <pre className="m-0 overflow-x-auto whitespace-pre-wrap bg-codezal-code px-4 py-3 font-mono text-[12px] leading-[1.65] text-codezal-text">
           {inputJson}
         </pre>
       </OutputBlock>
       {result && (
         <OutputBlock
-          label="output"
+          label={t("messageList.outputLabel")}
           copyText={result.output}
           tone={result.isError ? "error" : "default"}
         >
@@ -778,9 +784,10 @@ function ToolBody({
 
 // Dosya yolu satırı — tool body üst köşesinde küçük meta.
 function FileLine({ path, meta }: { path: string; meta?: string }) {
+  const t = useT()
   return (
     <div className="text-[11px] text-codezal-mute">
-      dosya: <span className="font-mono text-codezal-text">{path}</span>
+      {t("messageList.file")}: <span className="font-mono text-codezal-text">{path}</span>
       {meta && <span className="text-codezal-mute"> · {meta}</span>}
     </div>
   )
@@ -798,6 +805,7 @@ function OutputBlock({
   tone?: "default" | "error"
   children: React.ReactNode
 }) {
+  const t = useT()
   const [copied, setCopied] = useState(false)
   async function onCopy(e: React.MouseEvent) {
     e.stopPropagation()
@@ -821,16 +829,16 @@ function OutputBlock({
         <button
           type="button"
           onClick={onCopy}
-          title="Bu bloğu kopyala"
+          title={t("messageList.copyBlockTitle")}
           className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] normal-case tracking-normal text-codezal-dim opacity-0 transition hover:bg-codezal-chip hover:text-codezal-text group-hover/out:opacity-100 focus-visible:opacity-100"
         >
           {copied ? (
             <>
-              <Check className="h-3 w-3" /> kopyalandı
+              <Check className="h-3 w-3" /> {t("messageList.copiedLabel")}
             </>
           ) : (
             <>
-              <Copy className="h-3 w-3" /> kopyala
+              <Copy className="h-3 w-3" /> {t("messageList.copyLabel")}
             </>
           )}
         </button>
@@ -842,7 +850,7 @@ function OutputBlock({
 
 function ErrorBlock({ text }: { text: string }) {
   return (
-    <OutputBlock label="hata" copyText={text} tone="error">
+    <OutputBlock label={tStatic("messageList.errorLabel")} copyText={text} tone="error">
       <pre className="m-0 overflow-x-auto whitespace-pre-wrap bg-destructive/5 px-4 py-3 font-mono text-[12px] leading-[1.65] text-destructive">
         {text}
       </pre>
@@ -854,7 +862,7 @@ function DiffBlock({ lines }: { lines: DiffLine[] }) {
   if (lines.length === 0) {
     return (
       <div className="rounded bg-codezal-code p-3 text-[12px] leading-[1.6] font-mono text-codezal-mute">
-        (değişiklik yok)
+        {tStatic("messageList.noChanges")}
       </div>
     )
   }
@@ -889,11 +897,11 @@ function toolIcon(name: string) {
 
 function toolLabel(name: string): string {
   const map: Record<string, string> = {
-    list_dir: "Dizin",
-    read_file: "Dosya oku",
-    write_file: "Dosya yaz",
-    edit_file: "Dosya düzelt",
-    bash: "Bash",
+    list_dir: tStatic("messageList.toolDir"),
+    read_file: tStatic("messageList.toolReadFile"),
+    write_file: tStatic("messageList.toolWriteFile"),
+    edit_file: tStatic("messageList.toolEditFile"),
+    bash: tStatic("messageList.toolBash"),
   }
   return map[name] ?? name
 }
@@ -949,7 +957,13 @@ function statusForMessage(m: Message): "düşünüyor" | "çalışıyor" | "yaz�
 }
 
 function StreamingHint({ message }: { message: Message }) {
+  const t = useT()
   const status = statusForMessage(message)
+  const statusLabel = status === "düşünüyor"
+    ? t("messageList.thinking")
+    : status === "çalışıyor"
+      ? t("messageList.working")
+      : t("messageList.writing")
   return (
     <div className="flex items-center gap-2.5">
       {/* Minimal dönen ring — avatar yerine, daha sade. */}
@@ -972,7 +986,7 @@ function StreamingHint({ message }: { message: Message }) {
         </svg>
       </span>
       <span className="text-[12px] text-codezal-dim">
-        Codezal <span className="text-codezal-text">{status}</span>
+        {t("messageList.codezalSpeaker")} <span className="text-codezal-text">{statusLabel}</span>
       </span>
       <Dots />
     </div>
@@ -980,17 +994,34 @@ function StreamingHint({ message }: { message: Message }) {
 }
 
 function Welcome() {
+  const t = useT()
+  const index = useSessionsStore((s) => s.index)
+  const active = useSessionsStore((s) => s.active)
+  const hasHistory = index.some((m) => m.id !== active?.id && m.title !== "Yeni sohbet")
+
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="-mt-8 flex w-full max-w-[420px] flex-col items-center text-center">
-        <div className="mb-3 text-codezal-accent">
-          <CodezalMark size={26} />
+    <div className="flex flex-1 items-center justify-center px-6">
+      <div className="-mt-12 flex w-full max-w-[420px] flex-col items-center text-center">
+        {/* Hero — glyph + soft glow */}
+        <div className="relative mb-4 flex h-[72px] w-[72px] items-center justify-center">
+          <div
+            aria-hidden
+            className="absolute inset-0 rounded-full opacity-50 blur-2xl"
+            style={{
+              background:
+                "radial-gradient(circle, var(--codezal-accent, #f5b544) 0%, transparent 70%)",
+            }}
+          />
+          <div className="relative text-codezal-accent">
+            <CodezalGlyph size={56} />
+          </div>
         </div>
-        <h1 className="m-0 text-[16px] font-medium tracking-tight text-codezal-text">
-          Tekrar hoş geldin
+
+        <h1 className="m-0 text-[18px] font-medium tracking-tight text-codezal-text">
+          {hasHistory ? t("messageList.welcomeAgain") : t("messageList.welcomeNew")}
         </h1>
         <p className="mt-1.5 text-[13px] text-codezal-dim">
-          Bir görev tanımla — Codezal araçları çağırarak çalışsın.
+          {t("messageList.welcomeSubtitle")}
         </p>
       </div>
     </div>

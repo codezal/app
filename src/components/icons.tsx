@@ -23,6 +23,44 @@ export function CodezalMark({ size = 16, className }: IconProps) {
   )
 }
 
+// Codezal glyph: iki süslü parantez ve ortada 8-noktalı yıldız.
+// public/codezal-glyph-*.svg'den uyarlama — currentColor kullanır, tema rengini alır.
+export function CodezalGlyph({ size = 64, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M 40 26 Q 28 26 28 38 Q 28 50 18 50 Q 28 50 28 62 Q 28 74 40 74"
+        stroke="currentColor"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path
+        d="M 60 26 Q 72 26 72 38 Q 72 50 82 50 Q 72 50 72 62 Q 72 74 60 74"
+        stroke="currentColor"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <g transform="translate(50,50) scale(0.26) translate(-50,-50)">
+        <path
+          d="M 50.000,8.000 L 58.419,29.675 L 79.698,20.302 L 70.325,41.581 L 92.000,50.000 L 70.325,58.419 L 79.698,79.698 L 58.419,70.325 L 50.000,92.000 L 41.581,70.325 L 20.302,79.698 L 29.675,58.419 L 8.000,50.000 L 29.675,41.581 L 20.302,20.302 L 41.581,29.675 Z"
+          fill="currentColor"
+        />
+      </g>
+    </svg>
+  )
+}
+
 export function TrafficLights() {
   return (
     <div className="flex items-center gap-2">

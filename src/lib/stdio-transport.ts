@@ -42,12 +42,15 @@ export class StdioClientTransport implements Transport {
   private buffer = ""
   private started = false
   private closing = false
+  private opts: StdioOptions
 
   onmessage?: (message: JSONRPCMessage) => void
   onerror?: (error: Error) => void
   onclose?: () => void
 
-  constructor(private opts: StdioOptions) {}
+  constructor(opts: StdioOptions) {
+    this.opts = opts
+  }
 
   async start(): Promise<void> {
     if (this.started) throw new Error("StdioClientTransport zaten başlatıldı")

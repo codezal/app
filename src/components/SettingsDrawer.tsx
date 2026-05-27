@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   Cog,
   Info,
   KeyRound,
@@ -20,10 +22,12 @@ import {
 import { PROVIDERS, type ProviderId } from "@/lib/providers"
 import { useSettingsStore } from "@/store/settings"
 import { useSessionsStore } from "@/store/sessions"
-import { listMcpStatus, type McpServerConfig, type McpStatus } from "@/lib/mcp"
+import { listMcpStatus, parseMcpServersJson, type McpServerConfig, type McpStatus } from "@/lib/mcp"
 import { buildIndex, loadIndex, type BuildProgress } from "@/lib/semantic-index"
 import { cn } from "@/lib/utils"
 import type { Theme, FontScale } from "@/lib/theme"
+import { LOCALES, type Locale } from "@/lib/i18n"
+import { useT } from "@/lib/i18n/useT"
 
 type Props = {
   onClose: () => void
@@ -32,6 +36,7 @@ type Props = {
 type Tab = "genel" | "api" | "onay" | "mcp" | "hooks" | "semantic" | "hakkinda"
 
 export function SettingsModal({ onClose }: Props) {
+  const t = useT()
   const [tab, setTab] = useState<Tab>("genel")
 
   useEffect(() => {
@@ -43,13 +48,13 @@ export function SettingsModal({ onClose }: Props) {
   }, [onClose])
 
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: "genel", label: "Genel", icon: Cog },
-    { id: "api", label: "API", icon: KeyRound },
-    { id: "onay", label: "Onay", icon: ShieldCheck },
-    { id: "mcp", label: "MCP", icon: Plug },
-    { id: "hooks", label: "Hooks", icon: Webhook },
-    { id: "semantic", label: "Semantic", icon: Sparkles },
-    { id: "hakkinda", label: "Hakkında", icon: Info },
+    { id: "genel", label: t("settings.tabs.general"), icon: Cog },
+    { id: "api", label: t("settings.tabs.api"), icon: KeyRound },
+    { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck },
+    { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug },
+    { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook },
+    { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles },
+    { id: "hakkinda", label: t("settings.tabs.about"), icon: Info },
   ]
 
   return (
@@ -86,7 +91,7 @@ export function SettingsModal({ onClose }: Props) {
         {/* Sağ içerik */}
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex shrink-0 items-center justify-between border-b border-codezal px-5 py-3">
-            <h2 className="text-[13px] font-semibold text-codezal-text">Ayarlar · {tabs.find((t) => t.id === tab)?.label}</h2>
+            <h2 className="text-[13px] font-semibold text-codezal-text">{t("settings.drawer.headerPrefix", { tab: tabs.find((tt) => tt.id === tab)?.label ?? "" })}</h2>
             <button
               type="button"
               onClick={onClose}
@@ -114,10 +119,28 @@ export function SettingsModal({ onClose }: Props) {
 function GeneralTab() {
   const settings = useSettingsStore((s) => s.settings)
   const update = useSettingsStore((s) => s.update)
+  const t = useT()
 
   return (
     <div className="space-y-5">
-      <Section title="Tema">
+      <Section title={t("settings.general.language")}>
+        <select
+          value={settings.language ?? "tr"}
+          onChange={(e) => void update({ language: e.target.value as Locale })}
+          className="w-full rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-[12px] text-codezal-text"
+        >
+          {LOCALES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.nativeName}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 text-[11px] text-codezal-mute">
+          {t("settings.general.languageDesc")}
+        </p>
+      </Section>
+
+      <Section title={t("settings.drawer.themeTitle")}>
         <div className="flex items-center gap-1.5">
           {(["light", "dark", "system"] as Theme[]).map((th) => (
             <button
@@ -133,13 +156,13 @@ function GeneralTab() {
             >
               {th === "light" && <Sun className="h-3 w-3" />}
               {th === "dark" && <Moon className="h-3 w-3" />}
-              {th === "light" ? "Açık" : th === "dark" ? "Koyu" : "Sistem"}
+              {th === "light" ? t("settings.general.themeLight") : th === "dark" ? t("settings.general.themeDark") : t("settings.general.themeSystem")}
             </button>
           ))}
         </div>
       </Section>
 
-      <Section title="Yazı boyutu">
+      <Section title={t("settings.drawer.fontSizeTitle")}>
         <div className="flex items-center gap-1.5">
           {(["s", "m", "l", "xl"] as FontScale[]).map((sz) => {
             const active = (settings.fontScale ?? "m") === sz
@@ -156,12 +179,12 @@ function GeneralTab() {
                 )}
                 title={
                   sz === "s"
-                    ? "Küçük (%90)"
+                    ? t("settings.drawer.fontSmallTitle")
                     : sz === "m"
-                      ? "Orta (%100)"
+                      ? t("settings.drawer.fontMediumTitle")
                       : sz === "l"
-                        ? "Büyük (%110)"
-                        : "Çok büyük (%120)"
+                        ? t("settings.drawer.fontLargeTitle")
+                        : t("settings.drawer.fontXLTitle")
                 }
               >
                 {sz}
@@ -171,7 +194,7 @@ function GeneralTab() {
         </div>
       </Section>
 
-      <Section title="Varsayılan provider · model">
+      <Section title={t("settings.drawer.defaultProviderModelTitle")}>
         <div className="flex items-center gap-1.5 text-[12px]">
           <select
             value={settings.defaultProvider}
@@ -203,20 +226,20 @@ function GeneralTab() {
           </select>
         </div>
         <p className="mt-2 text-[11px] text-codezal-mute">
-          Yeni session açılınca bu provider/model atanır. Mevcut session Composer'dan ayrıca değiştirilebilir.
+          {t("settings.drawer.defaultProviderModelHint")}
         </p>
       </Section>
 
-      <Section title="Varsayılan workspace">
+      <Section title={t("settings.drawer.defaultWorkspaceTitle")}>
         <div className="rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-[12px] text-codezal-text">
-          {settings.defaultWorkspacePath ?? "(bağlı değil)"}
+          {settings.defaultWorkspacePath ?? t("settings.drawer.defaultWorkspaceUnbound")}
         </div>
         <p className="mt-1 text-[11px] text-codezal-mute">
-          Composer'daki klasör chip'inden değiştirilir.
+          {t("settings.drawer.defaultWorkspaceHint")}
         </p>
       </Section>
 
-      <Section title="Otomatik bağlam sıkıştırma">
+      <Section title={t("settings.drawer.autoCompactTitle")}>
         <label className="flex items-center gap-2 text-[12px]">
           <input
             type="checkbox"
@@ -228,13 +251,13 @@ function GeneralTab() {
             }
           />
           <span className="text-codezal-text">
-            Bağlam dolduğunda eski mesajları otomatik özetle
+            {t("settings.drawer.autoCompactDesc")}
           </span>
         </label>
 
         <div className="mt-3 grid grid-cols-3 gap-3 text-[11.5px]">
           <label className="flex flex-col gap-1">
-            <span className="text-codezal-dim">Tetikleme %</span>
+            <span className="text-codezal-dim">{t("settings.drawer.triggerPctLabel")}</span>
             <input
               type="number"
               min={20}
@@ -250,7 +273,7 @@ function GeneralTab() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-codezal-dim">Hedef % (hysteresis)</span>
+            <span className="text-codezal-dim">{t("settings.drawer.targetPctLabel")}</span>
             <input
               type="number"
               min={10}
@@ -266,7 +289,7 @@ function GeneralTab() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-codezal-dim">Korunan son N</span>
+            <span className="text-codezal-dim">{t("settings.drawer.keepLastLabel")}</span>
             <input
               type="number"
               min={2}
@@ -285,11 +308,11 @@ function GeneralTab() {
 
         <label className="mt-3 flex flex-col gap-1 text-[12px]">
           <span className="text-codezal-dim">
-            Sıkıştırma modeli (opsiyonel · "provider/model")
+            {t("settings.drawer.compactModelLabel")}
           </span>
           <input
             type="text"
-            placeholder="örn: deepseek/deepseek-v4-flash · boşsa aktif provider'ın flash modeli"
+            placeholder={t("settings.drawer.compactModelPlaceholder")}
             value={settings.autoCompact.model ?? ""}
             onChange={(e) => {
               const v = e.target.value.trim()
@@ -305,9 +328,7 @@ function GeneralTab() {
         </label>
 
         <p className="mt-2 text-[11px] text-codezal-mute">
-          Eski mesajlar yapısal bir memory notuna dönüştürülür (Aktif Hedefler, Mimari Kararlar,
-          Önemli API'ler, Çözülmemiş Sorunlar, Açık Dosyalar, Kısıtlar, Son Eylemler).
-          Hysteresis: tetikleme &gt; hedef olmalı.
+          {t("settings.drawer.compactExplain")}
         </p>
       </Section>
     </div>
@@ -315,19 +336,20 @@ function GeneralTab() {
 }
 
 function ApiTab() {
+  const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const setApiKey = useSettingsStore((s) => s.setApiKey)
 
   return (
     <div className="space-y-4">
-      <Section title="API anahtarları">
+      <Section title={t("settings.drawer.apiKeysTitle")}>
         <div className="grid grid-cols-1 gap-2">
           {Object.values(PROVIDERS).map((p) => (
             <label key={p.id} className="flex flex-col gap-1 text-[12px]">
               <span className="text-codezal-dim">{p.label}</span>
               <input
                 type="password"
-                placeholder={p.id === "openai" ? "sk-..." : "anahtar"}
+                placeholder={p.id === "openai" ? "sk-..." : t("settings.drawer.keyPlaceholder")}
                 value={settings.apiKeys[p.id] ?? ""}
                 onChange={(e) => void setApiKey(p.id, e.target.value)}
                 className="rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-codezal-text outline-none focus:border-codezal-accent"
@@ -337,7 +359,7 @@ function ApiTab() {
         </div>
       </Section>
       <p className="text-[11px] text-codezal-mute">
-        Anahtarlar yerel uygulama veri klasöründe sade JSON olarak saklanır. Hiçbir uzak sunucuya gönderilmez.
+        {t("settings.drawer.keysHint")}
       </p>
       <ProviderCatalogSection />
     </div>
@@ -345,6 +367,7 @@ function ApiTab() {
 }
 
 function ProviderCatalogSection() {
+  const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const refreshProviderCatalog = useSettingsStore((s) => s.refreshProviderCatalog)
   const [refreshing, setRefreshing] = useState(false)
@@ -366,16 +389,16 @@ function ProviderCatalogSection() {
   }
 
   return (
-    <Section title="Model katalogu (models.dev)">
+    <Section title={t("settings.drawer.catalogTitle")}>
       <div className="flex items-center justify-between gap-2 text-[12px]">
         <div className="flex-1 text-codezal-dim">
           {fetched ? (
             <>
-              Son güncelleme: <span className="text-codezal-text">{new Date(fetched).toLocaleString("tr-TR")}</span>
-              {modelCount > 0 && <> · <span className="text-codezal-text">{modelCount}</span> model</>}
+              {t("settings.drawer.catalogLastUpdate")} <span className="text-codezal-text">{new Date(fetched).toLocaleString()}</span>
+              {modelCount > 0 && <> · <span className="text-codezal-text">{modelCount}</span> {t("settings.drawer.catalogModelsLabel")}</>}
             </>
           ) : (
-            <span>Katalog yüklenmedi — hardcoded liste kullanılıyor.</span>
+            <span>{t("settings.drawer.catalogNotLoaded")}</span>
           )}
         </div>
         <button
@@ -384,10 +407,10 @@ function ProviderCatalogSection() {
           disabled={refreshing}
           className="rounded-md border border-codezal px-2.5 py-1 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
         >
-          {refreshing ? "Yükleniyor..." : "Yenile"}
+          {refreshing ? t("settings.drawer.catalogRefreshing") : t("settings.drawer.catalogRefresh")}
         </button>
       </div>
-      {error && <p className="mt-1.5 text-[11px] text-destructive">Hata: {error}</p>}
+      {error && <p className="mt-1.5 text-[11px] text-destructive">{t("settings.drawer.catalogErrorLabel")} {error}</p>}
     </Section>
   )
 }
@@ -402,6 +425,7 @@ function countModels(data: Record<string, unknown>): number {
 }
 
 function ApprovalTab() {
+  const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const update = useSettingsStore((s) => s.update)
 
@@ -412,13 +436,13 @@ function ApprovalTab() {
 
   return (
     <div className="space-y-5">
-      <Section title="Mod">
+      <Section title={t("settings.drawer.modeTitle")}>
         <div className="flex flex-wrap items-center gap-1.5">
           {(
             [
-              { v: "ask", label: "Varsayılan izinler" },
-              { v: "auto-review", label: "Otomatik inceleme" },
-              { v: "bypass", label: "Tam erişim" },
+              { v: "ask", label: t("composer.approvalAsk") },
+              { v: "auto-review", label: t("composer.approvalAutoReview") },
+              { v: "bypass", label: t("composer.approvalBypass") },
             ] as const
           ).map(({ v, label }) => (
             <button
@@ -437,19 +461,14 @@ function ApprovalTab() {
           ))}
         </div>
         <p className="mt-2 text-[11px] text-codezal-mute">
-          <b className="text-codezal-text">Varsayılan</b>: her tool çağrısı sorulur.{" "}
-          <b className="text-codezal-text">Otomatik inceleme</b>: dosya okuma/yazma/düzenleme
-          otomatik onaylanır, sadece <code className="text-codezal-text">bash</code> sorulur.
-          Sonradan diff'i inceleyip geri alabilirsin.{" "}
-          <b className="text-codezal-text">Tam erişim</b>: <code className="text-codezal-text">bash</code>{" "}
-          dahil hepsi otomatik — dikkatli kullan.
+          {t("settings.drawer.modeHint")}
         </p>
       </Section>
 
-      <Section title="Kayıtlı kurallar">
+      <Section title={t("settings.drawer.savedRulesTitle")}>
         {settings.approvalRules.length === 0 ? (
           <div className="rounded-md border border-dashed border-codezal px-3 py-4 text-center text-[12px] text-codezal-mute">
-            Henüz kural yok. Onay modalindan "Hep izin" tıklayarak ekleyebilirsin.
+            {t("settings.drawer.noRulesHint")}
           </div>
         ) : (
           <ul className="flex flex-col gap-1">
@@ -466,7 +485,7 @@ function ApprovalTab() {
                       : "bg-destructive/15 text-destructive",
                   )}
                 >
-                  {r.decision === "allow" ? "izin" : "ret"}
+                  {r.decision === "allow" ? t("settings.drawer.ruleAllow") : t("settings.drawer.ruleDeny")}
                 </span>
                 <span className="font-mono text-codezal-text">{r.tool}</span>
                 {r.pattern && (
@@ -479,7 +498,7 @@ function ApprovalTab() {
                   type="button"
                   onClick={() => removeRule(i)}
                   className="rounded p-1 text-codezal-mute hover:text-destructive"
-                  title="Kuralı sil"
+                  title={t("settings.drawer.ruleDeleteTitle")}
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -492,12 +511,45 @@ function ApprovalTab() {
   )
 }
 
+// Yeni MCP entry için benzersiz isim üret — "yeni", "yeni-2", ...
+function uniqueName(servers: McpServerConfig[], base: string): string {
+  const taken = new Set(servers.map((s) => s.name))
+  if (!taken.has(base)) return base
+  let i = 2
+  while (taken.has(`${base}-${i}`)) i++
+  return `${base}-${i}`
+}
+
 function McpTab() {
+  const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const update = useSettingsStore((s) => s.update)
   const servers = settings.mcpServers ?? []
   const [statuses, setStatuses] = useState<McpStatus[]>([])
   const [testing, setTesting] = useState(false)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [importOpen, setImportOpen] = useState(false)
+
+  function applyImport(parsed: McpServerConfig[], mode: "merge" | "replace") {
+    const next =
+      mode === "replace"
+        ? parsed
+        : (() => {
+            // Aynı isimli mevcut entry override edilir, yenileri eklenir
+            const byName = new Map<string, McpServerConfig>()
+            for (const s of servers) byName.set(s.name, s)
+            for (const s of parsed) byName.set(s.name, s)
+            return Array.from(byName.values())
+          })()
+    void update({ mcpServers: next })
+    setImportOpen(false)
+  }
+
+  // Duplicate ad tespiti — model'e expose edilirken aynı isim çakışıp tool'ları override eder
+  const nameCounts = servers.reduce<Record<string, number>>((acc, s) => {
+    if (s.name) acc[s.name] = (acc[s.name] ?? 0) + 1
+    return acc
+  }, {})
 
   function patchAt(idx: number, patch: Partial<McpServerConfig>) {
     const next = servers.map((s, i) => (i === idx ? { ...s, ...patch } : s))
@@ -509,7 +561,7 @@ function McpTab() {
   function addNew() {
     const next: McpServerConfig[] = [
       ...servers,
-      { name: "yeni", url: "", transport: "http", enabled: true },
+      { name: uniqueName(servers, "yeni"), url: "", transport: "http", enabled: true },
     ]
     void update({ mcpServers: next })
   }
@@ -517,7 +569,7 @@ function McpTab() {
     const next: McpServerConfig[] = [
       ...servers,
       {
-        name: "yeni-stdio",
+        name: uniqueName(servers, "yeni-stdio"),
         url: "",
         transport: "stdio",
         command: "npx",
@@ -547,18 +599,20 @@ function McpTab() {
     return statuses.find((s) => s.name === name)
   }
 
+  function toggleExpand(name: string) {
+    setExpanded((p) => ({ ...p, [name]: !p[name] }))
+  }
+
   return (
     <div className="space-y-4">
-      <Section title="MCP Sunucuları (HTTP / SSE / stdio)">
+      <Section title={t("settings.drawer.mcpServersTitle")}>
         <p className="mb-3 text-[11.5px] text-codezal-mute">
-          MCP sunucusunun tool'ları çağrı esnasında otomatik yüklenir; isim olarak{" "}
-          <code className="text-codezal-text">&lt;sunucu&gt;__&lt;tool&gt;</code>{" "}
-          şeklinde model'e sunulur. Stdio için bash'tan erişilebilir komut yeterli (örn npx, uvx).
+          {t("settings.drawer.mcpHint")}
         </p>
 
         {servers.length === 0 ? (
           <div className="mb-3 rounded-md border border-dashed border-codezal px-3 py-4 text-center text-[12px] text-codezal-mute">
-            Henüz sunucu yok.
+            {t("settings.drawer.mcpNoServers")}
           </div>
         ) : (
           <ul className="mb-3 flex flex-col gap-2">
@@ -573,8 +627,20 @@ function McpTab() {
                     <input
                       value={s.name}
                       onChange={(e) => patchAt(i, { name: e.target.value })}
-                      placeholder="ad"
-                      className="w-[120px] rounded border border-codezal bg-transparent px-1.5 py-1 text-[12px] text-codezal-text outline-none focus:border-codezal-strong"
+                      placeholder={t("settings.drawer.mcpNamePlaceholder")}
+                      className={cn(
+                        "w-[120px] rounded border bg-transparent px-1.5 py-1 text-[12px] text-codezal-text outline-none focus:border-codezal-strong",
+                        !s.name || nameCounts[s.name] > 1
+                          ? "border-destructive"
+                          : "border-codezal",
+                      )}
+                      title={
+                        !s.name
+                          ? "Ad boş olamaz"
+                          : nameCounts[s.name] > 1
+                            ? "Aynı isimde başka sunucu var — tool isimleri çakışır"
+                            : ""
+                      }
                     />
                     <select
                       value={s.transport ?? "http"}
@@ -595,26 +661,35 @@ function McpTab() {
                         checked={s.enabled !== false}
                         onChange={(e) => patchAt(i, { enabled: e.target.checked })}
                       />
-                      açık
+                      {t("settings.drawer.mcpEnabledLabel")}
                     </label>
                     {st && (
-                      <span
+                      <button
+                        type="button"
+                        onClick={() => st.ok && toggleExpand(s.name)}
+                        disabled={!st.ok}
                         className={cn(
-                          "ml-auto rounded px-1.5 py-0.5 text-[10.5px]",
+                          "ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px]",
                           st.ok
-                            ? "bg-codezal-accent-dim text-codezal-accent"
-                            : "bg-destructive/15 text-destructive",
+                            ? "bg-codezal-accent-dim text-codezal-accent hover:opacity-80"
+                            : "cursor-default bg-destructive/15 text-destructive",
                         )}
-                        title={st.error}
+                        title={st.error ?? (st.ok ? "Tool listesini göster/gizle" : "")}
                       >
-                        {st.ok ? `${st.toolCount} tool` : "hata"}
-                      </span>
+                        {st.ok &&
+                          (expanded[s.name] ? (
+                            <ChevronDown className="h-2.5 w-2.5" />
+                          ) : (
+                            <ChevronRight className="h-2.5 w-2.5" />
+                          ))}
+                        {st.ok ? `${st.toolCount} tool` : t("messageList.errorLabel")}
+                      </button>
                     )}
                     <button
                       type="button"
                       onClick={() => removeAt(i)}
                       className="rounded p-1 text-codezal-mute hover:text-destructive"
-                      title="Sil"
+                      title={t("settings.drawer.mcpDeleteTitle")}
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -653,7 +728,7 @@ function McpTab() {
                             // sessiz — kullanıcı yazarken geçersiz olabilir
                           }
                         }}
-                        placeholder='env: {"API_KEY": "..."} (opsiyonel)'
+                        placeholder={t("settings.drawer.mcpEnvPlaceholder")}
                         rows={1}
                         className="w-full resize-none rounded border border-codezal bg-transparent px-2 py-1 font-mono text-[11px] text-codezal-dim outline-none focus:border-codezal-strong"
                       />
@@ -663,7 +738,7 @@ function McpTab() {
                       <input
                         value={s.url}
                         onChange={(e) => patchAt(i, { url: e.target.value })}
-                        placeholder="https://mcp.example.com/v1/mcp"
+                        placeholder={t("settings.drawer.mcpUrlPlaceholder")}
                         className="mb-1 w-full rounded border border-codezal bg-transparent px-2 py-1 font-mono text-[11.5px] text-codezal-text outline-none focus:border-codezal-strong"
                       />
                       <textarea
@@ -678,7 +753,7 @@ function McpTab() {
                             // sessiz — kullanıcı yazarken geçersiz olabilir
                           }
                         }}
-                        placeholder='{"Authorization": "Bearer ..."}'
+                        placeholder={t("settings.drawer.mcpHeadersPlaceholder")}
                         rows={1}
                         className="w-full resize-none rounded border border-codezal bg-transparent px-2 py-1 font-mono text-[11px] text-codezal-dim outline-none focus:border-codezal-strong"
                       />
@@ -686,6 +761,22 @@ function McpTab() {
                   )}
                   {st?.error && (
                     <div className="mt-1 text-[10.5px] text-destructive">{st.error}</div>
+                  )}
+                  {st?.ok && expanded[s.name] && st.tools && st.tools.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 rounded border border-codezal/60 bg-codezal-panel-2/60 p-1.5 text-[11px]">
+                      {st.tools.map((ti) => (
+                        <li key={ti.name} className="flex flex-col">
+                          <code className="text-codezal-accent">
+                            {s.name}__{ti.name}
+                          </code>
+                          {ti.description && (
+                            <span className="ml-2 line-clamp-2 text-codezal-mute">
+                              {ti.description}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </li>
               )
@@ -699,14 +790,14 @@ function McpTab() {
             onClick={addNew}
             className="flex items-center gap-1 rounded-md border border-codezal px-2.5 py-1.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
           >
-            <Plus className="h-3 w-3" /> HTTP ekle
+            <Plus className="h-3 w-3" /> {t("settings.drawer.mcpHttpAdd")}
           </button>
           <button
             type="button"
             onClick={addStdio}
             className="flex items-center gap-1 rounded-md border border-codezal px-2.5 py-1.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
           >
-            <Plus className="h-3 w-3" /> Stdio ekle
+            <Plus className="h-3 w-3" /> {t("settings.drawer.mcpStdioAdd")}
           </button>
           <button
             type="button"
@@ -715,7 +806,7 @@ function McpTab() {
             className="flex items-center gap-1 rounded-md border border-codezal px-2.5 py-1.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
           >
             <RefreshCcw className={cn("h-3 w-3", testing && "animate-spin")} />
-            Bağlantı test et
+            {t("settings.drawer.mcpTestConnection")}
           </button>
           {statuses.length > 0 && !testing && (
             <span className="flex items-center gap-1 text-[11px] text-codezal-dim">
@@ -725,6 +816,143 @@ function McpTab() {
           )}
         </div>
       </Section>
+
+      {importOpen && (
+        <McpImportModal
+          onClose={() => setImportOpen(false)}
+          onApply={applyImport}
+        />
+      )}
+    </div>
+  )
+}
+
+// Üst kapsayıcısız veya mcpServers gömülü JSON yapıştırmak için modal.
+// merge: aynı isim varsa override, yenilerini ekle. replace: tamamen üzerine yaz.
+function McpImportModal({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void
+  onApply: (parsed: McpServerConfig[], mode: "merge" | "replace") => void
+}) {
+  const [text, setText] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<McpServerConfig[]>([])
+  const [mode, setMode] = useState<"merge" | "replace">("merge")
+
+  function tryParse(t: string) {
+    setText(t)
+    if (!t.trim()) {
+      setError(null)
+      setPreview([])
+      return
+    }
+    try {
+      const parsed = parseMcpServersJson(t)
+      setError(null)
+      setPreview(parsed)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setPreview([])
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="flex w-full max-w-[560px] flex-col gap-3 rounded-xl border border-codezal bg-codezal-panel p-4 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-codezal-text">
+            MCP sunucularını JSON'dan içe aktar
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-codezal-mute hover:text-codezal-text"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <p className="text-[11.5px] text-codezal-mute">
+          Claude Desktop / Cursor / VSCode formatı —{" "}
+          <code className="text-codezal-text">{"{ mcpServers: { ... } }"}</code> veya
+          doğrudan map.{" "}
+          <code className="text-codezal-text">command</code> varsa stdio,{" "}
+          <code className="text-codezal-text">url</code> varsa http (type/transport ile
+          override).
+        </p>
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => tryParse(e.target.value)}
+          placeholder={`{\n  "mcpServers": {\n    "filesystem": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-filesystem", "$HOME"]\n    },\n    "remote": {\n      "url": "https://mcp.example.com/v1/mcp",\n      "headers": { "Authorization": "Bearer ..." }\n    }\n  }\n}`}
+          rows={12}
+          className="w-full rounded-md border border-codezal bg-codezal-input px-2 py-1.5 font-mono text-[11.5px] text-codezal-text outline-none focus:border-codezal-strong"
+        />
+        {error && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
+            {error}
+          </div>
+        )}
+        {preview.length > 0 && (
+          <div className="rounded-md border border-codezal bg-codezal-panel-2/60 px-2 py-1.5 text-[11.5px]">
+            <div className="mb-1 text-codezal-dim">
+              {preview.length} sunucu bulundu:
+            </div>
+            <ul className="space-y-0.5">
+              {preview.map((p) => (
+                <li key={p.name} className="font-mono text-codezal-text">
+                  · {p.name}{" "}
+                  <span className="text-codezal-mute">
+                    [{p.transport ?? "http"}]
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[12px] text-codezal-dim">
+            <input
+              type="radio"
+              name="import-mode"
+              checked={mode === "merge"}
+              onChange={() => setMode("merge")}
+            />
+            Birleştir (aynı isim override)
+          </label>
+          <label className="flex items-center gap-1.5 text-[12px] text-codezal-dim">
+            <input
+              type="radio"
+              name="import-mode"
+              checked={mode === "replace"}
+              onChange={() => setMode("replace")}
+            />
+            Tamamını değiştir
+          </label>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-codezal px-2.5 py-1 text-[12px] text-codezal-dim hover:text-codezal-text"
+          >
+            İptal
+          </button>
+          <button
+            type="button"
+            disabled={preview.length === 0}
+            onClick={() => onApply(preview, mode)}
+            className="rounded-md border border-codezal-accent bg-codezal-accent-dim px-2.5 py-1 text-[12px] text-codezal-accent disabled:opacity-50"
+          >
+            Uygula ({preview.length})
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -732,6 +960,7 @@ function McpTab() {
 type HookEventLocal = "PreToolUse" | "PostToolUse" | "UserPromptSubmit" | "Stop"
 
 function HooksTab() {
+  const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const update = useSettingsStore((s) => s.update)
   const hooks = settings.hooks ?? []
@@ -766,16 +995,14 @@ function HooksTab() {
 
   return (
     <div className="space-y-4">
-      <Section title="Lifecycle hook'ları">
+      <Section title={t("settings.drawer.hooksTitle")}>
         <p className="mb-3 text-[11.5px] text-codezal-mute">
-          Tool çağrıları, kullanıcı promptu ve tur bitimi gibi olaylarda bash komutu çalıştır.
-          Payload JSON olarak <code className="text-codezal-text">$CODEZAL_HOOK_PAYLOAD</code> env'ine ve stdin'e verilir.
-          PreToolUse + blocking ile exit≠0 → tool durur.
+          {t("settings.drawer.hooksHint")}
         </p>
 
         {hooks.length === 0 && (
           <div className="rounded-md border border-dashed border-codezal px-3 py-4 text-center text-[11.5px] text-codezal-mute">
-            Henüz hook yok. Ekle ile başla.
+            {t("settings.drawer.hooksNoHooks")}
           </div>
         )}
 
@@ -795,7 +1022,7 @@ function HooksTab() {
                 </select>
                 <input
                   type="text"
-                  placeholder="matcher (tool adı veya *)"
+                  placeholder={t("settings.drawer.hookMatcherPlaceholder")}
                   value={h.matcher ?? ""}
                   onChange={(e) => patchHook(idx, { matcher: e.target.value })}
                   className="w-32 rounded border border-codezal bg-codezal-input px-1.5 py-0.5 text-[11.5px] text-codezal-text"
@@ -806,7 +1033,7 @@ function HooksTab() {
                     checked={h.enabled ?? true}
                     onChange={(e) => patchHook(idx, { enabled: e.target.checked })}
                   />
-                  aktif
+                  {t("settings.drawer.hookActiveLabel")}
                 </label>
                 {h.event === "PreToolUse" && (
                   <label className="ml-1 flex items-center gap-1 text-[11px] text-codezal-dim">
@@ -815,27 +1042,27 @@ function HooksTab() {
                       checked={h.blocking ?? false}
                       onChange={(e) => patchHook(idx, { blocking: e.target.checked })}
                     />
-                    block
+                    {t("settings.drawer.hookBlockLabel")}
                   </label>
                 )}
                 <button
                   type="button"
                   onClick={() => removeHook(idx)}
                   className="ml-auto rounded p-1 text-codezal-mute hover:bg-codezal-panel hover:text-codezal-text"
-                  title="Sil"
+                  title={t("settings.drawer.hookDeleteTitle")}
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
               <input
                 type="text"
-                placeholder="açıklama (opsiyonel)"
+                placeholder={t("settings.drawer.hookDescPlaceholder")}
                 value={h.description ?? ""}
                 onChange={(e) => patchHook(idx, { description: e.target.value })}
                 className="mt-1.5 w-full rounded border border-codezal bg-codezal-input px-1.5 py-0.5 text-[11.5px] text-codezal-text"
               />
               <textarea
-                placeholder='bash komutu — örn: jq -r .tool <<<"$CODEZAL_HOOK_PAYLOAD"'
+                placeholder={t("settings.drawer.hookCmdPlaceholder")}
                 value={h.command}
                 onChange={(e) => patchHook(idx, { command: e.target.value })}
                 rows={2}
@@ -851,7 +1078,7 @@ function HooksTab() {
           className="mt-3 flex h-7 items-center gap-1.5 rounded-md border border-codezal px-2.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
         >
           <Plus className="h-3 w-3" />
-          Hook ekle
+          {t("settings.drawer.hookAdd")}
         </button>
       </Section>
     </div>
@@ -859,6 +1086,7 @@ function HooksTab() {
 }
 
 function SemanticTab() {
+  const t = useT()
   const settings = useSettingsStore((s) => s.settings)
   const update = useSettingsStore((s) => s.update)
   const active = useSessionsStore((s) => s.active)
@@ -900,7 +1128,7 @@ function SemanticTab() {
 
   async function onBuild() {
     if (!workspace) {
-      setError("Önce workspace bağla")
+      setError(t("settings.drawer.semanticNeedWorkspace"))
       return
     }
     setBuilding(true)
@@ -926,11 +1154,9 @@ function SemanticTab() {
 
   return (
     <div className="space-y-4">
-      <Section title="Semantic index">
+      <Section title={t("settings.drawer.semanticTitle")}>
         <p className="mb-3 text-[11.5px] text-codezal-mute">
-          Workspace dosyalarını chunk'la, embedding'e çevir; <code className="text-codezal-text">code_query</code>{" "}
-          tool'u kavramsal arama için kullanır. İndex{" "}
-          <code className="text-codezal-text">&lt;ws&gt;/.codezal/index.json</code> dosyasında tutulur.
+          {t("settings.drawer.semanticHint")}
         </p>
 
         <label className="mb-3 flex items-center gap-2 text-[12px]">
@@ -939,12 +1165,12 @@ function SemanticTab() {
             checked={cfg.enabled}
             onChange={(e) => patch({ enabled: e.target.checked })}
           />
-          <span className="text-codezal-text">Semantic index'i aktif et</span>
+          <span className="text-codezal-text">{t("settings.drawer.semanticEnable")}</span>
         </label>
 
         <div className="mb-3 grid grid-cols-2 gap-2 text-[11.5px]">
           <label className="flex flex-col gap-1">
-            <span className="text-codezal-dim">Provider</span>
+            <span className="text-codezal-dim">{t("settings.drawer.semanticProviderLabel")}</span>
             <select
               value={cfg.provider}
               onChange={(e) =>
@@ -952,30 +1178,30 @@ function SemanticTab() {
               }
               className="rounded border border-codezal bg-codezal-input px-2 py-1 text-codezal-text"
             >
-              <option value="ollama">Ollama (yerel)</option>
-              <option value="openai">OpenAI</option>
-              <option value="custom">Custom (OpenAI uyumlu)</option>
+              <option value="ollama">{t("settings.drawer.providerOllama")}</option>
+              <option value="openai">{t("settings.drawer.providerOpenai")}</option>
+              <option value="custom">{t("settings.drawer.providerCustom")}</option>
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-codezal-dim">Model</span>
+            <span className="text-codezal-dim">{t("settings.drawer.semanticModelLabel")}</span>
             <input
               value={cfg.model}
               onChange={(e) => patch({ model: e.target.value })}
-              placeholder="nomic-embed-text · text-embedding-3-small"
+              placeholder={t("settings.drawer.semanticModelPlaceholder")}
               className="rounded border border-codezal bg-codezal-input px-2 py-1 font-mono text-codezal-text"
             />
           </label>
           {(cfg.provider === "custom" || cfg.provider === "ollama") && (
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-codezal-dim">Base URL</span>
+              <span className="text-codezal-dim">{t("settings.drawer.semanticBaseUrlLabel")}</span>
               <input
                 value={cfg.baseUrl ?? ""}
                 onChange={(e) => patch({ baseUrl: e.target.value })}
                 placeholder={
                   cfg.provider === "ollama"
-                    ? "http://localhost:11434/v1 (boş = default)"
-                    : "https://api.example.com/v1"
+                    ? t("settings.drawer.semanticBaseUrlOllamaPh")
+                    : t("settings.drawer.semanticBaseUrlCustomPh")
                 }
                 className="rounded border border-codezal bg-codezal-input px-2 py-1 font-mono text-codezal-text"
               />
@@ -983,7 +1209,7 @@ function SemanticTab() {
           )}
           {cfg.provider !== "ollama" && (
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-codezal-dim">API Key</span>
+              <span className="text-codezal-dim">{t("settings.drawer.semanticApiKeyLabel")}</span>
               <input
                 type="password"
                 value={cfg.apiKey ?? ""}
@@ -993,7 +1219,7 @@ function SemanticTab() {
             </label>
           )}
           <label className="flex flex-col gap-1">
-            <span className="text-codezal-dim">Top-K</span>
+            <span className="text-codezal-dim">{t("settings.drawer.semanticTopKLabel")}</span>
             <input
               type="number"
               min={1}
@@ -1006,22 +1232,22 @@ function SemanticTab() {
         </div>
       </Section>
 
-      <Section title="Workspace index">
+      <Section title={t("settings.drawer.semanticWsTitle")}>
         <div className="mb-2 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 text-[11.5px]">
           {!workspace ? (
-            <span className="text-codezal-mute">Workspace bağlı değil.</span>
+            <span className="text-codezal-mute">{t("settings.drawer.semanticWsNotConnected")}</span>
           ) : stats ? (
             <>
               <div className="text-codezal-text">
-                {stats.chunks} chunk · model{" "}
+                {t("settings.drawer.semanticChunksLabel", { n: stats.chunks })}{" "}
                 <code className="text-codezal-accent">{stats.model}</code>
               </div>
               <div className="text-codezal-mute">
-                Üretim: {new Date(stats.builtAt).toLocaleString()}
+                {t("settings.drawer.semanticBuiltLabel", { date: new Date(stats.builtAt).toLocaleString() })}
               </div>
             </>
           ) : (
-            <span className="text-codezal-mute">Henüz index yok.</span>
+            <span className="text-codezal-mute">{t("settings.drawer.semanticNoIndex")}</span>
           )}
         </div>
 
@@ -1041,7 +1267,7 @@ function SemanticTab() {
           className="flex h-7 items-center gap-1.5 rounded-md border border-codezal px-2.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
         >
           <RefreshCcw className={cn("h-3 w-3", building && "animate-spin")} />
-          {stats ? "Yeniden oluştur" : "İndex oluştur"}
+          {stats ? t("settings.drawer.semanticRebuildBtn") : t("settings.drawer.semanticBuildBtn")}
         </button>
       </Section>
     </div>
@@ -1049,6 +1275,7 @@ function SemanticTab() {
 }
 
 function AboutTab() {
+  const t = useT()
   return (
     <div className="space-y-4 text-[12.5px] text-codezal-dim">
       <div className="flex items-center gap-3">
@@ -1057,11 +1284,11 @@ function AboutTab() {
         </div>
         <div>
           <div className="text-[14px] font-semibold text-codezal-text">Codezal</div>
-          <div className="text-[11px] text-codezal-mute">Multi-LLM masaüstü asistanı · v0.1</div>
+          <div className="text-[11px] text-codezal-mute">{t("settings.drawer.aboutSubtitle")}</div>
         </div>
       </div>
 
-      <Section title="Bileşenler">
+      <Section title={t("settings.drawer.aboutComponents")}>
         <ul className="space-y-0.5 text-[12px]">
           <li>· Tauri 2 (Rust shell) + plugin-fs + plugin-shell</li>
           <li>· React 19 + Vite + Tailwind</li>
@@ -1070,22 +1297,21 @@ function AboutTab() {
         </ul>
       </Section>
 
-      <Section title="Kısayollar">
+      <Section title={t("settings.drawer.aboutShortcuts")}>
         <ul className="space-y-0.5 font-mono text-[11.5px]">
-          <li>⌘N — Yeni sohbet</li>
-          <li>⌘K — Komut paleti</li>
-          <li>⌘, — Ayarlar</li>
-          <li>⌘⇧F — Workspace'te ara</li>
-          <li>⌘B — Sağ paneli aç/kapa</li>
-          <li>⌘⏎ — Mesaj gönder / düzenlemeyi kaydet</li>
-          <li>Esc — Modali kapat</li>
+          <li>{t("settings.drawer.shortcutNew")}</li>
+          <li>{t("settings.drawer.shortcutPalette")}</li>
+          <li>{t("settings.drawer.shortcutSettings")}</li>
+          <li>{t("settings.drawer.shortcutSearch")}</li>
+          <li>{t("settings.drawer.shortcutPanel")}</li>
+          <li>{t("settings.drawer.shortcutSend")}</li>
+          <li>{t("settings.drawer.shortcutEsc")}</li>
         </ul>
       </Section>
 
-      <Section title="Veri">
+      <Section title={t("settings.drawer.aboutData")}>
         <p className="text-[11.5px]">
-          Sohbetler, ayarlar ve onay kuralları <code className="text-codezal-text">$APPDATA/sessions/</code> altında JSON olarak saklanır.
-          Hiçbir veri uzak sunucuya yedeklenmez.
+          {t("settings.drawer.aboutDataText")}
         </p>
       </Section>
     </div>

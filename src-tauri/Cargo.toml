@@ -1,5 +1,7 @@
 [package]
-name = "codezal"
+# Dev modunda dock etiketi = cargo binary adı. Bu yüzden büyük harfli.
+# Prod bundle'da CFBundleName tauri.conf.json > productName'den gelir.
+name = "Codezal"
 version = "0.1.0"
 description = "Codezal — multi-LLM desktop chat"
 authors = ["Erhan Erbas"]

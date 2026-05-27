@@ -133,6 +133,88 @@ function nthSpaceIndex(s: string, n: number): number {
   return i
 }
 
+// Git ref adı için güvenli karakter seti — shellQuote yeterli olsa da
+// defense-in-depth: shell metakarakter / kontrol karakteri / git'in reddettiği
+// formları erkenden engelle.
+function assertSafeBranchName(name: string): void {
+  if (!name) throw new Error("branch boş")
+  if (name.length > 200) throw new Error("branch adı çok uzun")
+  // İzinli: harf, rakam, - _ . /  (slash slash veya başında/sonunda yasak)
+  if (!/^[A-Za-z0-9._/-]+$/.test(name)) {
+    throw new Error("branch adı geçersiz karakter içeriyor")
+  }
+  if (name.startsWith("/") || name.endsWith("/") || name.includes("//")) {
+    throw new Error("branch adı geçersiz")
+  }
+  if (name.startsWith(".") || name.endsWith(".lock") || name.includes("..")) {
+    throw new Error("branch adı geçersiz")
+  }
+  if (name === "HEAD" || name === "@") {
+    throw new Error("branch adı rezerve")
+  }
+}
+
+// Local branch listesi (refname:short). Mevcut branch en başta.
+export async function gitListBranches(workspace: string): Promise<string[]> {
+  if (!workspace) return []
+  try {
+    // Parens'i tek tırnağa al — bash'te `(` subshell tetikler, çıplak format syntax error verir.
+    const raw = await exec(workspace, "for-each-ref --format='%(refname:short)' refs/heads/")
+    return raw
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+// Mevcut branch adı (detached HEAD ise null).
+export async function gitCurrentBranch(workspace: string): Promise<string | null> {
+  if (!workspace) return null
+  try {
+    const raw = await exec(workspace, "rev-parse --abbrev-ref HEAD")
+    const name = raw.trim()
+    if (!name || name === "HEAD") return null
+    return name
+  } catch {
+    return null
+  }
+}
+
+// Branch'e geç. Hata varsa stderr mesajıyla throw eder (örn: uncommitted changes).
+export async function gitCheckoutBranch(
+  workspace: string,
+  branch: string,
+): Promise<void> {
+  if (!workspace) throw new Error("workspace yok")
+  assertSafeBranchName(branch)
+  const wrapped = `cd ${shellQuote(workspace)} && git checkout ${shellQuote(branch)}`
+  const out = await Command.create("bash", ["-lc", wrapped]).execute()
+  if (out.code !== 0) {
+    throw new Error(out.stderr.trim() || `git checkout exit ${out.code}`)
+  }
+}
+
+// Yeni branch oluştur ve geç. start ref verilmezse HEAD'den.
+export async function gitCreateBranch(
+  workspace: string,
+  branch: string,
+  startRef?: string,
+): Promise<void> {
+  if (!workspace) throw new Error("workspace yok")
+  assertSafeBranchName(branch)
+  if (startRef) assertSafeBranchName(startRef)
+  const args = startRef
+    ? `checkout -b ${shellQuote(branch)} ${shellQuote(startRef)}`
+    : `checkout -b ${shellQuote(branch)}`
+  const wrapped = `cd ${shellQuote(workspace)} && git ${args}`
+  const out = await Command.create("bash", ["-lc", wrapped]).execute()
+  if (out.code !== 0) {
+    throw new Error(out.stderr.trim() || `git checkout -b exit ${out.code}`)
+  }
+}
+
 // Bir dosyanın working tree diff'i (staged değilse). staged=true ile staged göster.
 export async function gitDiffFile(
   workspace: string,

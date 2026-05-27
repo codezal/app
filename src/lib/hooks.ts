@@ -65,7 +65,7 @@ async function execHook(
       }),
     ])
     if (timer) clearTimeout(timer)
-    return { stdout: out.stdout, stderr: out.stderr, code: out.code }
+    return { stdout: out.stdout, stderr: out.stderr, code: out.code ?? -1 }
   } catch (e) {
     if (timer) clearTimeout(timer)
     const msg = e instanceof Error ? e.message : String(e)

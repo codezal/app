@@ -17,6 +17,8 @@ import {
 import { useSessionsStore } from "@/store/sessions"
 import { basename } from "@/lib/workspace"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 export type PanelMode =
   | "files"
@@ -27,14 +29,16 @@ export type PanelMode =
   | "rules"
   | "terminal"
 
-const MODE_LABEL: Record<PanelMode, string> = {
-  files: "Dosyalar",
-  git: "Git",
-  agents: "Ajan",
-  skills: "Skill",
-  memory: "Bellek",
-  rules: "Kurallar",
-  terminal: "Terminal",
+function modeLabel(m: PanelMode): string {
+  switch (m) {
+    case "files": return tStatic("tabBar.modeFiles")
+    case "git": return tStatic("tabBar.modeGit")
+    case "agents": return tStatic("tabBar.modeAgents")
+    case "skills": return tStatic("tabBar.modeSkills")
+    case "memory": return tStatic("tabBar.modeMemory")
+    case "rules": return tStatic("tabBar.modeRules")
+    case "terminal": return tStatic("tabBar.modeTerminal")
+  }
 }
 
 const MODE_ICON: Record<PanelMode, React.ComponentType<{ className?: string }>> = {
@@ -53,6 +57,7 @@ type Props = {
 }
 
 export function TabBar({ panelMode, onSetPanelMode }: Props) {
+  const t = useT()
   const active = useSessionsStore((s) => s.active)
   const setActiveFile = useSessionsStore((s) => s.setActiveFile)
   const closeFile = useSessionsStore((s) => s.closeFile)
@@ -139,7 +144,7 @@ export function TabBar({ panelMode, onSetPanelMode }: Props) {
                   "rounded p-0.5 hover:bg-destructive/10 hover:text-destructive",
                   isActive ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover:opacity-70",
                 )}
-                title="Kapat (orta tuş ile de kapanır)"
+                title={t("tabBar.closeTabHint")}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -163,6 +168,7 @@ function PanelMenu({
   mode: PanelMode | null
   onSet: (m: PanelMode | null) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -183,7 +189,7 @@ function PanelMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title={mode ? `Sağ panel · ${MODE_LABEL[mode]}` : "Sağ paneli aç"}
+        title={mode ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) }) : t("tabBar.rightPanelOpen")}
         className={cn(
           "flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11.5px]",
           mode
@@ -192,7 +198,7 @@ function PanelMenu({
         )}
       >
         <PanelRight className="h-3.5 w-3.5" />
-        {mode && <span>{MODE_LABEL[mode]}</span>}
+        {mode && <span>{modeLabel(mode)}</span>}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-40 mt-1 w-[200px] overflow-hidden rounded-md border border-codezal bg-codezal-panel shadow-xl">
@@ -217,7 +223,7 @@ function PanelMenu({
                 <Icon
                   className={cn("h-3.5 w-3.5", active ? "text-codezal-accent" : "text-codezal-mute")}
                 />
-                <span>{MODE_LABEL[m]}</span>
+                <span>{modeLabel(m)}</span>
                 {active && <span className="ml-auto text-[10.5px] text-codezal-accent">●</span>}
               </button>
             )
@@ -232,7 +238,7 @@ function PanelMenu({
               className="flex w-full items-center gap-2 border-t border-codezal px-3 py-1.5 text-left text-[12px] text-codezal-dim hover:bg-codezal-panel-2 hover:text-destructive"
             >
               <X className="h-3 w-3" />
-              Paneli kapat
+              {t("tabBar.closePanel")}
             </button>
           )}
         </div>

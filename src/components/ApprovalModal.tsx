@@ -6,8 +6,11 @@ import { useApprovalsStore } from "@/store/approvals"
 import { useSettingsStore } from "@/store/settings"
 import { hunksForEdit, type DiffLine } from "@/lib/diff"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n/useT"
+import { t as tStatic } from "@/lib/i18n"
 
 export function ApprovalModal() {
+  const t = useT()
   const queue = useApprovalsStore((s) => s.queue)
   const decide = useApprovalsStore((s) => s.decide)
   const settings = useSettingsStore((s) => s.settings)
@@ -37,16 +40,16 @@ export function ApprovalModal() {
       <div className="w-[520px] overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl">
         <header className="flex items-center gap-2 border-b border-codezal px-3 py-2.5">
           <ShieldCheck className="h-4 w-4 text-codezal-accent" />
-          <span className="text-[13px] font-medium text-codezal-text">Onay gerekli</span>
+          <span className="text-[13px] font-medium text-codezal-text">{t("approvalModal.needApproval")}</span>
           {isDangerous && (
             <span className="ml-2 flex items-center gap-1 rounded bg-destructive/15 px-1.5 py-0.5 text-[10.5px] text-destructive">
               <AlertTriangle className="h-3 w-3" />
-              riskli
+              {t("approvalModal.riskyLabel")}
             </span>
           )}
           <div className="flex-1" />
           {queue.length > 1 && (
-            <span className="text-[11px] text-codezal-mute">+{queue.length - 1} bekliyor</span>
+            <span className="text-[11px] text-codezal-mute">{t("approvalModal.pendingMore", { count: queue.length - 1 })}</span>
           )}
         </header>
 
@@ -55,21 +58,21 @@ export function ApprovalModal() {
             <span className="rounded bg-codezal-chip px-1.5 py-0.5 font-mono text-[11px] text-codezal-text">
               {req.tool}
             </span>
-            <span className="text-[12px] text-codezal-mute">aracı şunu çalıştırmak istiyor:</span>
+            <span className="text-[12px] text-codezal-mute">{t("approvalModal.wantsToRun")}</span>
           </div>
 
           <div className="mb-3 flex rounded-md border border-codezal text-[11px]">
-            {(["detay", "kural"] as const).map((t) => (
+            {(["detay", "kural"] as const).map((tt) => (
               <button
-                key={t}
+                key={tt}
                 type="button"
-                onClick={() => setTab(t)}
+                onClick={() => setTab(tt)}
                 className={cn(
                   "flex-1 px-2 py-1 capitalize",
-                  tab === t ? "bg-codezal-chip text-codezal-text" : "text-codezal-dim",
+                  tab === tt ? "bg-codezal-chip text-codezal-text" : "text-codezal-dim",
                 )}
               >
-                {t === "detay" ? "Detay" : "Kural ekle"}
+                {tt === "detay" ? t("approvalModal.tabDetail") : t("approvalModal.tabRule")}
               </button>
             ))}
           </div>
@@ -78,11 +81,8 @@ export function ApprovalModal() {
             <DetailView tool={req.tool} input={req.input} />
           ) : (
             <div className="space-y-2 text-[12px] text-codezal-dim">
-              <p>
-                "İzin ver ve kural ekle" → bir sonraki sefere aynı{" "}
-                <code className="text-codezal-text">{req.tool}</code> çağrısı için soru sorulmaz.
-              </p>
-              <p>Kurallar Ayarlar &gt; Onay menüsünden yönetilebilir.</p>
+              <p>{t("approvalModal.rulesHintLine1", { tool: req.tool })}</p>
+              <p>{t("approvalModal.rulesHintLine2")}</p>
             </div>
           )}
         </div>
@@ -93,32 +93,32 @@ export function ApprovalModal() {
             onClick={() => decideAndMaybeRule("deny")}
             className="flex items-center gap-1 rounded-md border border-codezal px-2.5 py-1.5 text-[12px] text-codezal-dim hover:border-destructive/40 hover:text-destructive"
           >
-            <X className="h-3 w-3" /> Reddet
+            <X className="h-3 w-3" /> {t("approvalModal.deny")}
           </button>
           {subj && (
             <button
               type="button"
               onClick={() => void decideAndMaybeRule("allow", "subject")}
               className="rounded-md border border-codezal px-2.5 py-1.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
-              title={`Bu '${subj.slice(0, 40)}…' başlangıçlı çağrılara otomatik izin ver`}
+              title={t("approvalModal.btnPatternTitle", { pattern: subj.slice(0, 40) })}
             >
-              Bu kalıba hep izin
+              {t("approvalModal.btnPatternAllow")}
             </button>
           )}
           <button
             type="button"
             onClick={() => void decideAndMaybeRule("allow", "tool")}
             className="rounded-md border border-codezal px-2.5 py-1.5 text-[12px] text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
-            title={`Tüm '${req.tool}' çağrılarına otomatik izin ver`}
+            title={t("approvalModal.btnAllToolTitle", { tool: req.tool })}
           >
-            Hep izin ({req.tool})
+            {t("approvalModal.btnAllToolAllow", { tool: req.tool })}
           </button>
           <button
             type="button"
             onClick={() => void decideAndMaybeRule("allow")}
             className="flex items-center gap-1 rounded-md bg-codezal-accent px-3 py-1.5 text-[12px] font-medium text-[#1a1106]"
           >
-            <Check className="h-3 w-3" /> İzin ver
+            <Check className="h-3 w-3" /> {t("approvalModal.allow")}
           </button>
         </footer>
       </div>
@@ -150,8 +150,8 @@ function DetailView({ tool, input }: { tool: string; input: unknown }) {
         <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-codezal bg-codezal-panel-2/80 px-3 py-1.5 text-[11px] backdrop-blur">
           <FileText className="h-3 w-3 text-codezal-mute" />
           <span className="font-mono text-codezal-text">{path}</span>
-          {added > 0 && <span className="text-codezal-diff-add">+{added}</span>}
-          {removed > 0 && <span className="text-codezal-diff-del">-{removed}</span>}
+          {added > 0 && <span className="text-codezal-diff-add">{tStatic("approvalModal.addedLabel", { count: added })}</span>}
+          {removed > 0 && <span className="text-codezal-diff-del">{tStatic("approvalModal.removedLabel", { count: removed })}</span>}
         </div>
         <UnifiedDiff lines={hunks} />
       </div>
@@ -169,11 +169,11 @@ function DetailView({ tool, input }: { tool: string; input: unknown }) {
         <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-codezal bg-codezal-panel-2/80 px-3 py-1.5 text-[11px] backdrop-blur">
           <FileText className="h-3 w-3 text-codezal-mute" />
           <span className="font-mono text-codezal-text">{path}</span>
-          <span className="text-codezal-mute">yeni dosya · {content.length} char</span>
+          <span className="text-codezal-mute">{tStatic("approvalModal.newFileLabel", { count: content.length })}</span>
         </div>
         <pre className="m-0 whitespace-pre-wrap px-3 py-2 font-mono text-[12px] leading-[1.6] text-codezal-text">
           {preview}
-          {more > 0 && `\n… ${more} satır daha`}
+          {more > 0 && `\n${tStatic("approvalModal.moreLines", { count: more })}`}
         </pre>
       </div>
     )
@@ -184,7 +184,7 @@ function DetailView({ tool, input }: { tool: string; input: unknown }) {
     return (
       <div className="overflow-hidden rounded-md border border-codezal-strong bg-codezal-code">
         <div className="border-b border-codezal bg-codezal-panel-2/80 px-3 py-1.5 text-[10.5px] uppercase tracking-[0.08em] text-codezal-mute">
-          komut
+          {tStatic("approvalModal.commandLabel")}
         </div>
         <pre className="m-0 max-h-[260px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-[12px] leading-[1.65] text-codezal-text">
           <span className="text-codezal-mute">$ </span>
@@ -206,7 +206,7 @@ function DetailView({ tool, input }: { tool: string; input: unknown }) {
 function UnifiedDiff({ lines }: { lines: DiffLine[] }) {
   if (lines.length === 0) {
     return (
-      <div className="px-3 py-3 text-[12px] text-codezal-mute">(değişiklik yok)</div>
+      <div className="px-3 py-3 text-[12px] text-codezal-mute">{tStatic("approvalModal.diffEmpty")}</div>
     )
   }
   return (
