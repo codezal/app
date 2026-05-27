@@ -26,6 +26,19 @@ export {
   isHighRisk,
   PERMISSION_LABELS,
 } from "./permissions"
+export {
+  addMarketplace,
+  pullMarketplace,
+  removeMarketplace,
+  readMarketplaceIndex,
+  readMarketplacePluginManifest,
+} from "./marketplace"
+export {
+  installPlugin,
+  uninstallPlugin,
+  togglePluginEnabled,
+  readPluginFile,
+} from "./install"
 export type {
   Permission,
   PluginManifest,
