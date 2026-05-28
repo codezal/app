@@ -39,7 +39,11 @@
         { "path": "$HOME/.codezal" },
         { "path": "$HOME/.codezal/**" },
         { "path": "$HOME/**/.codezal" },
-        { "path": "$HOME/**/.codezal/**" }
+        { "path": "$HOME/**/.codezal/**" },
+        { "path": "$HOME/.codezal/plugins/*/.codezal-plugin" },
+        { "path": "$HOME/.codezal/plugins/*/.codezal-plugin/**" },
+        { "path": "$HOME/.codezal/marketplaces/*/plugins-inline/*/.codezal-plugin" },
+        { "path": "$HOME/.codezal/marketplaces/*/plugins-inline/*/.codezal-plugin/**" }
       ]
     },
     {
