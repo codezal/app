@@ -28,7 +28,6 @@ import { useT } from "@/lib/i18n/useT"
 import { t as tStatic } from "@/lib/i18n"
 
 type Props = {
-  messages: Message[]
   streaming?: boolean
   emptyHint?: string
   onRegenerate?: (userMsgId: string) => void
@@ -40,7 +39,6 @@ type Props = {
 }
 
 export function MessageList({
-  messages,
   streaming,
   onRegenerate,
   onEditUser,
@@ -50,6 +48,9 @@ export function MessageList({
 }: Props) {
   const t = useT()
   const active = useSessionsStore((s) => s.active)
+  // Mesaj listesi store'dan — App artık messages prop'u geçmiyor, böylece App
+  // stream patch'lerinde re-render olmuyor; bu abonelik yalnız MessageList'i uyandırır.
+  const messages = useSessionsStore((s) => s.active?.messages ?? [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   // Otomatik dibe yapışma — kullanıcı yukarı kaydırınca pasifleşir,

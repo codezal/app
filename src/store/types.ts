@@ -34,6 +34,11 @@ export type Message = {
   // Bu mesajdaki tool çağrılarından önce snapshot alınmış dosyaların workspace-relative yolları.
   // Boş array veya undefined → snapshot yok (revert mümkün değil).
   snapshotPaths?: string[]
+  // Bu UI mesajının kaç ModelMessage ürettiği. User = 1, assistant = response.messages.length
+  // (assistant + tool-call + tool-result açılımı). truncate/fork/revert'te modelMessages dizisini
+  // UI indeksiyle değil, bu sayıların prefix-toplamıyla keserek hizayı korur.
+  // undefined → eski (legacy) mesaj; çağıran yaklaşık (UI-index) kesime düşer.
+  modelMsgCount?: number
 }
 
 export type SessionUsage = {
@@ -215,6 +220,10 @@ export type Settings = {
   // and hidden from the composer dropdown. Default: every recommended model is
   // enabled, others disabled.
   modelStatus?: Partial<Record<ProviderId, Record<string, boolean>>>
+  // Codezal terminal compact prompt (ZDOTDIR override). When true, terminal
+  // spawns with a short prompt (`~ %`) without touching the user's ~/.zshrc.
+  // Default: true.
+  terminalShortPrompt?: boolean
 }
 
 export type SessionMeta = Pick<

@@ -21,7 +21,7 @@ import { seedDefaultAgents, autoSeedOnFirstRun } from "@/lib/agents-seed"
 import { readWorkspaceAgents, readUserAgents } from "@/lib/agents"
 import { ensureDefaultMarketplace, loadAllInstalled } from "@/lib/plugins"
 import type { ProviderId } from "@/lib/providers"
-import { buildModel } from "@/lib/providers"
+import { buildLanguageModel } from "@/lib/providers"
 import { buildAllTools } from "@/lib/tools"
 import { buildSystemPrompt } from "@/lib/system-prompt"
 import { costUsd } from "@/lib/pricing"
@@ -51,12 +51,15 @@ export default function App() {
   const settings = useSettingsStore((s) => s.settings)
   const loadSettings = useSettingsStore((s) => s.load)
 
-  const active = useSessionsStore((s) => s.active)
+  // Dar selector'lar — App, stream sırasında active.messages her patch'te değişse de
+  // re-render OLMAZ (yalnız bu primitive alanlar değişince). Mesaj listesi kendi
+  // aboneliğini MessageList içinde tutar.
+  const workspacePath = useSessionsStore((s) => s.active?.workspacePath)
+  const activeFile = useSessionsStore((s) => s.active?.activeFile ?? null)
   const loadAll = useSessionsStore((s) => s.loadAll)
   const create = useSessionsStore((s) => s.create)
   const pushMessage = useSessionsStore((s) => s.pushMessage)
   const patchMessage = useSessionsStore((s) => s.patchMessage)
-  const appendModelMessages = useSessionsStore((s) => s.appendModelMessages)
   const replaceModelMessages = useSessionsStore((s) => s.replaceModelMessages)
   const setEffectiveContextTokens = useSessionsStore((s) => s.setEffectiveContextTokens)
   const addUsage = useSessionsStore((s) => s.addUsage)
@@ -109,7 +112,7 @@ export default function App() {
     void (async () => {
       try {
         const [proj, user] = await Promise.all([
-          readWorkspaceAgents(active?.workspacePath),
+          readWorkspaceAgents(workspacePath),
           readUserAgents(),
         ])
         if (alive) {
@@ -124,7 +127,7 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [active?.workspacePath])
+  }, [workspacePath])
   async function waitUntilIdle(signal: AbortSignal): Promise<void> {
     // İlk dispatch'in streaming=true'ya gelmesi için kısa bekleme
     await new Promise((r) => setTimeout(r, 50))
@@ -202,7 +205,7 @@ export default function App() {
   useEffect(() => {
     if (!settingsLoaded) return
     void startScheduler({
-      workspacePath: active?.workspacePath,
+      workspacePath,
       onFire: (r) => runRoutineRef.current(r),
     })
     return () => stopScheduler()
@@ -211,8 +214,8 @@ export default function App() {
   // Workspace değişti → rutin listesini yenile
   useEffect(() => {
     if (!settingsLoaded) return
-    void refreshScheduler(active?.workspacePath)
-  }, [active?.workspacePath, settingsLoaded])
+    void refreshScheduler(workspacePath)
+  }, [workspacePath, settingsLoaded])
 
   // Appearance: apply theme presets, fonts, motion flags, etc. Follow OS changes when mode='system'.
   useEffect(() => {
@@ -327,15 +330,14 @@ export default function App() {
 
     // Aktif session yoksa lazy oluştur — Composer'da seçilmiş provider/model/workspace
     // settings defaults'a yazıldığı için create() bunlarla başlar.
-    if (!active) {
+    // create() içindeki Zustand set() senkron çalışır; await dönüşünde getState()
+    // taze session'ı verir — eski setTimeout(30) yarış hack'i kaldırıldı.
+    if (!useSessionsStore.getState().active) {
       await create(
         settings.defaultProvider,
         settings.defaultModel,
         settings.defaultWorkspacePath,
       )
-      // create() state'i atomik günceller ama bu closure'daki `active` hâlâ null.
-      // Bir tick bekle, ardından store snapshot'tan devam et.
-      await new Promise((r) => setTimeout(r, 30))
     }
 
     const activeNow = useSessionsStore.getState().active
@@ -367,6 +369,8 @@ export default function App() {
       role: "user",
       content: text,
       createdAt: Date.now(),
+      // User turu daima 1 ModelMessage üretir — hiza takibi için.
+      modelMsgCount: 1,
     }
     const asstMsg: Message = {
       id: crypto.randomUUID(),
@@ -379,11 +383,21 @@ export default function App() {
     pushMessage(userMsg)
     pushMessage(asstMsg)
 
-    // Geçmiş: önceki modelMessages varsa onu kullan, yoksa text-only fallback
-    // (sıkıştırma yapıldıysa store güncellenmiştir — taze snap çek)
+    // Geçmiş: önceki modelMessages varsa onu kullan (user'lar dahil tam history),
+    // yoksa legacy text-only fallback. Fallback'te az önce push'lanan user/asst
+    // tekrar üretilmesin diye pending+boş mesajlar elenir; son user'ın içeriği
+    // hook-context eklenmiş effectiveText ile değiştirilir.
     const snap = useSessionsStore.getState().active!
-    const prior: ModelMessage[] = snap.modelMessages ?? messagesToModelFallback(snap.messages)
-    const history: ModelMessage[] = [...prior, { role: "user", content: effectiveText }]
+    let history: ModelMessage[]
+    if (snap.modelMessages) {
+      history = [...snap.modelMessages, { role: "user", content: effectiveText }]
+    } else {
+      history = messagesToModelFallback(snap.messages)
+      const last = history[history.length - 1]
+      if (last && last.role === "user") {
+        history[history.length - 1] = { role: "user", content: effectiveText }
+      }
+    }
 
     await runStream(asstMsg.id, history)
   }
@@ -392,7 +406,7 @@ export default function App() {
   // userMsgId: tutulacak son user mesajının id'si. Bundan sonraki her şey silinir,
   // yeni asistan mesajı eklenir ve stream baştan başlar.
   async function onRegenerate(userMsgId: string) {
-    if (!active) return
+    if (!useSessionsStore.getState().active) return
     setError(null)
     // userMsgId dahil her şeye kadar kes
     truncateAfter(userMsgId)
@@ -408,7 +422,8 @@ export default function App() {
       pending: true,
     }
     pushMessage(asstMsg)
-    // Geçmiş: truncate sonrası modelMessages veya text fallback
+    // Geçmiş: truncate sonrası modelMessages (user'lar dahil) veya legacy text fallback.
+    // Yeni user EKLENMEZ — son user zaten truncate ile korunan turdur.
     const history: ModelMessage[] =
       snap.modelMessages ?? messagesToModelFallback(snap.messages)
     await runStream(asstMsg.id, history)
@@ -454,7 +469,8 @@ export default function App() {
         clearMessages()
         return
       case "branch": {
-        const last = active?.messages[active.messages.length - 1]
+        const msgs = useSessionsStore.getState().active?.messages
+        const last = msgs?.[msgs.length - 1]
         if (last) await onBranch(last.id)
         return
       }
@@ -550,8 +566,58 @@ export default function App() {
     const ac = new AbortController()
     abortRef.current = ac
     setStreaming(true)
+
+    // Stream UI tamponları + rAF throttle. try DIŞINDA tanımlı — catch/finally
+    // bekleyen rAF'ı iptal edip (dangling patch yok) kısmi turu persist edebilsin.
+    const parts: Part[] = []
+    let textBuf = ""
+    let reasoningBuf = ""
+    let rafId: number | null = null
+    let pendingPatch = false
+
+    const computePatch = () => {
+      const next = [...parts]
+      if (reasoningBuf) next.push({ type: "reasoning", text: reasoningBuf })
+      if (textBuf) next.push({ type: "text", text: textBuf })
+      return { parts: next, content: collapseText(next) }
+    }
+    const cancelRaf = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      pendingPatch = false
+    }
+    const schedulePatch = () => {
+      if (pendingPatch) return
+      pendingPatch = true
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        pendingPatch = false
+        patchMessage(asstMsgId, computePatch())
+      })
+    }
+    const syncFlush = () => {
+      cancelRaf()
+      patchMessage(asstMsgId, computePatch())
+    }
+    const flushText = () => {
+      if (!textBuf) return
+      parts.push({ type: "text", text: textBuf })
+      textBuf = ""
+    }
+    const flushReasoning = () => {
+      if (!reasoningBuf) return
+      parts.push({ type: "reasoning", text: reasoningBuf })
+      reasoningBuf = ""
+    }
+
     try {
-      const model = buildModel(cur.provider, cur.model, settings.apiKeys)
+      const model = await buildLanguageModel({
+        providerId: cur.provider,
+        modelId: cur.model,
+        settings,
+      })
       const tools = await buildAllTools(cur.workspacePath, settings.mcpServers ?? [])
       const system = await buildSystemPrompt({
         workspacePath: cur.workspacePath,
@@ -563,7 +629,7 @@ export default function App() {
       const result = streamText({
         model,
         system,
-        messages: history,
+        messages: sanitizeHistoryForProvider(history),
         tools,
         // 20 → 80 — büyük agentic görevler 20 adımı kolay aşıyor, akış yarıda kalıyordu.
         stopWhen: stepCountIs(80),
@@ -576,39 +642,24 @@ export default function App() {
         },
       })
 
-      // Stream UI: text-delta + reasoning + tool-call + tool-result chunk'larını parts'a yaz
-      const parts: Part[] = []
-      let textBuf = ""
-      let reasoningBuf = ""
-      const flushText = () => {
-        if (!textBuf) return
-        parts.push({ type: "text", text: textBuf })
-        textBuf = ""
-      }
-      const flushReasoning = () => {
-        if (!reasoningBuf) return
-        parts.push({ type: "reasoning", text: reasoningBuf })
-        reasoningBuf = ""
-      }
-
+      // Stream UI: text-delta + reasoning + tool-call + tool-result chunk'larını parts'a yaz.
+      // Tampon + rAF throttle helper'ları yukarıda (try dışında) tanımlı.
       for await (const chunk of result.fullStream) {
         switch (chunk.type) {
           case "text-delta":
-            flushReasoning()
+            if (reasoningBuf) {
+              flushReasoning()
+            }
             textBuf += chunk.text ?? ""
-            patchMessage(asstMsgId, {
-              parts: [...parts, { type: "text", text: textBuf }],
-              content: collapseText([...parts, { type: "text", text: textBuf }]),
-            })
+            schedulePatch()
             break
           case "reasoning-delta": {
-            flushText()
+            if (textBuf) {
+              flushText()
+            }
             const delta = (chunk as { text?: string }).text ?? ""
             reasoningBuf += delta
-            patchMessage(asstMsgId, {
-              parts: [...parts, { type: "reasoning", text: reasoningBuf }],
-              content: collapseText([...parts, { type: "reasoning", text: reasoningBuf }]),
-            })
+            schedulePatch()
             break
           }
           case "tool-call":
@@ -620,7 +671,7 @@ export default function App() {
               toolName: chunk.toolName,
               input: chunk.input,
             })
-            patchMessage(asstMsgId, { parts: [...parts], content: collapseText(parts) })
+            syncFlush()
             break
           case "tool-result":
             parts.push({
@@ -629,9 +680,10 @@ export default function App() {
               toolName: chunk.toolName,
               output: stringifyToolOutput(chunk.output),
             })
-            patchMessage(asstMsgId, { parts: [...parts], content: collapseText(parts) })
+            syncFlush()
             break
           case "error": {
+            cancelRaf()
             const err = chunk.error
             const msg = err instanceof Error ? err.message : String(err)
             console.error("[stream chunk error]", err)
@@ -646,17 +698,25 @@ export default function App() {
           }
         }
       }
+      cancelRaf()
       flushText()
       flushReasoning()
+
+      // Final ModelMessage geçmişi: gönderilen history + bu turda üretilenler.
+      // appendModelMessages YETERSİZDİ — response.messages yalnız üretilen
+      // (assistant+tool) mesajları içerir, user turlarını içermez; eski kod
+      // user'ları hiç saklamadığından çok-turlu sohbette model önceki user'ları
+      // kaybediyordu. Tam history'yi replace ile yaz.
+      const resp = await result.response
+      replaceModelMessages([...history, ...resp.messages])
+
+      // asst UI mesajının ürettiği ModelMessage sayısı — truncate/fork/revert hizası.
       patchMessage(asstMsgId, {
         parts: [...parts],
         content: collapseText(parts),
         pending: false,
+        modelMsgCount: resp.messages.length,
       })
-
-      // Final ModelMessage geçmişini kaydet (sonraki tur için sağlam yapı)
-      const resp = await result.response
-      appendModelMessages(resp.messages)
 
       // Yeni modelMessages üzerinden efektif bağlam tahminini güncelle
       const updatedSnap = useSessionsStore.getState().active
@@ -701,12 +761,28 @@ export default function App() {
 
       await persistActive()
     } catch (e) {
-      if (ac.signal.aborted) {
-        patchMessage(asstMsgId, { pending: false })
-      } else {
+      // Bekleyen rAF'ı iptal et (try scope'u bitti — dangling patch riski) ve tamponu boşalt.
+      cancelRaf()
+      flushText()
+      flushReasoning()
+      const partialText = collapseText(parts)
+      // Kısmi turu model history'sine işle — UI'da görünen metin model geçmişiyle
+      // ayrışmasın (abort sonrası model "kendi yazdığını" görmezse divergence olur).
+      // Tool çağrıları yarıda kaldıysa atlanır: dangling tool-call sonraki turu bozar,
+      // bu yüzden yalnız text'i assistant mesajı olarak persist ederiz.
+      const partial: ModelMessage[] = partialText.trim()
+        ? [{ role: "assistant", content: partialText }]
+        : []
+      replaceModelMessages([...history, ...partial])
+      patchMessage(asstMsgId, {
+        parts: [...parts],
+        content: partialText,
+        pending: false,
+        modelMsgCount: partial.length,
+      })
+      if (!ac.signal.aborted) {
         const msg = e instanceof Error ? e.message : String(e)
         setError(msg)
-        patchMessage(asstMsgId, { pending: false })
       }
     } finally {
       setStreaming(false)
@@ -744,18 +820,49 @@ export default function App() {
       .join("\n\n")
   }
 
-  // Tool öncesi eski sessionlar için: düz user/assistant text → ModelMessage
+  // Tool öncesi eski sessionlar için: düz user/assistant text → ModelMessage.
+  // pending (akıştaki boş placeholder) ve boş-içerikli mesajlar elenir — aksi halde
+  // az önce push'lanan user/asst çifti history'de tekrar eder.
   function messagesToModelFallback(msgs: Message[]): ModelMessage[] {
     return msgs
-      .filter((m) => m.role === "user" || m.role === "assistant")
+      .filter(
+        (m) =>
+          (m.role === "user" || m.role === "assistant") &&
+          !m.pending &&
+          m.content.trim().length > 0,
+      )
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+  }
+
+  // Drop assistant turns whose content is empty (no text and no tool calls).
+  // OpenAI tolerates them silently, but stricter providers (Kimi, Moonshot,
+  // some OpenRouter routes) reject with "the message at position N with role
+  // 'assistant' must not be empty". This can happen when a tool-only turn
+  // produces no text and the tool result is the next message.
+  function sanitizeHistoryForProvider(history: ModelMessage[]): ModelMessage[] {
+    return history.filter((m) => {
+      if (m.role !== "assistant") return true
+      const c = m.content
+      if (typeof c === "string") return c.trim().length > 0
+      if (Array.isArray(c)) {
+        // Keep when ANY part has substance: text with non-empty string, or
+        // any tool-call / file / image part.
+        return c.some((p) => {
+          if (!p || typeof p !== "object") return false
+          if (p.type === "text") {
+            return typeof p.text === "string" && p.text.trim().length > 0
+          }
+          // tool-call, file, image, reasoning, etc. — non-empty signal.
+          return true
+        })
+      }
+      return false
+    })
   }
 
   function onAbort() {
     abortRef.current?.abort()
   }
-
-  const activeFile = active?.activeFile ?? null
 
   return (
     <div className="flex h-screen overflow-hidden bg-codezal-bg text-codezal-text">
@@ -765,6 +872,7 @@ export default function App() {
           onOpenRoutines={() => setShowRoutines(true)}
           onReplay={onReplay}
           onCollapse={() => setSidebarHidden(true)}
+          onOpenSearch={() => setShowSearch(true)}
         />
       )}
       {replayState.running && (
@@ -792,6 +900,7 @@ export default function App() {
               onSetPanelMode={setPanelMode}
               sidebarHidden={sidebarHidden}
               onExpandSidebar={() => setSidebarHidden(false)}
+              onOpenSearch={() => setShowSearch(true)}
             />
 
             <div className="flex min-h-0 flex-1">
@@ -801,7 +910,6 @@ export default function App() {
                 ) : (
                   <>
                     <MessageList
-                      messages={active?.messages ?? []}
                       streaming={streaming}
                       onRegenerate={onRegenerate}
                       onEditUser={onEditUser}
@@ -871,9 +979,9 @@ export default function App() {
         onRun={async (prompt, opts) => {
           const provider = (opts?.provider as ProviderId | undefined) ?? settings.defaultProvider
           const model = opts?.model ?? settings.defaultModel
+          // create() set() senkron — await dönüşünde session hazır, doğrudan gönder.
           await create(provider, model, settings.defaultWorkspacePath)
-          // create state'i atomik güncelliyor; bir tick sonra onSend
-          setTimeout(() => void onSend(prompt), 30)
+          void onSend(prompt)
         }}
       />
 

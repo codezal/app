@@ -17,8 +17,14 @@ import {
 import { useSessionsStore } from "@/store/sessions"
 import { useSettingsStore } from "@/store/settings"
 import type { ApprovalMode } from "@/store/types"
-import { PROVIDERS, modelsFor, defaultModelFor, type ProviderId } from "@/lib/providers"
-import type { ProvidersCatalog } from "@/lib/providers-catalog"
+import {
+  listProviderAdapters,
+  modelsFor,
+  defaultModelFor,
+  isConnectedSync,
+  type ProviderId,
+} from "@/lib/providers"
+import { modelDetail, type ProvidersCatalog } from "@/lib/providers-catalog"
 import { contextCap } from "@/lib/pricing"
 import { basename, pickWorkspaceFolder } from "@/lib/workspace"
 import {
@@ -61,10 +67,18 @@ export function Composer({
   const [commands, setCommands] = useState<SlashCommand[]>([])
   const [slashIdx, setSlashIdx] = useState(0)
   const ref = useRef<HTMLTextAreaElement>(null)
-  const active = useSessionsStore((s) => s.active)
   const updateActiveMeta = useSessionsStore((s) => s.updateActiveMeta)
   const setMode = useSessionsStore((s) => s.setMode)
-  const mode = active?.mode ?? "build"
+  // Dar selector'lar — Composer, stream sırasında active.messages her patch'te
+  // değişse de re-render OLMAZ; yalnız bu primitive alanlar değişince uyanır.
+  const hasActive = useSessionsStore((s) => s.active != null)
+  const mode = useSessionsStore((s) => s.active?.mode ?? "build")
+  const workspacePath = useSessionsStore((s) => s.active?.workspacePath)
+  const provider = useSessionsStore((s) => s.active?.provider)
+  const model = useSessionsStore((s) => s.active?.model)
+  const msgCount = useSessionsStore((s) => s.active?.messages.length ?? 0)
+  const effectiveTok = useSessionsStore((s) => s.active?.usage?.effectiveContextTokens)
+  const lastInputTok = useSessionsStore((s) => s.active?.usage?.lastInputTokens)
   const settings = useSettingsStore((s) => s.settings)
   const updateSettings = useSettingsStore((s) => s.update)
   const approvalMode = settings.approvalMode
@@ -74,7 +88,7 @@ export function Composer({
   useEffect(() => {
     let alive = true
     function refresh() {
-      void listAllCommands(active?.workspacePath).then((cmds) => {
+      void listAllCommands(workspacePath).then((cmds) => {
         if (alive) setCommands(cmds)
       })
     }
@@ -84,7 +98,7 @@ export function Composer({
       alive = false
       window.removeEventListener("codezal:commands-changed", refresh)
     }
-  }, [active?.workspacePath])
+  }, [workspacePath])
 
   // Slash menüsü aktif mi? Sadece `/` ile başlayıp boşluk yoksa.
   const slashState = useMemo(() => {
@@ -129,7 +143,7 @@ export function Composer({
     const path = await pickWorkspaceFolder()
     if (!path) return
     // Aktif session varsa bağla
-    if (active) updateActiveMeta({ workspacePath: path })
+    if (hasActive) updateActiveMeta({ workspacePath: path })
     // Varsayılan da güncellensin → lazy create / sonraki session aynı klasörle açılır
     void updateSettings({ defaultWorkspacePath: path })
   }
@@ -179,11 +193,9 @@ export function Composer({
   }
 
   // Tek doğru kaynak: StatusBar ile aynı — efektif bağlam tahmini.
-  // active.messages sadece UI mesajları (system + tool I/O hariç) — yanıltıcı.
-  const tokenCount =
-    active?.usage?.effectiveContextTokens ??
-    active?.usage?.lastInputTokens ??
-    estimateTokens(active?.messages ?? [])
+  // Usage henüz yoksa (ilk tur öncesi) 0; eski messages-bazlı tahmin kaldırıldı
+  // (her stream frame'inde re-render tetikliyordu).
+  const tokenCount = effectiveTok ?? lastInputTok ?? 0
   const effortLabel = effort === "high" ? t("composer.effortHigh") : effort === "medium" ? t("composer.effortMedium") : t("composer.effortLow")
 
   return (
@@ -255,11 +267,11 @@ export function Composer({
           />
 
           {/* Workspace seçici sadece boş sohbette — session başlayınca zaten bağlı */}
-          {(active?.messages.length ?? 0) === 0 && (
+          {msgCount === 0 && (
             <WorkspacePicker
-              current={active?.workspacePath ?? settings.defaultWorkspacePath}
+              current={workspacePath ?? settings.defaultWorkspacePath}
               onPick={(p) => {
-                if (active) updateActiveMeta({ workspacePath: p })
+                if (hasActive) updateActiveMeta({ workspacePath: p })
                 void updateSettings({ defaultWorkspacePath: p })
               }}
               onPickNew={pickWorkspace}
@@ -268,26 +280,26 @@ export function Composer({
 
           {/* Branch chip sohbet sırasında da görünür — kullanıcı mid-conversation switch edebilsin */}
           <BranchPicker
-            workspace={active?.workspacePath ?? settings.defaultWorkspacePath}
+            workspace={workspacePath ?? settings.defaultWorkspacePath}
           />
 
           <div className="flex-1" />
 
           {/* Model picker — yukarı açılan custom popover. Native select Tauri'de aşağı açılıyordu. */}
           <ModelPicker
-            providerId={(active?.provider ?? settings.defaultProvider) as ProviderId}
-            modelId={active?.model ?? settings.defaultModel}
+            providerId={(provider ?? settings.defaultProvider) as ProviderId}
+            modelId={model ?? settings.defaultModel}
             catalog={settings.providerCatalog?.data as ProvidersCatalog | undefined}
             onPickProvider={(id) => {
               const defaultModel = defaultModelFor(
                 id,
                 settings.providerCatalog?.data as ProvidersCatalog | undefined,
               )
-              if (active) updateActiveMeta({ provider: id, model: defaultModel })
+              if (hasActive) updateActiveMeta({ provider: id, model: defaultModel })
               else void updateSettings({ defaultProvider: id, defaultModel })
             }}
             onPickModel={(m) => {
-              if (active) updateActiveMeta({ model: m })
+              if (hasActive) updateActiveMeta({ model: m })
               else void updateSettings({ defaultModel: m })
             }}
           />
@@ -368,7 +380,7 @@ export function Composer({
           className="ml-auto"
           title={t("composer.contextUsedTitle")}
         >
-          {formatK(tokenCount)} / {formatK(contextCap(active?.model ?? ""))}
+          {formatK(tokenCount)} / {formatK(contextCap(model ?? ""))}
         </span>
         <span className="flex items-center gap-1">⌘⏎</span>
       </div>
@@ -764,116 +776,168 @@ function ModelPicker({
   onPickModel: (m: string) => void
 }) {
   const t = useT()
+  const settings = useSettingsStore((s) => s.settings)
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const wrapRef = useRef<HTMLDivElement>(null)
+  // Selected provider in the popover. `null` means "follow the committed
+  // providerId"; lets the user browse another provider's models without
+  // committing the switch until they pick one. Reset to null whenever the
+  // popover closes (handled in the event handlers, not an effect, to avoid
+  // setState-in-effect).
+  const [browseTab, setBrowseTab] = useState<ProviderId | null>(null)
+  const activeTab = browseTab ?? providerId
+
+  function closePopover() {
+    setOpen(false)
+    setBrowseTab(null)
+    setQ("")
+  }
 
   useEffect(() => {
     if (!open) return
     function onDoc(e: MouseEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+      if (!wrapRef.current?.contains(e.target as Node)) closePopover()
     }
     document.addEventListener("mousedown", onDoc)
     return () => document.removeEventListener("mousedown", onDoc)
   }, [open])
 
-  useEffect(() => {
-    if (!open) setQ("")
-  }, [open])
+  // Connected providers only — the model picker should never offer a
+  // provider the user has no credentials for. Sort: popular first, then
+  // alphabetical.
+  const adapters = useMemo(() => listProviderAdapters(catalog), [catalog])
+  const connected = useMemo(
+    () =>
+      adapters
+        .filter((p) => isConnectedSync(p, settings))
+        .sort((a, b) => {
+          if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
+          return a.label.localeCompare(b.label)
+        }),
+    [adapters, settings],
+  )
 
+  // Use the tab provider for the model list. If the user clicked a tab
+  // without committing, this lets them search within it.
   const models = useMemo(
-    () => modelsFor(providerId, catalog),
-    [providerId, catalog],
+    () => modelsFor(activeTab, catalog, settings.modelStatus),
+    [activeTab, catalog, settings.modelStatus],
   )
   const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase()
-    if (!t) return models
-    return models.filter((m) => m.toLowerCase().includes(t))
-  }, [models, q])
+    const needle = q.trim().toLowerCase()
+    if (!needle) return models
+    return models.filter((m) => {
+      if (m.toLowerCase().includes(needle)) return true
+      const name = modelDetail(catalog, activeTab, m)?.name
+      return Boolean(name && name.toLowerCase().includes(needle))
+    })
+  }, [models, q, catalog, activeTab])
 
-  const providerLabel = PROVIDERS[providerId]?.label ?? providerId
+  const activeAdapter = adapters.find((p) => p.id === providerId)
+  const providerLabel = activeAdapter?.label ?? String(providerId)
+  const activeDisplay = modelDetail(catalog, providerId, modelId)?.name || modelId
 
   return (
     <div ref={wrapRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? closePopover() : setOpen(true))}
         className="flex h-[26px] items-center gap-1.5 rounded-md border border-codezal px-2 text-[12px] font-medium hover:border-codezal-strong"
         title={`${providerLabel} · ${modelId}`}
       >
         <span className="text-codezal-dim">{providerLabel}</span>
         <span className="text-codezal-mute">·</span>
-        <span className="text-codezal-text">{modelId}</span>
+        <span className="text-codezal-text">{activeDisplay}</span>
         <ChevronDown className="h-2 w-2 text-codezal-mute" />
       </button>
       {open && (
-        <div className="absolute bottom-[32px] right-0 z-50 w-[320px] overflow-hidden rounded-md border border-codezal bg-codezal-sidebar shadow-lg">
-          {/* Provider sekmeleri */}
-          <div className="flex border-b border-codezal-hair">
-            {Object.values(PROVIDERS).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => onPickProvider(p.id)}
-                className={cn(
-                  "flex-1 px-2 py-1.5 text-[11.5px] font-medium transition-colors",
-                  p.id === providerId
-                    ? "bg-codezal-panel-2/60 text-codezal-text"
-                    : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
-                )}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          {/* Arama */}
-          <div className="border-b border-codezal-hair p-1.5">
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={t("composer.searchModel")}
-              className="w-full bg-transparent px-1.5 py-1 text-[12px] text-codezal-text outline-none placeholder:text-codezal-mute"
-            />
-          </div>
-          {/* Liste */}
-          <div className="max-h-[280px] overflow-y-auto py-1">
-            {filtered.length === 0 && (
-              <div className="px-2.5 py-2 text-[11.5px] text-codezal-mute">
-                {t("common.noResults")}
+        <div className="absolute bottom-[32px] right-0 z-50 w-[420px] overflow-hidden rounded-md border border-codezal bg-codezal-sidebar shadow-lg">
+          {connected.length === 0 ? (
+            <div className="px-3 py-3 text-[11.5px] text-codezal-mute">
+              {t("composer.noProvidersConnected")}
+            </div>
+          ) : (
+            <>
+              {/* Search bar spans the full width — searches model names + ids
+                  within the active provider. */}
+              <div className="border-b border-codezal-hair p-1.5">
+                <input
+                  autoFocus
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={t("composer.searchModel")}
+                  className="w-full bg-transparent px-1.5 py-1 text-[12px] text-codezal-text outline-none placeholder:text-codezal-mute"
+                />
               </div>
-            )}
-            {filtered.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  onPickModel(m)
-                  setOpen(false)
-                }}
-                className={cn(
-                  "flex w-full items-center gap-1.5 px-2.5 py-1 text-left text-[12px]",
-                  m === modelId
-                    ? "bg-codezal-panel-2/60 text-codezal-text"
-                    : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
-                )}
-                title={m}
-              >
-                <span className="truncate font-mono text-[11.5px]">{m}</span>
-                {m === modelId && (
-                  <Check className="ml-auto h-3 w-3 shrink-0 text-codezal-accent" />
-                )}
-              </button>
-            ))}
-          </div>
+              {/* Two-column layout: left = providers (vertical scroll),
+                  right = models for the active provider (vertical scroll).
+                  Fixed height so the popover doesn't jitter when a provider
+                  has only a couple of models — both columns scroll instead. */}
+              <div className="flex h-[320px]">
+                <div className="w-[140px] shrink-0 overflow-y-auto border-r border-codezal-hair py-1">
+                  {connected.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setBrowseTab(p.id)}
+                      className={cn(
+                        "block w-full truncate px-2.5 py-1 text-left text-[11.5px] font-medium transition-colors",
+                        p.id === activeTab
+                          ? "bg-codezal-accent/15 text-codezal-accent"
+                          : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
+                      )}
+                      title={p.label}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1 overflow-y-auto py-1">
+                  {filtered.length === 0 && (
+                    <div className="px-2.5 py-2 text-[11.5px] text-codezal-mute">
+                      {t("common.noResults")}
+                    </div>
+                  )}
+                  {filtered.map((m) => {
+                    const name = modelDetail(catalog, activeTab, m)?.name?.trim()
+                    const display = name || m
+                    const isActive = m === modelId && activeTab === providerId
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          // Switching provider implicitly commits the tab.
+                          if (activeTab !== providerId) onPickProvider(activeTab)
+                          onPickModel(m)
+                          closePopover()
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
+                          isActive
+                            ? "bg-codezal-panel-2/60 text-codezal-text"
+                            : "text-codezal-dim hover:bg-codezal-panel-2/40 hover:text-codezal-text",
+                        )}
+                        title={m}
+                      >
+                        <span className="truncate text-[12px] text-codezal-text">
+                          {display}
+                        </span>
+                        {isActive && (
+                          <Check className="ml-auto h-3 w-3 shrink-0 text-codezal-accent" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   )
-}
-
-function estimateTokens(messages: { content: string }[]): number {
-  return messages.reduce((n, m) => n + Math.ceil((m.content?.length ?? 0) / 4), 0)
 }
 
 function formatK(n: number): string {

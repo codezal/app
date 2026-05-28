@@ -179,6 +179,20 @@ function autoTitleFromMessages(msgs: Message[]): string {
   return text.length > 60 ? text.slice(0, 57) + "..." : text || "Yeni sohbet"
 }
 
+// UI mesajı ile ModelMessage 1:1 değildir — bir assistant turu tool kullanınca
+// birden çok ModelMessage'a açılır. İlk `uiLen` UI mesajının ürettiği toplam
+// ModelMessage sayısını (kesim noktasını) modelMsgCount prefix-toplamıyla bul.
+// Herhangi bir mesajda count yoksa (legacy) null dön — çağıran yaklaşık kesime düşer.
+function modelBoundary(messages: Message[], uiLen: number): number | null {
+  let sum = 0
+  for (let i = 0; i < uiLen; i++) {
+    const c = messages[i]?.modelMsgCount
+    if (c == null) return null
+    sum += c
+  }
+  return sum
+}
+
 export const useSessionsStore = create<SessionsState>((set, get) => ({
   index: [],
   activeId: null,
@@ -503,14 +517,16 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     // Bu mesajın snapshot'larını workspace'e geri yaz
     const result = await restoreMessage(session.id, messageId, session.workspacePath)
 
-    // Mesajı ve sonrasını sil — geçmiş tutarsız kalmasın
+    // Mesajı ve sonrasını sil — geçmiş tutarsız kalmasın.
+    // modelMessages'i UI indeksiyle değil, prefix-toplamla kes (idx hariç → [0, idx)).
     set((s) => {
       if (!s.active) return s
+      const cut = modelBoundary(s.active.messages, idx) ?? idx
       return {
         active: {
           ...s.active,
           messages: s.active.messages.slice(0, idx),
-          modelMessages: (s.active.modelMessages ?? []).slice(0, idx),
+          modelMessages: (s.active.modelMessages ?? []).slice(0, cut),
           updatedAt: Date.now(),
         },
       }
@@ -537,8 +553,9 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const now = Date.now()
     const forkId = newId()
     const forkMessages = a.messages.slice(0, idx + 1).map((m) => ({ ...m }))
-    // modelMessages için aynı sayıda mesaj kes (ham model mesajı sayısı ≈ ui mesajı)
-    const forkModelMsgs = (a.modelMessages ?? []).slice(0, idx + 1)
+    // modelMessages'i prefix-toplamla kes (idx dahil → [0, idx]). UI indeksi ≠ model mesajı sayısı.
+    const forkCut = modelBoundary(a.messages, idx + 1) ?? idx + 1
+    const forkModelMsgs = (a.modelMessages ?? []).slice(0, forkCut)
     const fork: Session = {
       id: forkId,
       title: a.title + " (çatal)",
@@ -610,12 +627,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       if (!st.active) return st
       const idx = st.active.messages.findIndex((m) => m.id === messageId)
       if (idx === -1) return st
+      // modelMessages'i prefix-toplamla kes (idx dahil → [0, idx]). UI indeksi ≠ model mesajı sayısı.
+      const cut = modelBoundary(st.active.messages, idx + 1) ?? idx + 1
       return {
         active: {
           ...st.active,
           messages: st.active.messages.slice(0, idx + 1),
-          // modelMessages eşle (yaklaşık)
-          modelMessages: (st.active.modelMessages ?? []).slice(0, idx + 1),
+          modelMessages: (st.active.modelMessages ?? []).slice(0, cut),
           updatedAt: Date.now(),
         },
       }

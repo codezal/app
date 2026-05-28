@@ -6,11 +6,14 @@ import { useT } from "@/lib/i18n/useT"
 
 export function StatusBar() {
   const t = useT()
-  const active = useSessionsStore((s) => s.active)
-  if (!active) return null
+  // Dar selector'lar — usage/model yalnız tur sonunda değişir; StatusBar artık
+  // stream patch'lerinde (active.messages değişimi) re-render olmaz.
+  const hasActive = useSessionsStore((s) => s.active != null)
+  const usage = useSessionsStore((s) => s.active?.usage)
+  const model = useSessionsStore((s) => s.active?.model ?? "")
+  if (!hasActive) return null
 
-  const usage = active.usage
-  const cap = contextCap(active.model)
+  const cap = contextCap(model)
   // ctx doluluk = efektif bağlam (estimator). Yoksa son turn'ün input'u.
   // Kümülatif input + output ARTIK kullanılmıyor — yanlış %100 göstergesi.
   const used = usage?.effectiveContextTokens ?? usage?.lastInputTokens ?? 0
