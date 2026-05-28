@@ -20,6 +20,58 @@ type Props = {
   error?: string | null
 }
 
+// Permission combo'ları için özel risk uyarıları. Tek başına olağan görünen
+// permission'lar bir araya geldiğinde RCE / exfil / API key sızıntı vektörü
+// oluşturabilir. Bu kombolar install onayında ayrı kırmızı banner gösterilir.
+function detectPermissionCombos(perms: string[]): {
+  title: string
+  detail: string
+}[] {
+  const has = (p: string) => perms.includes(p)
+  const out: { title: string; detail: string }[] = []
+  if (has("network.fetch") && has("providers.register")) {
+    out.push({
+      title: "API anahtarı sızıntı riski",
+      detail:
+        "Plugin LLM provider tanımlayabilir VE network çağrısı yapabilir. " +
+        "Provider'a giden API anahtarınızı harici bir sunucuya kopyalayabilir.",
+    })
+  }
+  if (has("network.fetch") && has("filesystem.read")) {
+    out.push({
+      title: "Veri exfiltration riski",
+      detail:
+        "Plugin disk'i okuyabilir VE internete yükleyebilir. Workspace " +
+        "içindeki .env / kimlik dosyaları sızdırılabilir.",
+    })
+  }
+  if (has("shell.exec") && has("network.fetch")) {
+    out.push({
+      title: "Uzaktan kod çalıştırma (RCE) riski",
+      detail:
+        "Plugin bash çalıştırabilir VE internet'ten kod indirebilir. " +
+        "curl | bash deseniyle keyfi binary çalıştırabilir.",
+    })
+  }
+  if (has("mcp.register") && has("network.fetch")) {
+    out.push({
+      title: "MCP backdoor riski",
+      detail:
+        "Plugin MCP server spawn edebilir VE network'e çıkabilir. MCP " +
+        "üzerinden gelen tool çağrılarını harici servise yönlendirebilir.",
+    })
+  }
+  if (has("filesystem.write") && has("hooks.register")) {
+    out.push({
+      title: "Persistence riski",
+      detail:
+        "Plugin disk'e yazabilir VE hook ile her oturumda tetiklenebilir. " +
+        "Kalıcı arka kapı kurma yeteneği var.",
+    })
+  }
+  return out
+}
+
 export function PluginInstallApproval({
   manifest,
   marketplaceName,
@@ -29,8 +81,9 @@ export function PluginInstallApproval({
   error,
 }: Props) {
   const highRisks = highRiskPermissions(manifest.permissions)
+  const combos = detectPermissionCombos(manifest.permissions)
   const [ack, setAck] = useState(false)
-  const needsAck = highRisks.length > 0
+  const needsAck = highRisks.length > 0 || combos.length > 0
   const canConfirm = !needsAck || ack
 
   return (
@@ -193,16 +246,35 @@ export function PluginInstallApproval({
             </div>
           )}
 
+          {/* Permission combo özel uyarıları — high-risk single permission'dan ayrı */}
+          {combos.length > 0 && (
+            <div className="space-y-2">
+              {combos.map((c, i) => (
+                <div
+                  key={i}
+                  className="rounded-md border border-destructive/60 bg-destructive/15 p-2.5"
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-destructive">
+                    <AlertTriangle className="h-3 w-3" /> {c.title}
+                  </div>
+                  <p className="mt-1 text-[11px] text-destructive/85">{c.detail}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* High-risk uyarı + checkbox */}
           {needsAck && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3">
               <div className="flex items-center gap-1.5 text-[12px] font-medium text-destructive">
                 <AlertTriangle className="h-3.5 w-3.5" /> Yüksek Riskli Eklenti
               </div>
-              <p className="mt-1 text-[11px] text-destructive/80">
-                Bu plugin {highRisks.join(", ")} izinleri istiyor. Bash komutu çalıştırabilir,
-                dosya yazabilir, binary spawn edebilir. Sadece güvendiğin kaynaklardan kur.
-              </p>
+              {highRisks.length > 0 && (
+                <p className="mt-1 text-[11px] text-destructive/80">
+                  Bu plugin {highRisks.join(", ")} izinleri istiyor. Bash komutu çalıştırabilir,
+                  dosya yazabilir, binary spawn edebilir. Sadece güvendiğin kaynaklardan kur.
+                </p>
+              )}
               <label className="mt-2 flex items-center gap-1.5 text-[11px] text-destructive">
                 <input
                   type="checkbox"

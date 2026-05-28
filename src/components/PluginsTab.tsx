@@ -295,7 +295,7 @@ export function PluginsTab() {
                       : "bg-codezal-panel-2 text-codezal-mute",
                   )}
                 >
-                  {c === "all" ? "Tümü" : c === "codezal-curated" ? "Curated" : "Topluluk"}
+                  {c === "all" ? "Tümü" : c === "codezal-curated" ? "Official" : "Topluluk"}
                 </button>
               ))}
             </div>

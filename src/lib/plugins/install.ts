@@ -49,6 +49,25 @@ async function runBash(cmd: string, label: string): Promise<void> {
   }
 }
 
+// runBashCapture — komutu çalıştırır ve stdout'u trim'lenmiş döndürür.
+async function runBashCapture(cmd: string, label: string): Promise<string> {
+  const r = await Command.create("bash", ["-lc", cmd]).execute()
+  if (r.code !== 0) {
+    throw new Error(
+      `${label} başarısız (code ${r.code}): ${r.stderr.trim() || r.stdout.trim() || "no output"}`,
+    )
+  }
+  return r.stdout.trim()
+}
+
+// SHA format validation — 40-hex git SHA-1 veya 64-hex SHA-256.
+// Manifest'te beklenmedik format = malicious veya bozuk veri.
+function assertValidGitSha(sha: string): void {
+  if (!/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(sha)) {
+    throw new Error(`Geçersiz SHA formatı: "${sha}" (40 veya 64 hex bekleniyor)`)
+  }
+}
+
 // Source'a göre plugin içeriğini geçici dizine çek.
 async function fetchPluginSource(
   source: PluginSource,
@@ -56,6 +75,8 @@ async function fetchPluginSource(
   destDir: string,
 ): Promise<void> {
   if (source.type === "git-subdir" || source.type === "git-repo") {
+    // SHA format zorunlu kontrol — TOCTOU/tampering guard'ı.
+    assertValidGitSha(source.sha)
     // Sığ clone + SHA checkout. Subdir varsa o alt yolu kopyala.
     const tmpDir = destDir + ".tmp"
     await runBash(`rm -rf ${shellQuote(tmpDir)}`, "tmp temizlik")
@@ -66,6 +87,21 @@ async function fetchPluginSource(
     await runBash(withTimeout(cloneCmd, 180), "git clone")
     const checkoutCmd = `cd ${shellQuote(tmpDir)} && git checkout ${shellQuote(source.sha)}`
     await runBash(checkoutCmd, `SHA checkout (${source.sha.slice(0, 8)})`)
+    // SHA double-check: git checkout başarılı olsa bile HEAD'in tam olarak
+    // beklenen SHA olduğunu doğrula. `git checkout <ref>` kısa hash veya
+    // ambiguous ref kabul edebilir; HEAD karşılaştırması TOCTOU + tampering
+    // saldırılarına karşı son katman.
+    const headSha = await runBashCapture(
+      `cd ${shellQuote(tmpDir)} && git rev-parse HEAD`,
+      "HEAD SHA okuma",
+    )
+    if (headSha !== source.sha) {
+      await runBash(`rm -rf ${shellQuote(tmpDir)}`, "rollback (SHA mismatch)")
+      throw new Error(
+        `SHA doğrulama başarısız: beklenen ${source.sha}, alınan ${headSha}. Marketplace manifest ile upstream HEAD eşleşmiyor.`,
+      )
+    }
+    console.info(`[plugin install] SHA verified: ${source.sha.slice(0, 8)}`)
     // Subdir'i destDir'e kopyala (veya tüm repo'yu)
     const srcPath = source.type === "git-subdir" ? `${tmpDir}/${source.path}` : tmpDir
     if (!(await exists(srcPath))) {

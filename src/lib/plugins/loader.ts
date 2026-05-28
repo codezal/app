@@ -17,7 +17,7 @@ import type { SlashCommand } from "../commands/types"
 import { _registerPluginMcp, _unregisterPluginMcps } from "../mcp"
 import { _registerPluginHook, _unregisterPluginHooks } from "../hooks"
 import { _unregisterPluginProvidersByPlugin } from "../providers"
-import { loadJsEntries } from "./sandbox"
+import { loadJsEntries, validateMcpCommand, validateHookCommand } from "./sandbox"
 import { readInstalled } from "./installed"
 import type { InstalledPlugin, LoadResult, Permission } from "./types"
 
@@ -143,24 +143,37 @@ export async function loadPlugin(plugin: InstalledPlugin): Promise<LoadResult> {
     }
   }
 
-  // MCPS — inline JSON manifest'inde
+  // MCPS — inline JSON manifest'inde. Plugin sandbox JS register'ında uygulanan
+  // command validation buraya da uygulanır — manifest path'i bypass olmamalı.
   if (plugin.manifest.contributes.mcps?.length) {
     if (!has("mcp.register", perms)) {
       warnings.push("mcp contribute ignore (mcp.register izni yok)")
     } else {
       for (const m of plugin.manifest.contributes.mcps) {
+        if (m.transport === "stdio") {
+          const err = validateMcpCommand(m.command ?? "", m.env)
+          if (err) {
+            warnings.push(`mcp "${m.name}" reddedildi: ${err}`)
+            continue
+          }
+        }
         _registerPluginMcp({ ...m, pluginId: plugin.id })
         reg.mcps++
       }
     }
   }
 
-  // HOOKS — inline JSON manifest'inde
+  // HOOKS — inline JSON manifest'inde. Yıkıcı pattern'leri reddedilir.
   if (plugin.manifest.contributes.hooks?.length) {
     if (!has("hooks.register", perms)) {
       warnings.push("hooks contribute ignore (hooks.register izni yok)")
     } else {
       for (const h of plugin.manifest.contributes.hooks) {
+        const err = validateHookCommand(h.command ?? "")
+        if (err) {
+          warnings.push(`hook "${h.id}" reddedildi: ${err}`)
+          continue
+        }
         _registerPluginHook({ ...h, pluginId: plugin.id })
         reg.hooks++
       }
