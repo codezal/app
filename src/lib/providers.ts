@@ -10,5 +10,6 @@ export {
   getProviderAdapter,
   _registerPluginProvider,
   _unregisterPluginProvider,
+  _unregisterPluginProvidersByPlugin,
 } from "./providers/index"
 export type { ApiKeys, ProviderAdapter, ProviderId, ProviderSpec } from "./providers/types"

@@ -35,6 +35,10 @@ export {
   ensureDefaultMarketplace,
 } from "./marketplace"
 export {
+  scanClaudeCodePlugins,
+  claudeCodePluginsAvailable,
+} from "./claude-adapter"
+export {
   installPlugin,
   uninstallPlugin,
   togglePluginEnabled,

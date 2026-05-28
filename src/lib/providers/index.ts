@@ -28,16 +28,27 @@ export function getProviderAdapter(id: ProviderId): ProviderAdapter | undefined 
 }
 
 // Plugin sistemi tarafından çağrılır — provider plugin'i runtime'da register eder.
-// Aynı id tekrar register edilirse silent override (Faz 3'te policy belirlenir).
+// Aynı id tekrar register edilirse silent override.
 export function _registerPluginProvider(p: ProviderAdapter): void {
   const idx = pluginAdapters.findIndex((x) => x.id === p.id)
   if (idx >= 0) pluginAdapters.splice(idx, 1, p)
   else pluginAdapters.push(p)
 }
 
+// Single-id unregister (kept for explicit removal scenarios).
 export function _unregisterPluginProvider(id: ProviderId): void {
   const idx = pluginAdapters.findIndex((p) => p.id === id)
   if (idx >= 0) pluginAdapters.splice(idx, 1)
+}
+
+// Bulk unregister by pluginId — called on plugin disable / uninstall to
+// remove every adapter the given plugin contributed.
+export function _unregisterPluginProvidersByPlugin(pluginId: string): void {
+  for (let i = pluginAdapters.length - 1; i >= 0; i--) {
+    if (pluginAdapters[i].pluginId === pluginId) {
+      pluginAdapters.splice(i, 1)
+    }
+  }
 }
 
 // Geriye uyumluluk: PROVIDERS map'i — UI bazı yerlerde bunu okur.

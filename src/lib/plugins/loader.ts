@@ -16,6 +16,8 @@ import { parseCommandFile } from "../commands/parse"
 import type { SlashCommand } from "../commands/types"
 import { _registerPluginMcp, _unregisterPluginMcps } from "../mcp"
 import { _registerPluginHook, _unregisterPluginHooks } from "../hooks"
+import { _unregisterPluginProvidersByPlugin } from "../providers"
+import { loadJsEntries } from "./sandbox"
 import { readInstalled } from "./installed"
 import type { InstalledPlugin, LoadResult, Permission } from "./types"
 
@@ -165,9 +167,21 @@ export async function loadPlugin(plugin: InstalledPlugin): Promise<LoadResult> {
     }
   }
 
-  // PROVIDERS — Faz 3, JS entry. Şimdilik no-op + warn.
+  // PROVIDERS — JS entry. Sandbox layer guards permissions and stamps pluginId.
+  // Runtime isolation is renderer-process only (see sandbox.ts threat model).
   if (plugin.manifest.contributes.providers?.length) {
-    warnings.push("providers contribute Faz 3'te aktif olacak (JS entry)")
+    try {
+      const { loaded, warnings: sw } = await loadJsEntries(plugin)
+      warnings.push(...sw)
+      // loadJsEntries reports loaded modules, not adapters registered; we
+      // surface module count via a stable warning rather than reusing the
+      // `reg` counter (which tracks Codezal-side registrations).
+      if (loaded > 0) {
+        warnings.push(`providers: ${loaded} JS entry/entries loaded`)
+      }
+    } catch (e) {
+      warnings.push(`providers sandbox failed: ${(e as Error).message}`)
+    }
   }
 
   return { pluginId: plugin.id, ok: true, registered: reg, warnings }
@@ -180,6 +194,7 @@ export function unloadPlugin(pluginId: string): void {
   _unregisterPluginCommands(pluginId)
   _unregisterPluginMcps(pluginId)
   _unregisterPluginHooks(pluginId)
+  _unregisterPluginProvidersByPlugin(pluginId)
 }
 
 // Boot'ta tüm enabled plugin'leri yükle. App.tsx loadSettings yanında çağrılır.

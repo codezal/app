@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import {
   addMarketplace,
+  claudeCodePluginsAvailable,
   installPlugin,
   pullMarketplace,
   readInstalled,
@@ -18,6 +19,7 @@ import {
   readMarketplacePluginManifest,
   readMarketplaces,
   removeMarketplace,
+  scanClaudeCodePlugins,
   togglePluginEnabled,
   uninstallPlugin,
   type InstalledPlugin,
@@ -43,6 +45,8 @@ export function PluginsTab() {
     | { mp: RegisteredMarketplace; manifest: MarketplacePluginManifest }
     | null
   >(null)
+  const [claudeAvailable, setClaudeAvailable] = useState(false)
+  const [claudeImports, setClaudeImports] = useState<MarketplacePluginManifest[] | null>(null)
 
   async function refresh() {
     const [mps, inst] = await Promise.all([readMarketplaces(), readInstalled()])
@@ -55,7 +59,40 @@ export function PluginsTab() {
 
   useEffect(() => {
     void refresh()
+    void claudeCodePluginsAvailable().then(setClaudeAvailable)
   }, [])
+
+  async function handleScanClaude() {
+    setBusy(true)
+    setError(null)
+    try {
+      const list = await scanClaudeCodePlugins()
+      setClaudeImports(list)
+      setInfo(list.length === 0 ? "No Claude Code plugins found." : `Discovered ${list.length} Claude Code plugin(s).`)
+    } catch (e) {
+      setError(`Claude scan failed: ${(e as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleImportClaude(m: MarketplacePluginManifest) {
+    setBusy(true)
+    setError(null)
+    try {
+      await installPlugin({
+        marketplaceId: "claude-code-adapter",
+        marketplaceLocalPath: undefined,
+        manifest: m,
+      })
+      setInfo(`Imported: ${m.name}`)
+      await refresh()
+    } catch (e) {
+      setError(`Import failed: ${(e as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!selectedMpId) {
@@ -341,6 +378,64 @@ export function PluginsTab() {
               )
             })}
           </div>
+        </section>
+      )}
+
+      {/* Claude Code adapter (opt-in) */}
+      {claudeAvailable && (
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[12px] font-medium text-codezal-text">
+              Claude Code Plugins (local)
+            </h3>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleScanClaude()}
+              className="rounded-md bg-codezal-accent px-3 py-1.5 text-[12px] font-medium text-black disabled:opacity-50"
+            >
+              {claudeImports ? "Rescan" : "Scan"}
+            </button>
+          </div>
+          <p className="mb-2 text-[11px] text-codezal-mute">
+            Opt-in import of plugins from <code>~/.claude/plugins/</code>. Permissions
+            are inferred from the plugin layout; JS-execution contributions
+            (providers / mcps / hooks) are intentionally NOT imported.
+          </p>
+          {claudeImports && claudeImports.length > 0 && (
+            <div className="space-y-1.5">
+              {claudeImports.map((m) => {
+                const installed = installedIds.has(`${m.name}@${m.channel}`)
+                return (
+                  <div
+                    key={m.name}
+                    className="flex items-center gap-2 rounded-md border border-codezal bg-codezal-panel-2/40 px-2.5 py-1.5"
+                  >
+                    <div className="flex-1">
+                      <div className="text-[12px] text-codezal-text">{m.name}</div>
+                      <div className="text-[10px] text-codezal-mute">
+                        {m.author.name} · {m.license} · {m.permissions.length} perm
+                      </div>
+                    </div>
+                    {installed ? (
+                      <span className="text-[11px] text-codezal-accent">
+                        <Check className="inline h-3 w-3" /> Imported
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleImportClaude(m)}
+                        className="rounded bg-codezal-accent px-2 py-1 text-[11px] font-medium text-black disabled:opacity-50"
+                      >
+                        Import
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </section>
       )}
 
