@@ -40,8 +40,9 @@ export function PluginInstallApproval({
     >
       <div className="flex max-h-[80vh] w-full max-w-[560px] flex-col overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl">
         <header className="flex items-center gap-2 border-b border-codezal px-4 py-3">
-          <span className="flex-1 text-[13px] font-medium text-codezal-text">
-            Eklenti Kur: <span className="font-mono">{manifest.name}</span>
+          <span className="flex-1 text-[13px] font-semibold text-codezal-text">
+            Eklenti Kur:{" "}
+            <span className="font-mono text-[12px] font-medium">{manifest.name}</span>
           </span>
           <button
             type="button"
@@ -56,7 +57,7 @@ export function PluginInstallApproval({
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-[12px]">
           {/* Meta */}
           <div className="rounded-md border border-codezal bg-codezal-panel-2/40 p-3 text-codezal-text">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 text-[12px]">
               <span className="font-medium">{manifest.name}</span>
               <span className="text-[11px] text-codezal-mute">v{manifest.version}</span>
               {manifest.verified ? (
@@ -70,7 +71,7 @@ export function PluginInstallApproval({
               )}
               <span className="text-[10px] text-codezal-mute">· {manifest.channel}</span>
             </div>
-            <p className="mt-1 text-[11.5px] text-codezal-dim">{manifest.description}</p>
+            <p className="mt-1 text-[11px] text-codezal-dim">{manifest.description}</p>
             <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-codezal-mute">
               <div>
                 <span className="text-codezal-dim">Yazar:</span> {manifest.author.name}
@@ -123,7 +124,7 @@ export function PluginInstallApproval({
 
           {/* Permissions */}
           <div>
-            <h4 className="mb-1.5 text-[11.5px] font-medium text-codezal-text">
+            <h4 className="mb-1.5 text-[11px] font-medium text-codezal-text">
               İstenen İzinler ({manifest.permissions.length})
             </h4>
             {manifest.permissions.length === 0 ? (
@@ -134,7 +135,7 @@ export function PluginInstallApproval({
                   <li
                     key={p}
                     className={cn(
-                      "flex items-center gap-2 rounded px-2 py-1 text-[11.5px]",
+                      "flex items-center gap-2 rounded px-2 py-1 text-[11px]",
                       isHighRisk(p as Permission)
                         ? "bg-destructive/10 text-destructive"
                         : "bg-codezal-panel-2/40 text-codezal-text",
@@ -143,7 +144,7 @@ export function PluginInstallApproval({
                     {isHighRisk(p as Permission) && (
                       <AlertTriangle className="h-3 w-3 shrink-0" />
                     )}
-                    <span className="font-mono text-[10.5px]">{p}</span>
+                    <span className="font-mono text-[10px]">{p}</span>
                     <span className="text-codezal-mute">— {describePermission(p as Permission)}</span>
                   </li>
                 ))}
@@ -153,7 +154,7 @@ export function PluginInstallApproval({
 
           {/* Contributes özet */}
           <div>
-            <h4 className="mb-1.5 text-[11.5px] font-medium text-codezal-text">İçerik</h4>
+            <h4 className="mb-1.5 text-[11px] font-medium text-codezal-text">İçerik</h4>
             <ul className="space-y-0.5 text-[11px] text-codezal-mute">
               {manifest.contributes.agents?.length ? (
                 <li>· {manifest.contributes.agents.length} agent</li>
@@ -190,7 +191,7 @@ export function PluginInstallApproval({
                 Bu plugin {highRisks.join(", ")} izinleri istiyor. Bash komutu çalıştırabilir,
                 dosya yazabilir, binary spawn edebilir. Sadece güvendiğin kaynaklardan kur.
               </p>
-              <label className="mt-2 flex items-center gap-1.5 text-[11.5px] text-destructive">
+              <label className="mt-2 flex items-center gap-1.5 text-[11px] text-destructive">
                 <input
                   type="checkbox"
                   checked={ack}
