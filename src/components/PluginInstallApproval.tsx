@@ -17,6 +17,7 @@ type Props = {
   onConfirm: () => void
   onCancel: () => void
   busy?: boolean
+  error?: string | null
 }
 
 export function PluginInstallApproval({
@@ -25,6 +26,7 @@ export function PluginInstallApproval({
   onConfirm,
   onCancel,
   busy,
+  error,
 }: Props) {
   const highRisks = highRiskPermissions(manifest.permissions)
   const [ack, setAck] = useState(false)
@@ -180,6 +182,16 @@ export function PluginInstallApproval({
               ) : null}
             </ul>
           </div>
+
+          {/* Install hata kutusu */}
+          {error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
+              <div className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="h-3 w-3" /> Kurulum Hatası
+              </div>
+              <p className="mt-1 break-words font-mono text-[10.5px]">{error}</p>
+            </div>
+          )}
 
           {/* High-risk uyarı + checkbox */}
           {needsAck && (

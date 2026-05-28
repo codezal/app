@@ -136,17 +136,22 @@ export function PluginsTab() {
     if (!approvalManifest) return
     setBusy(true)
     setError(null)
+    setInfo(null)
     try {
-      await installPlugin({
+      const installed = await installPlugin({
         marketplaceId: approvalManifest.mp.id,
         marketplaceLocalPath: approvalManifest.mp.localPath,
         manifest: approvalManifest.manifest,
       })
+      console.info("[PluginsTab] install OK:", installed.id)
       setInfo(`Kuruldu: ${approvalManifest.manifest.name}`)
       setApprovalManifest(null)
       await refresh()
     } catch (e) {
-      setError((e as Error).message)
+      const msg = (e as Error).message || String(e)
+      console.error("[PluginsTab] install fail:", e)
+      setError(`Kurulum hatası: ${msg}`)
+      // Modal'ı kapatma — kullanıcı hata gördükten sonra İptal'le çıksın
     } finally {
       setBusy(false)
     }
@@ -414,8 +419,12 @@ export function PluginsTab() {
           manifest={approvalManifest.manifest}
           marketplaceName={approvalManifest.mp.name}
           onConfirm={() => void handleInstallConfirm()}
-          onCancel={() => setApprovalManifest(null)}
+          onCancel={() => {
+            setApprovalManifest(null)
+            setError(null)
+          }}
           busy={busy}
+          error={error}
         />
       )}
     </div>

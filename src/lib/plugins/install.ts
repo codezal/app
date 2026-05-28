@@ -39,6 +39,16 @@ async function pluginsRoot(): Promise<string> {
   return r
 }
 
+// Helper: bash komutunu çalıştır, exit code !== 0 ise mesajla throw.
+async function runBash(cmd: string, label: string): Promise<void> {
+  const r = await Command.create("bash", ["-lc", cmd]).execute()
+  if (r.code !== 0) {
+    throw new Error(
+      `${label} başarısız (code ${r.code}): ${r.stderr.trim() || r.stdout.trim() || "no output"}`,
+    )
+  }
+}
+
 // Source'a göre plugin içeriğini geçici dizine çek.
 async function fetchPluginSource(
   source: PluginSource,
@@ -48,33 +58,24 @@ async function fetchPluginSource(
   if (source.type === "git-subdir" || source.type === "git-repo") {
     // Sığ clone + SHA checkout. Subdir varsa o alt yolu kopyala.
     const tmpDir = destDir + ".tmp"
-    await Command.create("bash", [
-      "-lc",
-      `rm -rf ${shellQuote(tmpDir)}`,
-    ]).execute()
+    await runBash(`rm -rf ${shellQuote(tmpDir)}`, "tmp temizlik")
     const repoUrl = source.repo.startsWith("http") || source.repo.startsWith("git@")
       ? source.repo
       : `https://github.com/${source.repo}.git`
     const cloneCmd = `git clone --filter=blob:none --no-checkout ${shellQuote(repoUrl)} ${shellQuote(tmpDir)}`
-    const c = await Command.create("bash", ["-lc", withTimeout(cloneCmd, 180)]).execute()
-    if (c.code !== 0) {
-      throw new Error(`git clone başarısız: ${c.stderr.trim()}`)
-    }
+    await runBash(withTimeout(cloneCmd, 180), "git clone")
     const checkoutCmd = `cd ${shellQuote(tmpDir)} && git checkout ${shellQuote(source.sha)}`
-    const co = await Command.create("bash", ["-lc", checkoutCmd]).execute()
-    if (co.code !== 0) {
-      throw new Error(`SHA checkout başarısız (${source.sha}): ${co.stderr.trim()}`)
-    }
+    await runBash(checkoutCmd, `SHA checkout (${source.sha.slice(0, 8)})`)
     // Subdir'i destDir'e kopyala (veya tüm repo'yu)
     const srcPath = source.type === "git-subdir" ? `${tmpDir}/${source.path}` : tmpDir
     if (!(await exists(srcPath))) {
       throw new Error(`Source path bulunamadı: ${srcPath}`)
     }
-    await Command.create("bash", [
-      "-lc",
+    await runBash(
       `mkdir -p ${shellQuote(destDir)} && cp -R ${shellQuote(srcPath)}/. ${shellQuote(destDir)}/`,
-    ]).execute()
-    await Command.create("bash", ["-lc", `rm -rf ${shellQuote(tmpDir)}`]).execute()
+      "kopyalama",
+    )
+    await runBash(`rm -rf ${shellQuote(tmpDir)}`, "tmp temizlik (post)")
     return
   }
   if (source.type === "inline") {
@@ -85,20 +86,20 @@ async function fetchPluginSource(
     if (!(await exists(srcPath))) {
       throw new Error(`Inline source path yok: ${srcPath}`)
     }
-    await Command.create("bash", [
-      "-lc",
+    await runBash(
       `mkdir -p ${shellQuote(destDir)} && cp -R ${shellQuote(srcPath)}/. ${shellQuote(destDir)}/`,
-    ]).execute()
+      "inline kopyalama",
+    )
     return
   }
   if (source.type === "local") {
     if (!(await exists(source.absolutePath))) {
       throw new Error(`Local source path yok: ${source.absolutePath}`)
     }
-    await Command.create("bash", [
-      "-lc",
+    await runBash(
       `mkdir -p ${shellQuote(destDir)} && cp -R ${shellQuote(source.absolutePath)}/. ${shellQuote(destDir)}/`,
-    ]).execute()
+      "local kopyalama",
+    )
     return
   }
   throw new Error(`Bilinmeyen source type`)
@@ -129,42 +130,45 @@ export async function installPlugin(opts: {
   const id = `${manifest.name}@${manifest.channel}`
   const root = await pluginsRoot()
   const installDir = root + "/" + manifest.name
+  console.info(`[plugin install] ${id} → ${installDir}`)
 
-  // Mevcutsa önce kaldır (update için)
-  if (await exists(installDir)) {
-    await Command.create("bash", [
-      "-lc",
-      `rm -rf ${shellQuote(installDir)}`,
-    ]).execute()
-  }
-
-  await fetchPluginSource(manifest.source, marketplaceLocalPath, installDir)
-
-  // Disk'teki plugin.json'u oku ve manifest ile karşılaştır — temel sanity check
-  const diskManifestPath = installDir + "/.codezal-plugin/plugin.json"
-  if (!(await exists(diskManifestPath))) {
-    // Bazı plugin'lerde .claude-plugin/ olabilir — Faz 3 adapter ileride; şimdilik reddet
-    await Command.create("bash", ["-lc", `rm -rf ${shellQuote(installDir)}`]).execute()
-    throw new Error(".codezal-plugin/plugin.json bulunamadı — plugin formatı uyumsuz")
-  }
   try {
-    parsePluginManifest(await readTextFile(diskManifestPath))
-  } catch (e) {
-    await Command.create("bash", ["-lc", `rm -rf ${shellQuote(installDir)}`]).execute()
-    throw new Error(`Plugin manifest doğrulama: ${(e as Error).message}`)
-  }
-
-  await verifyLicense(installDir, manifest.license)
-
-  // Attribution NOTICE dosyası varsa ek bilgi kopyala (idempotent)
-  if (manifest.attribution?.notice) {
-    const noticeExtra = installDir + "/ATTRIBUTION.txt"
-    if (!(await exists(noticeExtra))) {
-      await writeTextFile(
-        noticeExtra,
-        `Source: ${manifest.attribution.originalRepo}\nOriginal author: ${manifest.attribution.originalAuthor}\nModified: ${manifest.attribution.modified}\n\n${manifest.attribution.notice}\n`,
-      )
+    // Mevcutsa önce kaldır (update için)
+    if (await exists(installDir)) {
+      await runBash(`rm -rf ${shellQuote(installDir)}`, "eski install temizlik")
     }
+
+    console.info(`[plugin install] source fetch: ${manifest.source.type}`)
+    await fetchPluginSource(manifest.source, marketplaceLocalPath, installDir)
+
+    // Disk'teki plugin.json'u oku ve manifest ile karşılaştır — temel sanity check
+    const diskManifestPath = installDir + "/.codezal-plugin/plugin.json"
+    if (!(await exists(diskManifestPath))) {
+      await runBash(`rm -rf ${shellQuote(installDir)}`, "rollback (manifest yok)")
+      throw new Error(".codezal-plugin/plugin.json bulunamadı — plugin formatı uyumsuz")
+    }
+    try {
+      parsePluginManifest(await readTextFile(diskManifestPath))
+    } catch (e) {
+      await runBash(`rm -rf ${shellQuote(installDir)}`, "rollback (manifest bozuk)")
+      throw new Error(`Plugin manifest doğrulama: ${(e as Error).message}`)
+    }
+
+    await verifyLicense(installDir, manifest.license)
+
+    // Attribution NOTICE dosyası varsa ek bilgi kopyala (idempotent)
+    if (manifest.attribution?.notice) {
+      const noticeExtra = installDir + "/ATTRIBUTION.txt"
+      if (!(await exists(noticeExtra))) {
+        await writeTextFile(
+          noticeExtra,
+          `Source: ${manifest.attribution.originalRepo}\nOriginal author: ${manifest.attribution.originalAuthor}\nModified: ${manifest.attribution.modified}\n\n${manifest.attribution.notice}\n`,
+        )
+      }
+    }
+  } catch (e) {
+    console.error(`[plugin install] ${id} fetch/verify hatası:`, e)
+    throw e
   }
 
   const installed: InstalledPlugin = {
@@ -195,9 +199,27 @@ export async function installPlugin(opts: {
       requires: manifest.requires,
     },
   }
-  await upsertInstalled(installed)
-  // Hot-load: registry'lere ekle
-  await loadPlugin(installed)
+  try {
+    await upsertInstalled(installed)
+    console.info(`[plugin install] ${id} installed_plugins.json yazıldı`)
+  } catch (e) {
+    console.error(`[plugin install] ${id} upsertInstalled hatası:`, e)
+    throw new Error(`installed_plugins.json yazılamadı: ${(e as Error).message}`)
+  }
+  try {
+    // Hot-load: registry'lere ekle
+    const r = await loadPlugin(installed)
+    if (r.warnings.length > 0) {
+      console.warn(`[plugin install] ${id} load uyarıları:`, r.warnings.join("; "))
+    }
+    console.info(`[plugin install] ${id} hot-load OK`, r.registered)
+  } catch (e) {
+    console.error(`[plugin install] ${id} loadPlugin hatası:`, e)
+    // Plugin disk + json yazıldı; load hatası fatal sayma — disable et
+    installed.enabled = false
+    await upsertInstalled(installed)
+    throw new Error(`Plugin yüklenemedi (devre dışı bırakıldı): ${(e as Error).message}`)
+  }
   return installed
 }
 
