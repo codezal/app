@@ -19,7 +19,7 @@ import { OrchestraConfigModal } from "@/components/OrchestraConfigModal"
 import { HelpOverlay } from "@/components/HelpOverlay"
 import { seedDefaultAgents, autoSeedOnFirstRun } from "@/lib/agents-seed"
 import { readWorkspaceAgents, readUserAgents } from "@/lib/agents"
-import { loadAllInstalled } from "@/lib/plugins"
+import { ensureDefaultMarketplace, loadAllInstalled } from "@/lib/plugins"
 import type { ProviderId } from "@/lib/providers"
 import { buildModel } from "@/lib/providers"
 import { buildAllTools } from "@/lib/tools"
@@ -166,13 +166,16 @@ export default function App() {
     // İlk açılışta ~/.codezal/agents/ altına default agentleri seed et.
     // Idempotent — mevcut dosyalar atlanır, sadece eksikleri ekler.
     void autoSeedOnFirstRun()
-    // Plugin sistemi — kurulu enabled plugin'leri registry'lere yükle.
-    void loadAllInstalled().then((results) => {
-      const ok = results.filter((r) => r.ok).length
-      const fail = results.length - ok
-      if (results.length > 0) {
-        console.info(`[plugins] yüklendi: ${ok} ok, ${fail} hata`)
-      }
+    // Plugin sistemi — önce default Codezal marketplace seed (yalnız ilk açılış),
+    // sonra kurulu enabled plugin'leri registry'lere yükle.
+    void ensureDefaultMarketplace().finally(() => {
+      void loadAllInstalled().then((results) => {
+        const ok = results.filter((r) => r.ok).length
+        const fail = results.length - ok
+        if (results.length > 0) {
+          console.info(`[plugins] yüklendi: ${ok} ok, ${fail} hata`)
+        }
+      })
     })
   }, [loadSettings, loadAll])
 

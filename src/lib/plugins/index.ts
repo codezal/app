@@ -32,6 +32,7 @@ export {
   removeMarketplace,
   readMarketplaceIndex,
   readMarketplacePluginManifest,
+  ensureDefaultMarketplace,
 } from "./marketplace"
 export {
   installPlugin,

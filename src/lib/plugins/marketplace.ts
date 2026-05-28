@@ -127,3 +127,17 @@ export async function readMarketplacePluginManifest(
 }
 
 export { readMarketplaces } from "./installed"
+
+// İlk açılış seed'i — kullanıcının hiç marketplace'i yoksa Codezal resmi marketplace'ini
+// otomatik clone et. Kullanıcı kasten silmişse yeniden eklenmez (boşluk şartı).
+const DEFAULT_MARKETPLACE_URL = "https://github.com/codezal/marketplace"
+
+export async function ensureDefaultMarketplace(): Promise<void> {
+  const store = await readMarketplaces()
+  if (store.marketplaces.length > 0) return
+  try {
+    await addMarketplace(DEFAULT_MARKETPLACE_URL)
+  } catch (e) {
+    console.warn("Default marketplace seed başarısız:", (e as Error).message)
+  }
+}
