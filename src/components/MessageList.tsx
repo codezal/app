@@ -27,6 +27,10 @@ import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { t as tStatic } from "@/lib/i18n"
 
+// Stabil boş referans — selector `?? []` her çağrıda yeni array dönerse
+// useSyncExternalStore "getSnapshot should be cached" + sonsuz render döngüsüne girer.
+const EMPTY_MESSAGES: Message[] = []
+
 type Props = {
   streaming?: boolean
   emptyHint?: string
@@ -50,7 +54,7 @@ export function MessageList({
   const active = useSessionsStore((s) => s.active)
   // Mesaj listesi store'dan — App artık messages prop'u geçmiyor, böylece App
   // stream patch'lerinde re-render olmuyor; bu abonelik yalnız MessageList'i uyandırır.
-  const messages = useSessionsStore((s) => s.active?.messages ?? [])
+  const messages = useSessionsStore((s) => s.active?.messages ?? EMPTY_MESSAGES)
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   // Otomatik dibe yapışma — kullanıcı yukarı kaydırınca pasifleşir,
