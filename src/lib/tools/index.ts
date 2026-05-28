@@ -23,7 +23,7 @@ import {
   readUserAgents,
   type SubagentPolicy,
 } from "../agents"
-import { buildModel, type ProviderId } from "../providers"
+import { buildLanguageModel, type ProviderId } from "../providers"
 import { useSettingsStore } from "@/store/settings"
 import { useSessionsStore } from "@/store/sessions"
 import { buildMcpTools, listPluginMcps } from "../mcp"
@@ -657,7 +657,7 @@ export function buildTools(workspace: string | undefined): ToolSet {
         const settings = useSettingsStore.getState().settings
         let model
         try {
-          model = buildModel(provider, modelId, settings.apiKeys)
+          model = await buildLanguageModel({ providerId: provider, modelId, settings })
         } catch (e) {
           return `Model kurulamadı: ${e instanceof Error ? e.message : String(e)}`
         }

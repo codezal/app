@@ -43,7 +43,7 @@ import type {
   Permission,
   PluginAPI,
 } from "./types"
-import type { ProviderAdapter, ProviderId } from "../providers/types"
+import type { LegacyProviderAdapter, ProviderId } from "../providers/types"
 
 function has(p: Permission, perms: Permission[]): boolean {
   return perms.includes(p)
@@ -121,16 +121,17 @@ export function makePluginAPI(plugin: InstalledPlugin): PluginAPI {
   return {
     registerProvider: has("providers.register", perms)
       ? (p) => {
-          // Stamp the adapter so disable / uninstall can clean it up by pluginId.
-          const adapter: ProviderAdapter = {
+          // Plugin contract still uses the legacy {buildModel(modelId, apiKey)}
+          // shape; the registry wraps it into the new ProviderAdapter form.
+          const legacy: LegacyProviderAdapter = {
             id: p.id as ProviderId,
             label: p.label,
             defaultModel: p.defaultModel,
             fallbackModels: p.fallbackModels,
-            buildModel: p.buildModel as ProviderAdapter["buildModel"],
+            buildModel: p.buildModel as LegacyProviderAdapter["buildModel"],
             pluginId: pid,
           }
-          _registerPluginProvider(adapter)
+          _registerPluginProvider(legacy)
         }
       : (() => {
           return (_: unknown) => {

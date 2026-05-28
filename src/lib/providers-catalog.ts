@@ -40,12 +40,32 @@ export type CachedCatalog = {
   fetchedAt: number
 }
 
-// Codezal ProviderId → models.dev provider id eşlemesi
-const PROVIDER_ID_MAP: Record<ProviderId, string> = {
+// Codezal ProviderId → models.dev provider id eşlemesi.
+// Partial: bilinmeyen id'ler için provider id'sini olduğu gibi kullan.
+const PROVIDER_ID_MAP: Partial<Record<ProviderId, string>> = {
   openai: "openai",
   anthropic: "anthropic",
   google: "google",
   deepseek: "deepseek",
+  openrouter: "openrouter",
+  groq: "groq",
+  mistral: "mistral",
+  xai: "xai",
+  perplexity: "perplexity",
+  cohere: "cohere",
+  cerebras: "cerebras",
+  togetherai: "togetherai",
+  deepinfra: "deepinfra",
+  "github-copilot": "github-copilot",
+  "amazon-bedrock": "amazon-bedrock",
+  azure: "azure",
+  "google-vertex": "google-vertex",
+  vercel: "vercel",
+  alibaba: "alibaba",
+}
+
+function modelsDevId(id: ProviderId): string {
+  return PROVIDER_ID_MAP[id] ?? id
 }
 
 // 24 saat ile bayatlık eşiği
@@ -119,7 +139,7 @@ function isChatCodingModel(m: ModelsDevModel): boolean {
 // release_date varsa yenilik sırasıyla sıralanır.
 export function modelsForProvider(catalog: ProvidersCatalog | undefined, id: ProviderId): string[] {
   if (!catalog) return []
-  const mdId = PROVIDER_ID_MAP[id]
+  const mdId = modelsDevId(id)
   const p = catalog[mdId]
   if (!p) return []
   const entries = Object.values(p.models).filter(isChatCodingModel)
@@ -140,7 +160,7 @@ export function modelDetail(
   modelId: string,
 ): ModelsDevModel | null {
   if (!catalog) return null
-  const mdId = PROVIDER_ID_MAP[providerId]
+  const mdId = modelsDevId(providerId)
   const p = catalog[mdId]
   if (!p) return null
   return p.models[modelId] ?? null

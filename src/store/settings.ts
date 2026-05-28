@@ -4,6 +4,7 @@ import { PROVIDERS } from "@/lib/providers"
 import { DEFAULT_LOCALE, useI18nStore } from "@/lib/i18n"
 import { DEFAULT_APPEARANCE, type Appearance } from "@/lib/theme"
 import { DEFAULT_TOKEN_SAVERS } from "@/lib/token-savers/types"
+import type { OAuthCredential, ProviderConfig, ProviderId } from "@/lib/providers"
 import type { Settings } from "./types"
 
 const DEFAULT: Settings = {
@@ -33,6 +34,10 @@ const DEFAULT: Settings = {
   },
   appearance: DEFAULT_APPEARANCE,
   tokenSavers: DEFAULT_TOKEN_SAVERS,
+  credentials: {},
+  providerConfigs: {},
+  envFallback: true,
+  modelStatus: {},
 }
 
 type SettingsState = {
@@ -41,6 +46,16 @@ type SettingsState = {
   load: () => Promise<void>
   update: (patch: Partial<Settings>) => Promise<void>
   setApiKey: (provider: keyof Settings["apiKeys"], key: string) => Promise<void>
+  // OAuth / extended credentials.
+  setCredential: (provider: ProviderId, cred: OAuthCredential | null) => Promise<void>
+  // Per-provider config (baseURL, headers, custom options).
+  setProviderConfig: (provider: ProviderId, config: ProviderConfig | null) => Promise<void>
+  // Single-model enable/disable.
+  setModelEnabled: (provider: ProviderId, modelId: string, enabled: boolean) => Promise<void>
+  // Bulk model status replace.
+  setProviderModelStatus: (provider: ProviderId, status: Record<string, boolean>) => Promise<void>
+  // Disconnect provider — clears apiKey + credential + providerConfig.
+  disconnectProvider: (provider: ProviderId) => Promise<void>
   // models.dev'den katalog çek + kaydet
   refreshProviderCatalog: () => Promise<void>
 }
@@ -120,6 +135,57 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...get().settings,
       apiKeys: { ...get().settings.apiKeys, [provider]: key },
     }
+    set({ settings: next })
+    await saveSettingsFile(next)
+  },
+
+  setCredential: async (provider, cred) => {
+    const prev = get().settings.credentials ?? {}
+    const credentials = { ...prev }
+    if (cred) credentials[provider] = cred
+    else delete credentials[provider]
+    const next: Settings = { ...get().settings, credentials }
+    set({ settings: next })
+    await saveSettingsFile(next)
+  },
+
+  setProviderConfig: async (provider, config) => {
+    const prev = get().settings.providerConfigs ?? {}
+    const providerConfigs = { ...prev }
+    if (config) providerConfigs[provider] = config
+    else delete providerConfigs[provider]
+    const next: Settings = { ...get().settings, providerConfigs }
+    set({ settings: next })
+    await saveSettingsFile(next)
+  },
+
+  setModelEnabled: async (provider, modelId, enabled) => {
+    const prev = get().settings.modelStatus ?? {}
+    const perProvider = { ...(prev[provider] ?? {}) }
+    perProvider[modelId] = enabled
+    const modelStatus = { ...prev, [provider]: perProvider }
+    const next: Settings = { ...get().settings, modelStatus }
+    set({ settings: next })
+    await saveSettingsFile(next)
+  },
+
+  setProviderModelStatus: async (provider, status) => {
+    const prev = get().settings.modelStatus ?? {}
+    const modelStatus = { ...prev, [provider]: status }
+    const next: Settings = { ...get().settings, modelStatus }
+    set({ settings: next })
+    await saveSettingsFile(next)
+  },
+
+  disconnectProvider: async (provider) => {
+    const s = get().settings
+    const apiKeys = { ...s.apiKeys }
+    delete apiKeys[provider]
+    const credentials = { ...(s.credentials ?? {}) }
+    delete credentials[provider]
+    const providerConfigs = { ...(s.providerConfigs ?? {}) }
+    delete providerConfigs[provider]
+    const next: Settings = { ...s, apiKeys, credentials, providerConfigs }
     set({ settings: next })
     await saveSettingsFile(next)
   },

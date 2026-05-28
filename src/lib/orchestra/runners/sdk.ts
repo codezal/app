@@ -2,7 +2,7 @@
 // YOLO=true ise worker'ı bypassWorkerIds set'ine ekler; gate() global bypass kısa devresi
 // üzerinden tool çağrılarını auto-approve eder.
 import { streamText, stepCountIs } from "ai"
-import { buildModel } from "../../providers"
+import { buildLanguageModel } from "../../providers"
 import { buildAllTools } from "../../tools"
 import { findAgent } from "../../agents"
 import { useSettingsStore } from "@/store/settings"
@@ -51,7 +51,7 @@ export const startSdkWorker: RunnerStart = async ({
           if (ag) systemPrompt = ag.systemPrompt
         }
 
-        const model = buildModel(provider, modelId, settings.apiKeys)
+        const model = await buildLanguageModel({ providerId: provider, modelId, settings })
         // Tool seti — aynı buildAllTools (worker da MCP dahil tam set görür).
         // Approval gate'i global bypass set'i üzerinden YOLO'yu okur.
         const tools = await buildAllTools(workspacePath, settings.mcpServers ?? [])

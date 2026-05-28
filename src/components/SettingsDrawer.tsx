@@ -32,6 +32,7 @@ import { LOCALES, type Locale } from "@/lib/i18n"
 import { useT } from "@/lib/i18n/useT"
 import { PluginsTab } from "./PluginsTab"
 import { TokenSavingTab } from "./settings/TokenSavingTab"
+import { ModelsPage } from "./settings/ModelsPage"
 import { DEFAULT_APPEARANCE, type Appearance, type DiffStyle, type ReduceMotion } from "@/lib/theme"
 import {
   BUILTIN_PRESETS,
@@ -48,7 +49,17 @@ type Props = {
   onClose: () => void
 }
 
-type Tab = "genel" | "gorunum" | "api" | "onay" | "mcp" | "hooks" | "semantic" | "tokens" | "eklentiler" | "hakkinda"
+type Tab =
+  | "genel"
+  | "gorunum"
+  | "modeller"
+  | "onay"
+  | "mcp"
+  | "hooks"
+  | "semantic"
+  | "tokens"
+  | "eklentiler"
+  | "hakkinda"
 
 export function SettingsPage({ onClose }: Props) {
   const t = useT()
@@ -67,7 +78,7 @@ export function SettingsPage({ onClose }: Props) {
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "genel", label: t("settings.tabs.general"), icon: Cog },
     { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette },
-    { id: "api", label: t("settings.tabs.api"), icon: KeyRound },
+    { id: "modeller", label: t("settings.nav.providers"), icon: KeyRound },
     { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck },
     { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug },
     { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook },
@@ -123,7 +134,12 @@ export function SettingsPage({ onClose }: Props) {
           <div className="mx-auto max-w-3xl px-6 py-6">
             {tab === "genel" && <GeneralTab />}
             {tab === "gorunum" && <AppearanceTab />}
-            {tab === "api" && <ApiTab />}
+            {tab === "modeller" && (
+              <div className="flex flex-col gap-6">
+                <ProviderCatalogSection />
+                <ModelsPage />
+              </div>
+            )}
             {tab === "onay" && <ApprovalTab />}
             {tab === "mcp" && <McpTab />}
             {tab === "hooks" && <HooksTab />}
@@ -303,37 +319,6 @@ function GeneralTab() {
   )
 }
 
-function ApiTab() {
-  const t = useT()
-  const settings = useSettingsStore((s) => s.settings)
-  const setApiKey = useSettingsStore((s) => s.setApiKey)
-
-  return (
-    <div className="space-y-4">
-      <Section title={t("settings.drawer.apiKeysTitle")}>
-        <div className="grid grid-cols-1 gap-2">
-          {Object.values(PROVIDERS).map((p) => (
-            <label key={p.id} className="flex flex-col gap-1 text-[12px]">
-              <span className="text-codezal-dim">{p.label}</span>
-              <input
-                type="password"
-                placeholder={p.id === "openai" ? "sk-..." : t("settings.drawer.keyPlaceholder")}
-                value={settings.apiKeys[p.id] ?? ""}
-                onChange={(e) => void setApiKey(p.id, e.target.value)}
-                className="rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-codezal-text outline-none focus:border-codezal-accent"
-              />
-            </label>
-          ))}
-        </div>
-      </Section>
-      <p className="text-[11px] text-codezal-mute">
-        {t("settings.drawer.keysHint")}
-      </p>
-      <ProviderCatalogSection />
-    </div>
-  )
-}
-
 function ProviderCatalogSection() {
   const t = useT()
   const settings = useSettingsStore((s) => s.settings)
@@ -385,9 +370,9 @@ function ProviderCatalogSection() {
 
 function countModels(data: Record<string, unknown>): number {
   let n = 0
-  for (const id of ["openai", "anthropic", "google", "deepseek"]) {
-    const p = data[id] as { models?: Record<string, unknown> } | undefined
-    if (p?.models) n += Object.keys(p.models).length
+  for (const p of Object.values(data)) {
+    const block = p as { models?: Record<string, unknown> } | undefined
+    if (block?.models) n += Object.keys(block.models).length
   }
   return n
 }

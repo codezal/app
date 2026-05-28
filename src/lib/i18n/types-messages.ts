@@ -634,6 +634,57 @@ export type Messages = {
       defaultProvider: string
       defaultModel: string
     }
+    providersPage: {
+      connectedTitle: string
+      popularTitle: string
+      noneConnected: string
+      connect: string
+      disconnect: string
+      edit: string
+      recommended: string
+      badgeApiKey: string
+      badgeOauth: string
+      badgeEnv: string
+      envHint: string
+      connectTo: string
+      oauthSignIn: string
+      oauthStart: string
+      oauthOpening: string
+      oauthComplete: string
+      oauthCompleting: string
+      oauthPasteHint: string
+      oauthCallbackPlaceholder: string
+      deviceCodeHint: string
+      deviceCodePolling: string
+      apiKeyLabel: string
+      envVarHint: string
+      baseUrlLabel: string
+      optionsJsonLabel: string
+      optionsJsonHint: string
+      addProvider: string
+      emptyHint: string
+      pickerTitle: string
+      pickerSearchPlaceholder: string
+      pickerPopular: string
+      pickerOther: string
+    }
+    modelsPage: {
+      searchPlaceholder: string
+      noResults: string
+      notConnected: string
+      onlyRecommended: string
+      enableAll: string
+      disableAll: string
+      recommendedBadge: string
+      recommendedTooltip: string
+      filterAll: string
+      filterConnected: string
+      filterDisconnected: string
+      expandAll: string
+      collapseAll: string
+      countLabel: string
+      filteredHint: string
+    }
     mcp: {
       title: string
       description: string

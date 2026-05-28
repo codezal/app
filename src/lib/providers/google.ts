@@ -1,10 +1,14 @@
-// Google provider adapter — @ai-sdk/google sarmalayıcısı (Gemini).
+// Google provider adapter — @ai-sdk/google wrapper (Gemini API).
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import type { ProviderAdapter } from "./types"
 
 export const googleAdapter: ProviderAdapter = {
   id: "google",
   label: "Google",
+  popular: true,
+  authMethods: ["apiKey", "env"],
+  envVars: ["GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"],
+  npmPackage: "@ai-sdk/google",
   defaultModel: "gemini-3.5-flash",
   fallbackModels: [
     "gemini-3.1-pro",
@@ -13,7 +17,13 @@ export const googleAdapter: ProviderAdapter = {
     "gemini-2.5-pro",
     "gemini-2.5-flash",
   ],
-  buildModel(modelId, apiKey) {
-    return createGoogleGenerativeAI({ apiKey })(modelId)
+  recommendedModels: ["gemini-3.1-pro", "gemini-3.5-flash"],
+  buildLanguageModel({ modelId, auth, config }) {
+    if (auth.kind !== "apiKey") throw new Error("Google: API key required")
+    return createGoogleGenerativeAI({
+      apiKey: auth.value,
+      baseURL: config?.baseURL,
+      headers: config?.headers,
+    })(modelId)
   },
 }

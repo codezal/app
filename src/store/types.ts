@@ -1,4 +1,4 @@
-import type { ProviderId, ApiKeys } from "@/lib/providers"
+import type { ProviderId, ApiKeys, OAuthCredential, ProviderConfig } from "@/lib/providers"
 import type { McpServerConfig } from "@/lib/mcp"
 import type { ModelMessage } from "ai"
 import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
@@ -202,6 +202,19 @@ export type Settings = {
   // Token-saver toggles — three independent features (brief mode, compact
   // shell output, code map). Optional for back-compat with older settings files.
   tokenSavers?: TokenSaverSettings
+  // OAuth + extended provider credentials (token, refresh, expiry).
+  // Plain apiKeys[] continues to hold simple API key strings.
+  credentials?: Partial<Record<ProviderId, OAuthCredential>>
+  // Per-provider config — baseURL, headers, custom options (openai-compatible
+  // endpoint, azure deployment id, vertex project, etc.).
+  providerConfigs?: Partial<Record<ProviderId, ProviderConfig>>
+  // Fallback to shell env vars when apiKeys is empty. When false, auth chain
+  // skips the env step. UI surfaces an "Env" badge when an env var is present.
+  envFallback?: boolean
+  // Per-model enable/disable map. Disabled models are filtered from `modelsFor()`
+  // and hidden from the composer dropdown. Default: every recommended model is
+  // enabled, others disabled.
+  modelStatus?: Partial<Record<ProviderId, Record<string, boolean>>>
 }
 
 export type SessionMeta = Pick<

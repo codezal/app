@@ -1,5 +1,15 @@
-// Codezal Tauri entry — plugin kayıtları
+// Codezal Tauri entry — plugin registrations + invoke handlers.
 mod pty;
+
+// Read an environment variable by name; returns None when unset/empty.
+// Provider auth chain calls this to detect env fallbacks (ANTHROPIC_API_KEY, etc.).
+#[tauri::command]
+fn read_env_var(name: String) -> Option<String> {
+    match std::env::var(&name) {
+        Ok(v) if !v.is_empty() => Some(v),
+        _ => None,
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,6 +24,7 @@ pub fn run() {
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
+            read_env_var,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
