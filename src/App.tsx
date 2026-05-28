@@ -8,7 +8,7 @@ import { MessageList } from "@/components/MessageList"
 import { Composer } from "@/components/Composer"
 import { ContextPanel } from "@/components/ContextPanel"
 import { FileViewer } from "@/components/FileViewer"
-import { SettingsModal } from "@/components/SettingsDrawer"
+import { SettingsPage } from "@/components/SettingsDrawer"
 import { StatusBar } from "@/components/StatusBar"
 import { CommandPalette } from "@/components/CommandPalette"
 import { SearchOverlay } from "@/components/SearchOverlay"
@@ -27,7 +27,9 @@ import { buildSystemPrompt } from "@/lib/system-prompt"
 import { costUsd } from "@/lib/pricing"
 import { shouldCompact, compactMessages, targetTokensAfterCompact } from "@/lib/compact"
 import { estimateMessagesTokens } from "@/lib/tokens"
-import { applyTheme, watchSystemTheme, applyFontScale } from "@/lib/theme"
+import { applyAppearance, watchSystemTheme, applyFontScale, DEFAULT_APPEARANCE } from "@/lib/theme"
+import { loadUserThemes } from "@/lib/theme-loader"
+import type { ThemePreset } from "@/lib/theme-presets"
 import { runHooks } from "@/lib/hooks"
 import {
   startScheduler,
@@ -70,6 +72,8 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showRoutines, setShowRoutines] = useState(false)
+  const [sidebarHidden, setSidebarHidden] = useState(false)
+  const [userThemes, setUserThemes] = useState<ThemePreset[]>([])
   const [showOrchestra, setShowOrchestra] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [panelMode, setPanelMode] = useState<PanelMode | null>(null)
@@ -210,14 +214,21 @@ export default function App() {
     void refreshScheduler(active?.workspacePath)
   }, [active?.workspacePath, settingsLoaded])
 
-  // Tema uygula + system değişimini takip
+  // Appearance: apply theme presets, fonts, motion flags, etc. Follow OS changes when mode='system'.
   useEffect(() => {
-    applyTheme(settings.theme)
-    if (settings.theme !== "system") return
-    return watchSystemTheme(() => applyTheme("system"))
-  }, [settings.theme])
+    const appearance = settings.appearance ?? DEFAULT_APPEARANCE
+    applyAppearance(appearance, userThemes)
+    if (appearance.mode !== "system") return
+    return watchSystemTheme(() => applyAppearance(appearance, userThemes))
+  }, [settings.appearance, userThemes])
 
-  // Yazı ölçeği uygula — Tauri webview setZoom (browser-level, viewport-aware)
+  // Load user theme JSONs from $HOME/.codezal/themes once settings have hydrated.
+  useEffect(() => {
+    if (!settingsLoaded) return
+    void loadUserThemes().then(setUserThemes)
+  }, [settingsLoaded])
+
+  // Legacy font-scale (Tauri webview zoom) — preserved alongside the new px-based font sizes.
   useEffect(() => {
     void applyFontScale(settings.fontScale)
   }, [settings.fontScale])
@@ -547,6 +558,7 @@ export default function App() {
         modelLabel: `${cur.provider}/${cur.model}`,
         mode: cur.mode ?? "build",
         orchestra: cur.orchestra,
+        tokenSavers: settings.tokenSavers,
       })
       const result = streamText({
         model,
@@ -747,11 +759,14 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-codezal-bg text-codezal-text">
-      <Sidebar
-        onOpenSettings={() => setShowSettings((v) => !v)}
-        onOpenRoutines={() => setShowRoutines(true)}
-        onReplay={onReplay}
-      />
+      {!sidebarHidden && (
+        <Sidebar
+          onOpenSettings={() => setShowSettings((v) => !v)}
+          onOpenRoutines={() => setShowRoutines(true)}
+          onReplay={onReplay}
+          onCollapse={() => setSidebarHidden(true)}
+        />
+      )}
       {replayState.running && (
         <div className="fixed left-1/2 top-4 z-40 -translate-x-1/2 rounded-md border border-codezal bg-codezal-panel/95 px-3 py-1.5 text-[11.5px] text-codezal-text shadow-lg">
           Replay {replayState.current}/{replayState.total}: {replayState.prompt.slice(0, 60)}
@@ -766,70 +781,77 @@ export default function App() {
         </div>
       )}
 
-      {/* Sağ sütun — üstte tam genişlik TabBar, altta main + ContextPanel */}
+      {/* Right column — TabBar + main + ContextPanel, OR full-page Settings */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <TabBar panelMode={panelMode} onSetPanelMode={setPanelMode} />
+        {showSettings ? (
+          <SettingsPage onClose={() => setShowSettings(false)} />
+        ) : (
+          <>
+            <TabBar
+              panelMode={panelMode}
+              onSetPanelMode={setPanelMode}
+              sidebarHidden={sidebarHidden}
+              onExpandSidebar={() => setSidebarHidden(false)}
+            />
 
-        <div className="flex min-h-0 flex-1">
-          <main className="flex min-w-0 flex-1 flex-col">
-            {activeFile ? (
-              <FileViewer path={activeFile} />
-            ) : (
-              <>
-                <MessageList
-                  messages={active?.messages ?? []}
-                  streaming={streaming}
-                  onRegenerate={onRegenerate}
-                  onEditUser={onEditUser}
-                  onBranch={onBranch}
-                  onDelete={onDeleteMessage}
-                  onRevert={(id) => void onRevert(id)}
-                />
+            <div className="flex min-h-0 flex-1">
+              <main className="flex min-w-0 flex-1 flex-col">
+                {activeFile ? (
+                  <FileViewer path={activeFile} />
+                ) : (
+                  <>
+                    <MessageList
+                      messages={active?.messages ?? []}
+                      streaming={streaming}
+                      onRegenerate={onRegenerate}
+                      onEditUser={onEditUser}
+                      onBranch={onBranch}
+                      onDelete={onDeleteMessage}
+                      onRevert={(id) => void onRevert(id)}
+                    />
 
-                {error && (
-                  <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-[12px] text-destructive">
-                    {error}
-                  </div>
+                    {error && (
+                      <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-[12px] text-destructive">
+                        {error}
+                      </div>
+                    )}
+
+                    {agentCatalogEmpty && !agentHintDismissed && (
+                      <div className="flex items-center gap-2 border-t border-codezal-accent/30 bg-codezal-accent/10 px-4 py-2 text-[12px] text-codezal-accent">
+                        <span className="flex-1">
+                          Agent havuzu boş. <code className="rounded bg-codezal-panel-2/60 px-1">/agents-init</code> ile <code>~/.codezal/agents/</code> altına 5 default agent yaz (code-reviewer, test-runner, debugger, doc-writer, refactorer).
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAgentHintDismissed(true)}
+                          className="rounded px-1.5 py-0.5 text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
+                          title="Kapat"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    <Composer
+                      streaming={streaming}
+                      onSend={onSend}
+                      onAbort={onAbort}
+                      onSlashAction={(a, args) => void onSlashAction(a, args)}
+                      onOpenOrchestra={() => setShowOrchestra(true)}
+                    />
+                  </>
                 )}
+              </main>
 
-                {agentCatalogEmpty && !agentHintDismissed && (
-                  <div className="flex items-center gap-2 border-t border-codezal-accent/30 bg-codezal-accent/10 px-4 py-2 text-[12px] text-codezal-accent">
-                    <span className="flex-1">
-                      Agent havuzu boş. <code className="rounded bg-codezal-panel-2/60 px-1">/agents-init</code> ile <code>~/.codezal/agents/</code> altına 5 default agent yaz (code-reviewer, test-runner, debugger, doc-writer, refactorer).
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setAgentHintDismissed(true)}
-                      className="rounded px-1.5 py-0.5 text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
-                      title="Kapat"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
+              {panelMode && (
+                <ContextPanel mode={panelMode} onClose={() => setPanelMode(null)} />
+              )}
+            </div>
 
-                <Composer
-                  streaming={streaming}
-                  onSend={onSend}
-                  onAbort={onAbort}
-                  onSlashAction={(a, args) => void onSlashAction(a, args)}
-                  onOpenOrchestra={() => setShowOrchestra(true)}
-                />
-              </>
-            )}
-          </main>
-
-          {panelMode && (
-            <ContextPanel mode={panelMode} onClose={() => setPanelMode(null)} />
-          )}
-        </div>
-
-        <StatusBar />
+            <StatusBar />
+          </>
+        )}
       </div>
-
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
 
       <CommandPalette
         open={showPalette}

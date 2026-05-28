@@ -3,6 +3,8 @@ import type { McpServerConfig } from "@/lib/mcp"
 import type { ModelMessage } from "ai"
 import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
 import type { Locale } from "@/lib/i18n/types"
+import type { Appearance } from "@/lib/theme"
+import type { TokenSaverSettings } from "@/lib/token-savers/types"
 
 export type Role = "user" | "assistant" | "system" | "tool"
 
@@ -193,6 +195,13 @@ export type Settings = {
   hooks?: HookConfig[]
   // Semantic index (embedding) — code_query tool için.
   semantic?: SemanticIndexConfig
+  // Theme/typography/UX flags — managed by the Appearance settings tab.
+  // Optional for back-compat: old settings files fall back to DEFAULT_APPEARANCE
+  // and the legacy `theme` field is migrated into `appearance.mode` on load.
+  appearance?: Appearance
+  // Token-saver toggles — three independent features (brief mode, compact
+  // shell output, code map). Optional for back-compat with older settings files.
+  tokenSavers?: TokenSaverSettings
 }
 
 export type SessionMeta = Pick<

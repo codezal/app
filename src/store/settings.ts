@@ -2,6 +2,8 @@ import { create } from "zustand"
 import { loadSettingsFile, saveSettingsFile } from "@/lib/storage"
 import { PROVIDERS } from "@/lib/providers"
 import { DEFAULT_LOCALE, useI18nStore } from "@/lib/i18n"
+import { DEFAULT_APPEARANCE, type Appearance } from "@/lib/theme"
+import { DEFAULT_TOKEN_SAVERS } from "@/lib/token-savers/types"
 import type { Settings } from "./types"
 
 const DEFAULT: Settings = {
@@ -29,6 +31,8 @@ const DEFAULT: Settings = {
     apiKey: "",
     topK: 5,
   },
+  appearance: DEFAULT_APPEARANCE,
+  tokenSavers: DEFAULT_TOKEN_SAVERS,
 }
 
 type SettingsState = {
@@ -47,11 +51,53 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   load: async () => {
     const loaded = await loadSettingsFile<Settings>(DEFAULT)
-    // autoCompact alanı eski dosyalarda eksik olabilir — nested merge
+    // Nested merge — older settings files may lack newer blocks.
+    const persistedAppearance = loaded.appearance ?? ({} as Partial<Appearance>)
+    const mergedAppearance: Appearance = {
+      ...DEFAULT_APPEARANCE,
+      ...persistedAppearance,
+      // Migrate legacy `theme` field into appearance.mode if appearance was absent.
+      mode: persistedAppearance.mode ?? loaded.theme ?? DEFAULT_APPEARANCE.mode,
+    }
+    // One-time migration: legacy customLight/customDark → customsByPreset keyed by
+    // the active light/dark preset. Drop the legacy fields once copied.
+    const lightId = mergedAppearance.lightPreset
+    const darkId = mergedAppearance.darkPreset
+    const byPreset: Record<string, Partial<NonNullable<Appearance["customsByPreset"]>>[string]> = {
+      ...(mergedAppearance.customsByPreset ?? {}),
+    }
+    if (mergedAppearance.customLight && !byPreset[lightId]) {
+      byPreset[lightId] = mergedAppearance.customLight
+    }
+    if (mergedAppearance.customDark && !byPreset[darkId]) {
+      byPreset[darkId] = mergedAppearance.customDark
+    }
+    mergedAppearance.customsByPreset = byPreset
+    delete mergedAppearance.customLight
+    delete mergedAppearance.customDark
+    // Nested merge for tokenSavers so adding new sub-features in future
+    // releases doesn't blow away the user's existing toggles.
+    const loadedTokens = loaded.tokenSavers ?? ({} as Partial<NonNullable<Settings["tokenSavers"]>>)
+    const mergedTokens: NonNullable<Settings["tokenSavers"]> = {
+      briefMode: { ...DEFAULT_TOKEN_SAVERS.briefMode, ...(loadedTokens.briefMode ?? {}) },
+      compactOutput: {
+        ...DEFAULT_TOKEN_SAVERS.compactOutput,
+        ...(loadedTokens.compactOutput ?? {}),
+        filters: {
+          ...DEFAULT_TOKEN_SAVERS.compactOutput.filters,
+          ...(loadedTokens.compactOutput?.filters ?? {}),
+        },
+      },
+      codeMap: { ...DEFAULT_TOKEN_SAVERS.codeMap, ...(loadedTokens.codeMap ?? {}) },
+    }
     const merged: Settings = {
       ...DEFAULT,
       ...loaded,
       autoCompact: { ...DEFAULT.autoCompact, ...(loaded.autoCompact ?? {}) },
+      appearance: mergedAppearance,
+      tokenSavers: mergedTokens,
+      // Keep `theme` in sync with appearance.mode so legacy readers continue to work.
+      theme: mergedAppearance.mode,
     }
     set({ settings: merged, loaded: true })
     // i18n: apply persisted locale (falls back to DEFAULT_LOCALE if absent)

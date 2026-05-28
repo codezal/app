@@ -32,6 +32,18 @@ import { listPluginAgents } from "../agents/plugin"
 import { captureFiles, affectedPaths } from "../snapshots"
 import { runHooks } from "../hooks"
 import { loadIndex, queryIndex } from "../semantic-index"
+import {
+  loadCodeMap,
+  searchSymbols,
+  resolveByName,
+  callers as cmCallers,
+  callees as cmCallees,
+  trace as cmTrace,
+  impact as cmImpact,
+  formatSymbol,
+  findById,
+} from "../token-savers"
+import type { CodeMap, CodeSymbol } from "../token-savers"
 
 // Tool execute'undan önce kullanıcı onayını iste — reddedilirse hata fırlat.
 // Read-only toollar (list_dir, read_file, load_skill) için onay gerekmez.
@@ -44,7 +56,16 @@ const READ_ONLY = new Set(["list_dir", "read_file", "load_skill", "question"])
 const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch"])
 
 // repo_overview ve list_worktrees salt-okunur — onay gerekmez.
-const READ_ONLY_EXTRA = new Set(["repo_overview", "list_worktrees", "code_query"])
+const READ_ONLY_EXTRA = new Set([
+  "repo_overview",
+  "list_worktrees",
+  "code_query",
+  "code_search",
+  "code_callers",
+  "code_callees",
+  "code_trace",
+  "code_impact",
+])
 
 // Subagent tool'larını policy ile sarmala — her execute öncesi policy check.
 // approvalRequired tool'lar normalde READ_ONLY olsa bile onay sorar.
@@ -170,6 +191,11 @@ export type ToolName =
   | "list_worktrees"
   | "remove_worktree"
   | "code_query"
+  | "code_search"
+  | "code_callers"
+  | "code_callees"
+  | "code_trace"
+  | "code_impact"
 
 // Her tool execute sonrası PostToolUse hook'unu çalıştıran wrapper.
 // PreToolUse zaten gate() içinde manuel; bu sadece post tarafı.
@@ -392,7 +418,8 @@ export function buildTools(workspace: string | undefined): ToolSet {
       }),
       execute: async ({ command }) => {
         await gate("bash", { command })
-        return runBash(workspace, command)
+        const compactOutput = useSettingsStore.getState().settings.tokenSavers?.compactOutput
+        return runBash(workspace, command, { compactOutput })
       },
     }),
 
@@ -435,6 +462,8 @@ export function buildTools(workspace: string | undefined): ToolSet {
         ].join("\n")
       },
     }),
+
+    ...buildCodeMapTools(workspace),
 
     code_query: tool({
       description:
@@ -663,6 +692,128 @@ export function buildTools(workspace: string | undefined): ToolSet {
         } catch (e) {
           return `Agent hatası: ${e instanceof Error ? e.message : String(e)}`
         }
+      },
+    }),
+  }
+}
+
+// Code Map tools — wrap a single loaded index per turn so each tool call
+// doesn't reparse JSON from disk. Returns empty toolset when Code Map is
+// disabled in settings (no tools surface to the model).
+function buildCodeMapTools(workspace: string | undefined): ToolSet {
+  const enabled = useSettingsStore.getState().settings.tokenSavers?.codeMap.enabled
+  if (!enabled || !workspace) return {}
+
+  async function loadOrError(): Promise<CodeMap | string> {
+    const map = await loadCodeMap(workspace!)
+    if (!map) {
+      return "Code Map not built yet. Open Settings → Token Saving → Code Map and click 'Build index'."
+    }
+    return map
+  }
+
+  function symList(syms: CodeSymbol[]): string {
+    if (syms.length === 0) return "(no matches)"
+    return syms.map((s) => `- ${formatSymbol(s)}`).join("\n")
+  }
+
+  function pickSymbol(map: CodeMap, ref: string): CodeSymbol | string {
+    // Accept either an explicit symbol id ("file::name::line") or a bare name.
+    if (ref.includes("::")) {
+      const s = findById(map, ref)
+      return s ?? `No symbol with id '${ref}'`
+    }
+    const matches = resolveByName(map, ref)
+    if (matches.length === 0) return `No symbol named '${ref}'`
+    if (matches.length === 1) return matches[0]!
+    // Ambiguous — list candidates so the model can re-call with a specific id.
+    return `Ambiguous '${ref}' (${matches.length} matches). Pass a specific id:\n${symList(matches)}`
+  }
+
+  return {
+    code_search: tool({
+      description:
+        "Search the Code Map for symbols by name. Returns matching functions, classes, methods, types " +
+        "with file:line and a short signature. Use this before code_callers / code_callees to find the " +
+        "exact symbol id when a name has multiple definitions.",
+      inputSchema: z.object({
+        query: z.string().describe("Symbol name or partial name (case-insensitive)"),
+        limit: z.number().int().min(1).max(50).optional(),
+      }),
+      execute: async ({ query, limit }) => {
+        const res = await loadOrError()
+        if (typeof res === "string") return res
+        return symList(searchSymbols(res, query, limit ?? 20))
+      },
+    }),
+
+    code_callers: tool({
+      description:
+        "List functions/methods that call the given symbol. Pass the symbol name or its full id from code_search.",
+      inputSchema: z.object({
+        symbol: z.string().describe("Symbol name or id ('file::name::line')"),
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+      execute: async ({ symbol, limit }) => {
+        const res = await loadOrError()
+        if (typeof res === "string") return res
+        const picked = pickSymbol(res, symbol)
+        if (typeof picked === "string") return picked
+        return symList(cmCallers(res, picked.id, limit ?? 30))
+      },
+    }),
+
+    code_callees: tool({
+      description:
+        "List the functions/methods that the given symbol calls. Pass the symbol name or its full id from code_search.",
+      inputSchema: z.object({
+        symbol: z.string().describe("Symbol name or id ('file::name::line')"),
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+      execute: async ({ symbol, limit }) => {
+        const res = await loadOrError()
+        if (typeof res === "string") return res
+        const picked = pickSymbol(res, symbol)
+        if (typeof picked === "string") return picked
+        return symList(cmCallees(res, picked.id, limit ?? 30))
+      },
+    }),
+
+    code_trace: tool({
+      description:
+        "Find the shortest call-path from one symbol to another (BFS over the calls graph). Returns the chain in order, " +
+        "or '(no path)' when unreachable. Use for 'how does X reach Y' questions.",
+      inputSchema: z.object({
+        from: z.string().describe("Source symbol name or id"),
+        to: z.string().describe("Target symbol name or id"),
+      }),
+      execute: async ({ from, to }) => {
+        const res = await loadOrError()
+        if (typeof res === "string") return res
+        const a = pickSymbol(res, from)
+        if (typeof a === "string") return a
+        const b = pickSymbol(res, to)
+        if (typeof b === "string") return b
+        const chain = cmTrace(res, a.id, b.id)
+        if (chain.length === 0) return "(no path)"
+        return chain.map((s, i) => `${i + 1}. ${formatSymbol(s)}`).join("\n")
+      },
+    }),
+
+    code_impact: tool({
+      description:
+        "Transitive callers of a symbol up to N hops — the 'blast radius' of changing it. Useful before a rename or signature change.",
+      inputSchema: z.object({
+        symbol: z.string().describe("Symbol name or id"),
+        depth: z.number().int().min(1).max(5).optional().describe("How many hops upward (default 2)"),
+        limit: z.number().int().min(1).max(200).optional(),
+      }),
+      execute: async ({ symbol, depth, limit }) => {
+        const res = await loadOrError()
+        if (typeof res === "string") return res
+        const picked = pickSymbol(res, symbol)
+        if (typeof picked === "string") return picked
+        return symList(cmImpact(res, picked.id, depth ?? 2, limit ?? 60))
       },
     }),
   }

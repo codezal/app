@@ -5,6 +5,8 @@ import { listPluginSkills } from "./skills/plugin"
 import { readWorkspaceAgents, readUserAgents, buildAgentsCatalog } from "./agents"
 import { listPluginAgents } from "./agents/plugin"
 import type { OrchestraConfig } from "./orchestra/types"
+import { briefModeSection } from "./token-savers"
+import type { TokenSaverSettings } from "./token-savers/types"
 
 const BASE_SYSTEM = `Sen Codezal'sun — bir geliştirme asistanısın.
 Kullanıcı sana bir görev verdiğinde, doğru sonucu üretmek için araçları kullan.
@@ -23,6 +25,9 @@ export type SystemPromptInput = {
   modelLabel?: string
   mode?: "plan" | "build" | "orchestra"
   orchestra?: OrchestraConfig
+  // Token-saver toggles — when Brief Mode is enabled, an extra directive is
+  // injected so the model responds in compressed style.
+  tokenSavers?: TokenSaverSettings
 }
 
 // Orkestra modu için worker havuzu kataloğu — parent LLM dispatch_workers çağrırken bu listeyi kullanır.
@@ -56,8 +61,14 @@ export async function buildSystemPrompt({
   modelLabel,
   mode = "build",
   orchestra,
+  tokenSavers,
 }: SystemPromptInput): Promise<string> {
   const parts: string[] = [BASE_SYSTEM]
+
+  // Brief Mode directive — placed near the top so the style rule frames every
+  // later section (memory blocks, catalogs). Falls through cleanly when disabled.
+  const brief = briefModeSection(tokenSavers?.briefMode)
+  if (brief) parts.push("\n" + brief)
 
   if (workspacePath) {
     parts.push(`\nÇalışma klasörü: ${workspacePath}`)

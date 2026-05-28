@@ -1,24 +1,25 @@
-// Ayarlar modal — sekmeli: Genel, API, Onay, Hakkında.
-// Esc / arka plan tıklama / X ile kapanır.
+// Settings — full-page view with sidebar tabs (General, API, Approval, …, About).
+// Esc / back button returns to chat.
 import { useEffect, useState } from "react"
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
   Cog,
   Info,
   KeyRound,
-  Moon,
   Plug,
   Plus,
   Puzzle,
   RefreshCcw,
   ShieldCheck,
   Sparkles,
-  Sun,
+  Palette,
   Trash2,
   Webhook,
   X,
+  Coins,
 } from "lucide-react"
 import { PROVIDERS, type ProviderId } from "@/lib/providers"
 import { useSettingsStore } from "@/store/settings"
@@ -26,18 +27,30 @@ import { useSessionsStore } from "@/store/sessions"
 import { listMcpStatus, parseMcpServersJson, type McpServerConfig, type McpStatus } from "@/lib/mcp"
 import { buildIndex, loadIndex, type BuildProgress } from "@/lib/semantic-index"
 import { cn } from "@/lib/utils"
-import type { Theme, FontScale } from "@/lib/theme"
+import type { FontScale } from "@/lib/theme"
 import { LOCALES, type Locale } from "@/lib/i18n"
 import { useT } from "@/lib/i18n/useT"
 import { PluginsTab } from "./PluginsTab"
+import { TokenSavingTab } from "./settings/TokenSavingTab"
+import { DEFAULT_APPEARANCE, type Appearance, type DiffStyle, type ReduceMotion } from "@/lib/theme"
+import {
+  BUILTIN_PRESETS,
+  PICKABLE_TOKENS,
+  presetsForMode,
+  type ThemePreset,
+  type ThemeTokens,
+  type ThemeMode,
+} from "@/lib/theme-presets"
+import { loadUserThemes, presetToJson, jsonToPreset, saveUserTheme } from "@/lib/theme-loader"
+import { hslToHex, hexToHsl } from "@/lib/color-utils"
 
 type Props = {
   onClose: () => void
 }
 
-type Tab = "genel" | "api" | "onay" | "mcp" | "hooks" | "semantic" | "eklentiler" | "hakkinda"
+type Tab = "genel" | "gorunum" | "api" | "onay" | "mcp" | "hooks" | "semantic" | "tokens" | "eklentiler" | "hakkinda"
 
-export function SettingsModal({ onClose }: Props) {
+export function SettingsPage({ onClose }: Props) {
   const t = useT()
   const [tab, setTab] = useState<Tab>("genel")
 
@@ -49,68 +62,73 @@ export function SettingsModal({ onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey)
   }, [onClose])
 
+  const tokensLabelRaw = t("settings.tabs.tokens")
+  const tokensLabel = tokensLabelRaw === "settings.tabs.tokens" ? "Token Saving" : tokensLabelRaw
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "genel", label: t("settings.tabs.general"), icon: Cog },
+    { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette },
     { id: "api", label: t("settings.tabs.api"), icon: KeyRound },
     { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck },
     { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug },
     { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook },
     { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles },
+    { id: "tokens", label: tokensLabel, icon: Coins },
     { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle },
     { id: "hakkinda", label: t("settings.tabs.about"), icon: Info },
   ]
 
+  const activeLabel = tabs.find((tt) => tt.id === tab)?.label ?? ""
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="flex h-[560px] w-full max-w-[720px] overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl">
-        {/* Sol nav */}
-        <nav className="w-[160px] shrink-0 border-r border-codezal bg-codezal-sidebar p-2">
-          {tabs.map((t) => {
-            const Icon = t.icon
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  "mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px]",
-                  tab === t.id
-                    ? "bg-codezal-chip text-codezal-text"
-                    : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {t.label}
-              </button>
-            )
-          })}
-        </nav>
-
-        {/* Sağ içerik */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex shrink-0 items-center justify-between border-b border-codezal px-5 py-3">
-            <h2 className="text-[13px] font-semibold text-codezal-text">{t("settings.drawer.headerPrefix", { tab: tabs.find((tt) => tt.id === tab)?.label ?? "" })}</h2>
+    <div className="flex min-h-0 flex-1 bg-codezal-bg">
+      {/* Left nav */}
+      <nav className="w-[200px] shrink-0 overflow-y-auto border-r border-codezal bg-codezal-sidebar p-3">
+        <button
+          type="button"
+          onClick={onClose}
+          title="Back (Esc)"
+          className="mb-3 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>Back</span>
+        </button>
+        {tabs.map((tt) => {
+          const Icon = tt.icon
+          return (
             <button
+              key={tt.id}
               type="button"
-              onClick={onClose}
-              className="rounded p-1 text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
+              onClick={() => setTab(tt.id)}
+              className={cn(
+                "mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px]",
+                tab === tt.id
+                  ? "bg-codezal-chip text-codezal-text"
+                  : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
+              )}
             >
-              <X className="h-3.5 w-3.5" />
+              <Icon className="h-3.5 w-3.5" />
+              {tt.label}
             </button>
-          </header>
+          )
+        })}
+      </nav>
 
-          <div className="flex-1 overflow-y-auto px-5 py-5">
+      {/* Right content */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 items-center gap-3 border-b border-codezal bg-codezal-panel px-6 py-3">
+          <h2 className="text-[14px] font-semibold text-codezal-text">{t("settings.drawer.headerPrefix", { tab: activeLabel })}</h2>
+        </header>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl px-6 py-6">
             {tab === "genel" && <GeneralTab />}
+            {tab === "gorunum" && <AppearanceTab />}
             {tab === "api" && <ApiTab />}
             {tab === "onay" && <ApprovalTab />}
             {tab === "mcp" && <McpTab />}
             {tab === "hooks" && <HooksTab />}
             {tab === "semantic" && <SemanticTab />}
+            {tab === "tokens" && <TokenSavingTab />}
             {tab === "eklentiler" && <PluginsTab />}
             {tab === "hakkinda" && <AboutTab />}
           </div>
@@ -131,7 +149,7 @@ function GeneralTab() {
         <select
           value={settings.language ?? "tr"}
           onChange={(e) => void update({ language: e.target.value as Locale })}
-          className="w-full rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-[12px] text-codezal-text"
+          className="codezal-select"
         >
           {LOCALES.map((l) => (
             <option key={l.code} value={l.code}>
@@ -144,62 +162,8 @@ function GeneralTab() {
         </p>
       </Section>
 
-      <Section title={t("settings.drawer.themeTitle")}>
-        <div className="flex items-center gap-1.5">
-          {(["light", "dark", "system"] as Theme[]).map((th) => (
-            <button
-              key={th}
-              type="button"
-              onClick={() => void update({ theme: th })}
-              className={cn(
-                "flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px]",
-                settings.theme === th
-                  ? "border-codezal-accent text-codezal-accent"
-                  : "border-codezal text-codezal-dim hover:border-codezal-strong",
-              )}
-            >
-              {th === "light" && <Sun className="h-3 w-3" />}
-              {th === "dark" && <Moon className="h-3 w-3" />}
-              {th === "light" ? t("settings.general.themeLight") : th === "dark" ? t("settings.general.themeDark") : t("settings.general.themeSystem")}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      <Section title={t("settings.drawer.fontSizeTitle")}>
-        <div className="flex items-center gap-1.5">
-          {(["s", "m", "l", "xl"] as FontScale[]).map((sz) => {
-            const active = (settings.fontScale ?? "m") === sz
-            return (
-              <button
-                key={sz}
-                type="button"
-                onClick={() => void update({ fontScale: sz })}
-                className={cn(
-                  "flex h-7 min-w-[36px] items-center justify-center rounded-md border px-2.5 text-[12px] uppercase",
-                  active
-                    ? "border-codezal-accent text-codezal-accent"
-                    : "border-codezal text-codezal-dim hover:border-codezal-strong",
-                )}
-                title={
-                  sz === "s"
-                    ? t("settings.drawer.fontSmallTitle")
-                    : sz === "m"
-                      ? t("settings.drawer.fontMediumTitle")
-                      : sz === "l"
-                        ? t("settings.drawer.fontLargeTitle")
-                        : t("settings.drawer.fontXLTitle")
-                }
-              >
-                {sz}
-              </button>
-            )
-          })}
-        </div>
-      </Section>
-
       <Section title={t("settings.drawer.defaultProviderModelTitle")}>
-        <div className="flex items-center gap-1.5 text-[12px]">
+        <div className="grid grid-cols-2 gap-2">
           <select
             value={settings.defaultProvider}
             onChange={(e) => {
@@ -209,7 +173,7 @@ function GeneralTab() {
                 defaultModel: PROVIDERS[id].defaultModel,
               })
             }}
-            className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-codezal-text"
+            className="codezal-select"
           >
             {Object.values(PROVIDERS).map((p) => (
               <option key={p.id} value={p.id}>
@@ -220,7 +184,7 @@ function GeneralTab() {
           <select
             value={settings.defaultModel}
             onChange={(e) => void update({ defaultModel: e.target.value })}
-            className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-codezal-text"
+            className="codezal-select"
           >
             {PROVIDERS[settings.defaultProvider].models.map((m) => (
               <option key={m} value={m}>
@@ -1180,7 +1144,7 @@ function SemanticTab() {
               onChange={(e) =>
                 patch({ provider: e.target.value as "openai" | "ollama" | "custom" })
               }
-              className="rounded border border-codezal bg-codezal-input px-2 py-1 text-codezal-text"
+              className="codezal-select"
             >
               <option value="ollama">{t("settings.drawer.providerOllama")}</option>
               <option value="openai">{t("settings.drawer.providerOpenai")}</option>
@@ -1330,5 +1294,661 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       </h3>
       {children}
     </div>
+  )
+}
+
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="inline-flex gap-1 rounded-md border border-codezal bg-codezal-panel-2 p-0.5">
+      {options.map((opt) => {
+        const active = value === opt.value
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            aria-pressed={active}
+            className={cn(
+              "rounded px-2.5 py-1 text-[12px] transition-colors",
+              active
+                ? "bg-codezal-accent font-semibold text-white shadow-sm"
+                : "text-codezal-dim hover:bg-codezal-panel hover:text-codezal-text",
+            )}
+          >
+            {opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Row({
+  label,
+  description,
+  children,
+}: {
+  label: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-codezal py-3 last:border-b-0">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium text-codezal-text">{label}</div>
+        {description && <div className="mt-0.5 text-[11.5px] text-codezal-mute">{description}</div>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  )
+}
+
+// Every web-font in this list is loaded via index.css @import (Google Fonts,
+// SIL OFL — free for commercial use). System fonts (SF Mono, Segoe UI, etc.)
+// are guaranteed by their host OS. CSS keywords (system-ui, ui-monospace) map
+// to the platform's default.
+const UI_FONTS: { value: string; label: string }[] = [
+  { value: "IBM Plex Sans", label: "IBM Plex Sans" },   // Google Fonts
+  { value: "Inter", label: "Inter" },                    // Google Fonts
+  { value: "Geist", label: "Geist" },                    // Google Fonts
+  { value: "Roboto", label: "Roboto" },                  // Google Fonts
+  { value: "system-ui", label: "System default" },       // CSS keyword
+  { value: "-apple-system", label: "Apple system" },     // CSS keyword (macOS/iOS)
+  { value: "Segoe UI", label: "Segoe UI" },              // Windows system
+  { value: "Helvetica Neue", label: "Helvetica Neue" },  // macOS system
+]
+
+const CODE_FONTS: { value: string; label: string }[] = [
+  { value: "IBM Plex Mono", label: "IBM Plex Mono" },    // Google Fonts
+  { value: "JetBrains Mono", label: "JetBrains Mono" },  // Google Fonts
+  { value: "Fira Code", label: "Fira Code" },            // Google Fonts
+  { value: "Cascadia Code", label: "Cascadia Code" },    // Google Fonts
+  { value: "SF Mono", label: "SF Mono" },                // macOS system
+  { value: "Menlo", label: "Menlo" },                    // macOS system
+  { value: "Monaco", label: "Monaco" },                  // macOS system
+  { value: "Consolas", label: "Consolas" },              // Windows system
+  { value: "ui-monospace", label: "System monospace" },  // CSS keyword
+]
+
+function AppearanceTab() {
+  const t = useT()
+  const settings = useSettingsStore((s) => s.settings)
+  const update = useSettingsStore((s) => s.update)
+  const appearance: Appearance = settings.appearance ?? DEFAULT_APPEARANCE
+  const [userThemes, setUserThemes] = useState<ThemePreset[]>([])
+  const [importError, setImportError] = useState<string | null>(null)
+  const customSuffix = t("settings.drawer.appearance.customSuffix")
+
+  const tokenLabel: Record<keyof ThemeTokens, string> = {
+    codezalAccent: t("settings.drawer.appearance.tokenAccent"),
+    codezalBg: t("settings.drawer.appearance.tokenBackground"),
+    codezalText: t("settings.drawer.appearance.tokenForeground"),
+    codezalPanel: t("settings.drawer.appearance.tokenPanel"),
+    codezalSidebar: t("settings.drawer.appearance.tokenSidebar"),
+    codezalChip: t("settings.drawer.appearance.tokenChip"),
+    codezalDiffAdd: t("settings.drawer.appearance.tokenDiffAdd"),
+    codezalDiffDel: t("settings.drawer.appearance.tokenDiffDel"),
+  } as Record<keyof ThemeTokens, string>
+
+  useEffect(() => {
+    void loadUserThemes().then(setUserThemes)
+  }, [])
+
+  function patch(p: Partial<Appearance>) {
+    const next: Appearance = { ...appearance, ...p }
+    void update({ appearance: next, theme: next.mode })
+  }
+
+  const resolvedMode: ThemeMode =
+    appearance.mode === "system"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : appearance.mode
+
+  const allPresets = [...BUILTIN_PRESETS, ...userThemes]
+  const lightPresets = presetsForMode("light", allPresets)
+  const darkPresets = presetsForMode("dark", allPresets)
+  const activeLightPreset =
+    lightPresets.find((p) => p.id === appearance.lightPreset) ?? BUILTIN_PRESETS[0]
+  const activeDarkPreset =
+    darkPresets.find((p) => p.id === appearance.darkPreset) ?? BUILTIN_PRESETS[1]
+  const activePreset = resolvedMode === "dark" ? activeDarkPreset : activeLightPreset
+  const customsByPreset = appearance.customsByPreset ?? {}
+  const overrides = customsByPreset[activePreset.id] ?? {}
+  const customLightActive =
+    Object.keys(customsByPreset[activeLightPreset.id] ?? {}).length > 0
+  const customDarkActive =
+    Object.keys(customsByPreset[activeDarkPreset.id] ?? {}).length > 0
+  // Sentinel option id used when overrides are active — selecting it is a no-op.
+  const CUSTOM_LIGHT_ID = "__custom-light__"
+  const CUSTOM_DARK_ID = "__custom-dark__"
+
+  function getActiveToken(key: keyof ThemeTokens): string {
+    return (overrides[key] as string | undefined) ?? activePreset.tokens[key]
+  }
+
+  function setActiveToken(key: keyof ThemeTokens, hsl: string) {
+    const prev = customsByPreset[activePreset.id] ?? {}
+    patch({
+      customsByPreset: {
+        ...customsByPreset,
+        [activePreset.id]: { ...prev, [key]: hsl },
+      },
+    })
+  }
+
+  function resetOverrides() {
+    const next = { ...customsByPreset }
+    delete next[activePreset.id]
+    patch({ customsByPreset: next })
+  }
+
+  function exportCurrent() {
+    // Strip a trailing "(custom)" so re-exports don't accumulate suffixes;
+    // the dropdown already appends "(custom)" for non-builtin presets at render time.
+    const baseName = activePreset.name.replace(/\s*\(custom\)\s*$/i, "")
+    const merged: ThemePreset = {
+      id: `${activePreset.id}-custom-${Date.now()}`,
+      name: baseName,
+      mode: resolvedMode,
+      tokens: { ...activePreset.tokens, ...overrides } as ThemeTokens,
+    }
+    const json = presetToJson(merged)
+    void navigator.clipboard.writeText(json).catch(() => {})
+    // Persist a copy under ~/.codezal/themes/ so it can be re-selected later
+    void saveUserTheme(merged).then(async () => {
+      const next = await loadUserThemes()
+      setUserThemes(next)
+    })
+  }
+
+  async function onImport(file: File) {
+    try {
+      const text = await file.text()
+      const preset = jsonToPreset(text, file.name.replace(/\.json$/i, ""))
+      if (!preset) {
+        setImportError(t("settings.drawer.appearance.invalidThemeJson"))
+        return
+      }
+      await saveUserTheme(preset)
+      const next = await loadUserThemes()
+      setUserThemes(next)
+      setImportError(null)
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : t("settings.drawer.appearance.importFailed"))
+    }
+  }
+
+  const localizedMode =
+    resolvedMode === "dark"
+      ? t("settings.drawer.appearance.modeDark")
+      : t("settings.drawer.appearance.modeLight")
+
+  const zoomLabel = (sz: FontScale): string => {
+    switch (sz) {
+      case "s":
+        return t("settings.drawer.appearance.zoomSmall")
+      case "m":
+        return t("settings.drawer.appearance.zoomMedium")
+      case "l":
+        return t("settings.drawer.appearance.zoomLarge")
+      case "xl":
+        return t("settings.drawer.appearance.zoomXL")
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <Section title={t("settings.drawer.appearance.modeTitle")}>
+        <Segmented
+          value={appearance.mode}
+          options={[
+            { value: "light", label: t("settings.drawer.appearance.modeLight") },
+            { value: "dark", label: t("settings.drawer.appearance.modeDark") },
+            { value: "system", label: t("settings.drawer.appearance.modeSystem") },
+          ]}
+          onChange={(mode) => patch({ mode })}
+        />
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.zoomTitle")}>
+        <p className="mb-2 text-[11.5px] text-codezal-mute">
+          {t("settings.drawer.appearance.zoomDesc")}
+        </p>
+        <Segmented<FontScale>
+          value={settings.fontScale ?? "m"}
+          options={(["s", "m", "l", "xl"] as FontScale[]).map((sz) => ({
+            value: sz,
+            label: zoomLabel(sz),
+          }))}
+          onChange={(sz) => void update({ fontScale: sz })}
+        />
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.themePresetsTitle")}>
+        <Row
+          label={t("settings.drawer.appearance.lightThemeLabel")}
+          description={t("settings.drawer.appearance.lightThemeDesc")}
+        >
+          <select
+            value={customLightActive ? CUSTOM_LIGHT_ID : appearance.lightPreset}
+            onChange={(e) => {
+              const next = e.target.value
+              if (next === CUSTOM_LIGHT_ID) return
+              patch({ lightPreset: next })
+            }}
+            className="codezal-select w-auto"
+          >
+            {customLightActive && (
+              <option value={CUSTOM_LIGHT_ID}>
+                {activeLightPreset.name.replace(/\s*\(custom\)\s*$/i, "")} ({customSuffix})
+              </option>
+            )}
+            {lightPresets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name.replace(/\s*\(custom\)\s*$/i, "")}
+                {p.builtin === false ? ` (${customSuffix})` : ""}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row
+          label={t("settings.drawer.appearance.darkThemeLabel")}
+          description={t("settings.drawer.appearance.darkThemeDesc")}
+        >
+          <select
+            value={customDarkActive ? CUSTOM_DARK_ID : appearance.darkPreset}
+            onChange={(e) => {
+              const next = e.target.value
+              if (next === CUSTOM_DARK_ID) return
+              patch({ darkPreset: next })
+            }}
+            className="codezal-select w-auto"
+          >
+            {customDarkActive && (
+              <option value={CUSTOM_DARK_ID}>
+                {activeDarkPreset.name.replace(/\s*\(custom\)\s*$/i, "")} ({customSuffix})
+              </option>
+            )}
+            {darkPresets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name.replace(/\s*\(custom\)\s*$/i, "")}
+                {p.builtin === false ? ` (${customSuffix})` : ""}
+              </option>
+            ))}
+          </select>
+        </Row>
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.customColorsTitle", { mode: localizedMode })}>
+        <p className="mb-2 text-[11.5px] text-codezal-mute">
+          {t("settings.drawer.appearance.customColorsHint")}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {PICKABLE_TOKENS.map(({ key, label }) => {
+            const hsl = getActiveToken(key)
+            const hex = hslToHex(hsl)
+            return (
+              <div
+                key={key}
+                className="flex items-center justify-between rounded-md border border-codezal bg-codezal-panel px-2.5 py-1.5"
+              >
+                <span className="text-[12px] text-codezal-text">{tokenLabel[key] ?? label}</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={hex}
+                    onChange={(e) => setActiveToken(key, hexToHsl(e.target.value))}
+                    className="h-6 w-8 cursor-pointer rounded border border-codezal bg-transparent"
+                  />
+                  <HexInput
+                    value={hex}
+                    onCommit={(next) => setActiveToken(key, hexToHsl(next))}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {Object.keys(overrides).length > 0 && (
+          <button
+            type="button"
+            onClick={resetOverrides}
+            className="mt-2 text-[12px] text-codezal-accent hover:underline"
+          >
+            {t("settings.drawer.appearance.resetCustomColors")}
+          </button>
+        )}
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.typographyTitle")}>
+        <Row
+          label={t("settings.drawer.appearance.uiFontLabel")}
+          description={t("settings.drawer.appearance.uiFontDesc")}
+        >
+          <select
+            value={UI_FONTS.some((f) => f.value === appearance.uiFont) ? appearance.uiFont : "Roboto"}
+            onChange={(e) => patch({ uiFont: e.target.value })}
+            className="codezal-select w-auto"
+            style={{ fontFamily: `"${appearance.uiFont}", system-ui, sans-serif` }}
+          >
+            {UI_FONTS.map((f) => (
+              <option key={f.value} value={f.value} style={{ fontFamily: `"${f.value}", system-ui, sans-serif` }}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row
+          label={t("settings.drawer.appearance.codeFontLabel")}
+          description={t("settings.drawer.appearance.codeFontDesc")}
+        >
+          <select
+            value={CODE_FONTS.some((f) => f.value === appearance.codeFont) ? appearance.codeFont : "JetBrains Mono"}
+            onChange={(e) => patch({ codeFont: e.target.value })}
+            className="codezal-select w-auto"
+            style={{ fontFamily: `"${appearance.codeFont}", monospace` }}
+          >
+            {CODE_FONTS.map((f) => (
+              <option key={f.value} value={f.value} style={{ fontFamily: `"${f.value}", monospace` }}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        {/* UI font size removed — Tailwind text-[Npx] utilities on most components
+            override body font-size, so the slider had no visible effect. Use the
+            "Ekran ölçeği" (zoom) control above for whole-UI scaling. */}
+        <Row
+          label={t("settings.drawer.appearance.codeFontSizeLabel")}
+          description={t("settings.drawer.appearance.pixelsHint")}
+        >
+          <NumberInput
+            value={appearance.codeFontSizePx}
+            min={9}
+            max={20}
+            onChange={(v) => patch({ codeFontSizePx: v })}
+            suffix="px"
+          />
+        </Row>
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.contrastTitle")}>
+        <Row
+          label={t("settings.drawer.appearance.lightContrastLabel")}
+          description={t("settings.drawer.appearance.contrastDesc")}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={appearance.contrastLight}
+            onChange={(e) => patch({ contrastLight: parseInt(e.target.value, 10) })}
+            className="w-48"
+          />
+          <span className="ml-2 text-[11.5px] text-codezal-mute">{appearance.contrastLight}</span>
+        </Row>
+        <Row
+          label={t("settings.drawer.appearance.darkContrastLabel")}
+          description={t("settings.drawer.appearance.contrastDesc")}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={appearance.contrastDark}
+            onChange={(e) => patch({ contrastDark: parseInt(e.target.value, 10) })}
+            className="w-48"
+          />
+          <span className="ml-2 text-[11.5px] text-codezal-mute">{appearance.contrastDark}</span>
+        </Row>
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.surfacesTitle")}>
+        <Row
+          label={t("settings.drawer.appearance.translucentSidebarLabel")}
+          description={t("settings.drawer.appearance.translucentSidebarDesc")}
+        >
+          <Toggle
+            checked={appearance.translucentSidebar}
+            onChange={(v) => patch({ translucentSidebar: v })}
+          />
+        </Row>
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.motionTitle")}>
+        <Row
+          label={t("settings.drawer.appearance.reduceMotionLabel")}
+          description={t("settings.drawer.appearance.reduceMotionDesc")}
+        >
+          <Segmented<ReduceMotion>
+            value={appearance.reduceMotion}
+            options={[
+              { value: "system", label: t("settings.drawer.appearance.modeSystem") },
+              { value: "on", label: t("settings.drawer.appearance.reduceMotionOn") },
+              { value: "off", label: t("settings.drawer.appearance.reduceMotionOff") },
+            ]}
+            onChange={(v) => patch({ reduceMotion: v })}
+          />
+        </Row>
+        <Row
+          label={t("settings.drawer.appearance.pointerCursorLabel")}
+          description={t("settings.drawer.appearance.pointerCursorDesc")}
+        >
+          <Toggle
+            checked={appearance.pointerCursor}
+            onChange={(v) => patch({ pointerCursor: v })}
+          />
+        </Row>
+        <Row
+          label={t("settings.drawer.appearance.fontSmoothingLabel")}
+          description={t("settings.drawer.appearance.fontSmoothingDesc")}
+        >
+          <Toggle
+            checked={appearance.fontSmoothing}
+            onChange={(v) => patch({ fontSmoothing: v })}
+          />
+        </Row>
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.diffDisplayTitle")}>
+        <Row
+          label={t("settings.drawer.appearance.diffMarkersLabel")}
+          description={t("settings.drawer.appearance.diffMarkersDesc")}
+        >
+          <Segmented<DiffStyle>
+            value={appearance.diffStyle}
+            options={[
+              { value: "color", label: t("settings.drawer.appearance.diffColor") },
+              { value: "symbols", label: "+/-" },
+            ]}
+            onChange={(v) => patch({ diffStyle: v })}
+          />
+        </Row>
+      </Section>
+
+      <Section title={t("settings.drawer.appearance.importExportTitle")}>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="cursor-pointer rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-[12px] text-codezal-text hover:bg-codezal-panel-2">
+            {t("settings.drawer.appearance.importTheme")}
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void onImport(file)
+                e.target.value = ""
+              }}
+              className="hidden"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={exportCurrent}
+            className="rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-[12px] text-codezal-text hover:bg-codezal-panel-2"
+          >
+            {t("settings.drawer.appearance.exportCurrent")}
+          </button>
+        </div>
+        <p className="mt-2 text-[11.5px] text-codezal-mute">
+          {t("settings.drawer.appearance.userThemesHint")}
+        </p>
+        {importError && (
+          <p className="mt-2 text-[12px] text-destructive">{importError}</p>
+        )}
+      </Section>
+    </div>
+  )
+}
+
+// Editable hex color input. Accepts #rgb, #rrggbb (with or without #).
+// Commits live on every keystroke as soon as the draft is a valid hex —
+// invalid intermediate states keep the picker's previous color. Esc reverts.
+function HexInput({
+  value,
+  onCommit,
+}: {
+  value: string
+  onCommit: (hex: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  // Re-sync when external value changes (e.g. preset switch, reset).
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
+  function normalize(raw: string): string | null {
+    const v = raw.trim().replace(/^#/, "")
+    if (/^[0-9a-f]{3}$/i.test(v)) {
+      const r = v[0], g = v[1], b = v[2]
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase()
+    }
+    if (/^[0-9a-f]{6}$/i.test(v)) return `#${v}`.toLowerCase()
+    return null
+  }
+
+  function handleChange(next: string) {
+    setDraft(next)
+    const hex = normalize(next)
+    if (hex && hex.toLowerCase() !== value.toLowerCase()) {
+      onCommit(hex)
+    }
+  }
+
+  function commitOrRevert() {
+    const hex = normalize(draft)
+    if (hex) setDraft(hex.toUpperCase())
+    else setDraft(value)
+  }
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={commitOrRevert}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          ;(e.target as HTMLInputElement).blur()
+        } else if (e.key === "Escape") {
+          setDraft(value)
+          ;(e.target as HTMLInputElement).blur()
+        }
+      }}
+      spellCheck={false}
+      autoCapitalize="off"
+      autoCorrect="off"
+      className="w-[72px] rounded border border-codezal bg-codezal-input px-1.5 py-0.5 font-mono text-[10.5px] uppercase tracking-tight text-codezal-text focus:border-codezal-accent focus:outline-none"
+    />
+  )
+}
+
+function NumberInput({
+  value,
+  min,
+  max,
+  onChange,
+  suffix,
+}: {
+  value: number
+  min: number
+  max: number
+  onChange: (v: number) => void
+  suffix?: string
+}) {
+  // Draft state so the user can clear the input and type intermediate digits
+  // (e.g. typing "1" then "8" without being clamped to min on the first digit).
+  // Commit on blur or Enter; Esc reverts.
+  const [draft, setDraft] = useState<string>(String(value))
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  function commit(raw: string) {
+    if (raw.trim() === "") {
+      setDraft(String(value))
+      return
+    }
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n)) {
+      setDraft(String(value))
+      return
+    }
+    const clamped = Math.max(min, Math.min(max, n))
+    setDraft(String(clamped))
+    if (clamped !== value) onChange(clamped)
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            commit((e.target as HTMLInputElement).value)
+            ;(e.target as HTMLInputElement).blur()
+          } else if (e.key === "Escape") {
+            setDraft(String(value))
+            ;(e.target as HTMLInputElement).blur()
+          }
+        }}
+        className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-[12.5px] text-codezal-text"
+      />
+      {suffix && <span className="text-[11px] text-codezal-mute">{suffix}</span>}
+    </div>
+  )
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+        checked ? "bg-codezal-accent" : "bg-codezal-panel-2",
+      )}
+    >
+      <span
+        className={cn(
+          "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+          checked ? "translate-x-4" : "translate-x-0.5",
+        )}
+      />
+    </button>
   )
 }

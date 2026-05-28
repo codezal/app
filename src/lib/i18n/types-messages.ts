@@ -736,6 +736,10 @@ export type Messages = {
       semantic: string
       plugins: string
       about: string
+      // Optional — appearance tab label. Falls back to TR ("Görünüm") if missing.
+      appearance?: string
+      // Optional — Token Saving tab label. Component falls back to English.
+      tokens?: string
     }
     drawer: {
       headerPrefix: string
@@ -833,6 +837,89 @@ export type Messages = {
       shortcutPanel: string
       shortcutSend: string
       shortcutEsc: string
+      // Optional — appearance subview. Locales without these keys fall back to EN.
+      appearance?: {
+        modeTitle: string
+        modeLight: string
+        modeDark: string
+        modeSystem: string
+        themePresetsTitle: string
+        lightThemeLabel: string
+        lightThemeDesc: string
+        darkThemeLabel: string
+        darkThemeDesc: string
+        customColorsTitle: string
+        customColorsHint: string
+        resetCustomColors: string
+        typographyTitle: string
+        uiFontLabel: string
+        uiFontDesc: string
+        codeFontLabel: string
+        codeFontDesc: string
+        uiFontSizeLabel: string
+        codeFontSizeLabel: string
+        pixelsHint: string
+        contrastTitle: string
+        lightContrastLabel: string
+        darkContrastLabel: string
+        contrastDesc: string
+        surfacesTitle: string
+        translucentSidebarLabel: string
+        translucentSidebarDesc: string
+        motionTitle: string
+        reduceMotionLabel: string
+        reduceMotionDesc: string
+        reduceMotionOn: string
+        reduceMotionOff: string
+        pointerCursorLabel: string
+        pointerCursorDesc: string
+        fontSmoothingLabel: string
+        fontSmoothingDesc: string
+        diffDisplayTitle: string
+        diffMarkersLabel: string
+        diffMarkersDesc: string
+        diffColor: string
+        importExportTitle: string
+        importTheme: string
+        exportCurrent: string
+        userThemesHint: string
+        invalidThemeJson: string
+        importFailed: string
+        tokenAccent: string
+        tokenBackground: string
+        tokenForeground: string
+        tokenPanel: string
+        tokenSidebar: string
+        tokenChip: string
+        tokenDiffAdd: string
+        tokenDiffDel: string
+        customSuffix: string
+        // Display zoom (legacy fontScale moved into Appearance tab).
+        zoomTitle?: string
+        zoomDesc?: string
+        zoomSmall?: string
+        zoomMedium?: string
+        zoomLarge?: string
+        zoomXL?: string
+      }
+      // Optional — Token Saving tab keys. Component falls back to English literals.
+      tokensTitle?: string
+      tokensIntro?: string
+      tokensBriefTitle?: string
+      tokensBriefDesc?: string
+      tokensBriefEnable?: string
+      tokensBriefLevel?: string
+      tokensBriefLevelLite?: string
+      tokensBriefLevelFull?: string
+      tokensBriefLevelUltra?: string
+      tokensBriefLevelLiteDesc?: string
+      tokensBriefLevelFullDesc?: string
+      tokensBriefLevelUltraDesc?: string
+      tokensCompactTitle?: string
+      tokensCompactDesc?: string
+      tokensComingSoon?: string
+      tokensCodeMapTitle?: string
+      tokensCodeMapDesc?: string
     }
   }
 
