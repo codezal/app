@@ -21,7 +21,7 @@ import {
   type CodeMap,
 } from "@/lib/token-savers"
 import { cn } from "@/lib/utils"
-import { Zap, Terminal, Network } from "lucide-react"
+import { Zap, Terminal, Network, Check } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 // Local fallback helper: if a locale lacks our new keys, useT returns the
@@ -109,7 +109,9 @@ export function TokenSavingTab() {
 
       <CodeMapCard
         enabled={cfg.codeMap.enabled}
+        autoReindex={cfg.codeMap.autoReindex}
         onToggle={(enabled) => patchCodeMap({ enabled })}
+        onAutoReindex={(autoReindex) => patchCodeMap({ autoReindex })}
       />
     </div>
   )
@@ -167,24 +169,39 @@ function BriefModeCard({ enabled, level, onToggle, onLevel }: BriefCardProps) {
         {tt("settings.drawer.tokensBriefLevel", "Compression level")}
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {levels.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            disabled={!enabled}
-            onClick={() => onLevel(l.id)}
-            className={cn(
-              "flex flex-col items-start gap-1 rounded-md border px-2.5 py-2 text-left text-[11.5px] transition",
-              !enabled && "cursor-not-allowed opacity-50",
-              enabled && level === l.id
-                ? "border-codezal-accent bg-codezal-chip text-codezal-text"
-                : "border-codezal bg-codezal-panel-2 text-codezal-dim hover:bg-codezal-panel",
-            )}
-          >
-            <span className="font-medium text-codezal-text">{tt(l.titleKey, l.titleFb)}</span>
-            <span className="text-codezal-mute">{tt(l.descKey, l.descFb)}</span>
-          </button>
-        ))}
+        {levels.map((l) => {
+          const selected = enabled && level === l.id
+          return (
+            <button
+              key={l.id}
+              type="button"
+              disabled={!enabled}
+              onClick={() => onLevel(l.id)}
+              className={cn(
+                "relative flex flex-col items-start gap-1 rounded-md border-2 px-2.5 py-2 pr-7 text-left text-[11.5px] transition",
+                selected
+                  ? "border-codezal-accent bg-codezal-accent/10 text-codezal-text shadow-[0_0_0_2px_rgba(var(--codezal-accent-rgb,251_146_60),0.25)]"
+                  : "border-codezal bg-codezal-panel-2 text-codezal-dim hover:bg-codezal-panel",
+              )}
+              aria-pressed={selected}
+            >
+              {selected && (
+                <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-codezal-accent text-white">
+                  <Check className="h-3 w-3" strokeWidth={3} />
+                </span>
+              )}
+              <span
+                className={cn(
+                  "font-medium",
+                  selected ? "text-codezal-accent" : "text-codezal-text",
+                )}
+              >
+                {tt(l.titleKey, l.titleFb)}
+              </span>
+              <span className="text-codezal-mute">{tt(l.descKey, l.descFb)}</span>
+            </button>
+          )
+        })}
       </div>
 
       <button
@@ -238,10 +255,7 @@ function CompactOutputCard({ enabled, filters, onToggle, onFilter }: CompactCard
         {COMPACT_FILTERS.map((f) => (
           <label
             key={f.key}
-            className={cn(
-              "flex items-start gap-2 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 text-[11.5px]",
-              !enabled && "opacity-50",
-            )}
+            className="flex items-start gap-2 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 text-[11.5px]"
           >
             <input
               type="checkbox"
@@ -263,10 +277,12 @@ function CompactOutputCard({ enabled, filters, onToggle, onFilter }: CompactCard
 
 type CodeMapCardProps = {
   enabled: boolean
+  autoReindex: boolean
   onToggle: (v: boolean) => void
+  onAutoReindex: (v: boolean) => void
 }
 
-function CodeMapCard({ enabled, onToggle }: CodeMapCardProps) {
+function CodeMapCard({ enabled, autoReindex, onToggle, onAutoReindex }: CodeMapCardProps) {
   const tt = useTokensT()
   const active = useSessionsStore((s) => s.active)
   const workspace = active?.workspacePath
@@ -278,11 +294,30 @@ function CodeMapCard({ enabled, onToggle }: CodeMapCardProps) {
     builtAt: number
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Tracks whether we've already attempted an auto-build for this
+  // workspace+enabled combination so toggling doesn't re-trigger a build.
+  const [autoBuildAttempted, setAutoBuildAttempted] = useState(false)
+
+  async function build(reason: "manual" | "auto") {
+    if (!workspace || building) return
+    setBuilding(true)
+    setError(null)
+    try {
+      await buildCodeMap({ workspace, onProgress: setProgress })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      if (reason === "auto") setAutoBuildAttempted(true)
+    } finally {
+      setBuilding(false)
+      setProgress(null)
+    }
+  }
 
   useEffect(() => {
     let alive = true
     if (!workspace) {
       setStats(null)
+      setAutoBuildAttempted(false)
       return
     }
     void loadCodeMap(workspace).then((m: CodeMap | null) => {
@@ -296,22 +331,24 @@ function CodeMapCard({ enabled, onToggle }: CodeMapCardProps) {
     }
   }, [workspace, building])
 
-  async function onBuild() {
-    if (!workspace) {
-      setError("Connect a workspace folder first")
-      return
-    }
-    setBuilding(true)
-    setError(null)
-    try {
-      await buildCodeMap({ workspace, onProgress: setProgress })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBuilding(false)
-      setProgress(null)
-    }
-  }
+  // Auto-build when the user enables Code Map and no index exists yet.
+  // Runs once per (workspace,enabled) cycle; manual rebuild is always available.
+  useEffect(() => {
+    if (!enabled || !workspace || building) return
+    if (stats !== null) return
+    if (autoBuildAttempted) return
+    setAutoBuildAttempted(true)
+    void build("auto")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, workspace, stats, autoBuildAttempted])
+
+  // Reset the auto-build guard when card is disabled so re-enabling later
+  // (perhaps in a different workspace) triggers a fresh attempt.
+  useEffect(() => {
+    if (!enabled) setAutoBuildAttempted(false)
+  }, [enabled])
+
+  const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
   return (
     <FeatureCard
@@ -333,7 +370,7 @@ function CodeMapCard({ enabled, onToggle }: CodeMapCardProps) {
 
         {!workspace ? (
           <p className="text-codezal-mute">Connect a workspace folder to build a Code Map.</p>
-        ) : stats ? (
+        ) : stats && !building ? (
           <div className="rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2">
             <div className="text-codezal-text">
               <span className="font-medium">{stats.symbols.toLocaleString()}</span> symbols ·{" "}
@@ -343,16 +380,30 @@ function CodeMapCard({ enabled, onToggle }: CodeMapCardProps) {
               Built {new Date(stats.builtAt).toLocaleString()}
             </div>
           </div>
-        ) : (
+        ) : !building ? (
           <p className="text-codezal-mute">No index yet — click Build to generate one.</p>
-        )}
+        ) : null}
 
-        {progress && (
-          <div className="rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 font-mono text-[10.5px]">
-            <div>
-              {progress.done} / {progress.total} files · {progress.symbolsSoFar} symbols
+        {building && (
+          <div className="space-y-1.5 rounded-md border border-codezal-accent/40 bg-codezal-accent/5 px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2 text-codezal-text">
+              <span className="font-medium">Indexing workspace… please wait</span>
+              <span className="font-mono tabular-nums">{pct}%</span>
             </div>
-            <div className="truncate text-codezal-mute">{progress.currentFile}</div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-codezal-panel-2">
+              <div
+                className="h-full rounded-full bg-codezal-accent transition-[width] duration-150"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2 font-mono text-[10.5px] text-codezal-mute">
+              <span className="truncate">{progress?.currentFile ?? "preparing…"}</span>
+              <span className="shrink-0">
+                {progress
+                  ? `${progress.done}/${progress.total} files · ${progress.symbolsSoFar} symbols`
+                  : ""}
+              </span>
+            </div>
           </div>
         )}
 
@@ -362,11 +413,21 @@ function CodeMapCard({ enabled, onToggle }: CodeMapCardProps) {
           </div>
         )}
 
+        <label className="flex items-center gap-2 text-codezal-dim">
+          <input
+            type="checkbox"
+            checked={autoReindex}
+            disabled={!enabled}
+            onChange={(e) => onAutoReindex(e.target.checked)}
+          />
+          <span>Auto-rebuild index when enabling Code Map in a new workspace</span>
+        </label>
+
         <div>
           <button
             type="button"
             disabled={!enabled || !workspace || building}
-            onClick={onBuild}
+            onClick={() => void build("manual")}
             className={cn(
               "rounded-md border border-codezal bg-codezal-chip px-3 py-1.5 text-[11.5px] text-codezal-text",
               "hover:bg-codezal-panel disabled:cursor-not-allowed disabled:opacity-50",
@@ -391,12 +452,12 @@ type FeatureCardProps = {
 }
 
 function FeatureCard({ icon, title, desc, enabled, onToggle, comingSoonLabel, children }: FeatureCardProps) {
-  const disabled = Boolean(comingSoonLabel)
+  const placeholder = Boolean(comingSoonLabel)
   return (
     <section
       className={cn(
-        "rounded-lg border border-codezal bg-codezal-panel p-4",
-        disabled && "opacity-70",
+        "rounded-lg border border-codezal bg-codezal-panel p-4 transition-opacity",
+        placeholder && "opacity-70",
       )}
     >
       <div className="mb-3 flex items-start gap-3">
@@ -404,7 +465,7 @@ function FeatureCard({ icon, title, desc, enabled, onToggle, comingSoonLabel, ch
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <h4 className="text-[13.5px] font-semibold text-codezal-text">{title}</h4>
-            {comingSoonLabel ? (
+            {placeholder ? (
               <span className="rounded-full bg-codezal-chip px-2 py-0.5 text-[10px] text-codezal-dim">
                 {comingSoonLabel}
               </span>
@@ -415,14 +476,30 @@ function FeatureCard({ icon, title, desc, enabled, onToggle, comingSoonLabel, ch
                   checked={enabled}
                   onChange={(e) => onToggle(e.target.checked)}
                 />
-                <span className="text-codezal-dim">{enabled ? "On" : "Off"}</span>
+                <span
+                  className={cn(
+                    "font-medium",
+                    enabled ? "text-codezal-accent" : "text-codezal-dim",
+                  )}
+                >
+                  {enabled ? "On" : "Off"}
+                </span>
               </label>
             )}
           </div>
           <p className="mt-1 text-[11.5px] text-codezal-mute">{desc}</p>
         </div>
       </div>
-      {!disabled && children ? <div className="pl-7">{children}</div> : null}
+      {!placeholder && children ? (
+        <div
+          className={cn(
+            "pl-7 transition-opacity",
+            !enabled && "pointer-events-none opacity-50",
+          )}
+        >
+          {children}
+        </div>
+      ) : null}
     </section>
   )
 }
