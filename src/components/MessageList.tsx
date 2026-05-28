@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react"
 import { Markdown } from "./Markdown"
-import { CodezalGlyph, CodezalMark } from "./icons"
+import { CodezalMark } from "./icons"
 import { AgentCard } from "./AgentCard"
 import type { Message, Part } from "@/store/types"
 import { useSessionsStore } from "@/store/sessions"
@@ -753,15 +753,54 @@ function ToolBody({
     )
   }
 
-  // Generic — JSON input + raw output
+  if (call.toolName === "question") {
+    const prompt = String(input.prompt ?? "")
+    const choices = Array.isArray(input.choices) ? (input.choices as string[]) : []
+    const answer = result?.output ?? ""
+    return (
+      <>
+        <div className="overflow-hidden rounded-md border border-codezal-strong bg-codezal-panel-2/40">
+          <div className="px-4 py-3 text-[12.5px] leading-[1.65] text-codezal-text whitespace-pre-wrap">
+            {prompt}
+          </div>
+          {choices.length > 0 && (
+            <ul className="border-t border-codezal/60 bg-codezal-code/40 px-4 py-2.5 space-y-1 text-[12px] leading-[1.6] text-codezal-dim">
+              {choices.map((c, i) => (
+                <li key={i} className="whitespace-pre-wrap">{c}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {result && (
+          <OutputBlock
+            label={t("messageList.outputLabel")}
+            copyText={answer}
+            tone={result.isError ? "error" : "default"}
+          >
+            <div
+              className={cn(
+                "px-4 py-2.5 text-[12.5px] leading-[1.65] whitespace-pre-wrap",
+                result.isError ? "text-destructive" : "text-codezal-text",
+              )}
+            >
+              {answer}
+            </div>
+          </OutputBlock>
+        )}
+      </>
+    )
+  }
+
+  // Generic — pretty key/value input + raw output
   const inputJson = JSON.stringify(call.input, null, 2)
+  const entries = Object.entries((call.input as Record<string, unknown>) ?? {})
   return (
     <>
-      <OutputBlock label={t("messageList.inputLabel")} copyText={inputJson}>
-        <pre className="m-0 overflow-x-auto whitespace-pre-wrap bg-codezal-code px-4 py-3 font-mono text-[12px] leading-[1.65] text-codezal-text">
-          {inputJson}
-        </pre>
-      </OutputBlock>
+      {entries.length > 0 && (
+        <OutputBlock label={t("messageList.inputLabel")} copyText={inputJson}>
+          <KeyValueList entries={entries} />
+        </OutputBlock>
+      )}
       {result && (
         <OutputBlock
           label={t("messageList.outputLabel")}
@@ -848,6 +887,64 @@ function OutputBlock({
   )
 }
 
+// Pretty key/value list for generic tool inputs.
+// Short scalars render inline; long strings and structured values get a block.
+function KeyValueList({ entries }: { entries: [string, unknown][] }) {
+  return (
+    <div className="divide-y divide-codezal/40 bg-codezal-code">
+      {entries.map(([key, value]) => (
+        <KeyValueRow key={key} k={key} v={value} />
+      ))}
+    </div>
+  )
+}
+
+function KeyValueRow({ k, v }: { k: string; v: unknown }) {
+  const inline = formatInline(v)
+  if (inline !== null) {
+    return (
+      <div className="flex items-baseline gap-2 px-4 py-1.5 font-mono text-[12px] leading-[1.6]">
+        <span className="shrink-0 text-codezal-mute">{k}:</span>
+        <span className="min-w-0 break-all text-codezal-text">{inline}</span>
+      </div>
+    )
+  }
+  const block = formatBlock(v)
+  return (
+    <div className="px-4 py-2 font-mono text-[12px] leading-[1.6]">
+      <div className="text-codezal-mute">{k}:</div>
+      <pre className="m-0 mt-1 max-h-[280px] overflow-auto whitespace-pre-wrap text-codezal-text">
+        {block}
+      </pre>
+    </div>
+  )
+}
+
+// null = needs block render; otherwise a short inline string.
+function formatInline(v: unknown): string | null {
+  if (v === null) return "null"
+  if (v === undefined) return "—"
+  if (typeof v === "boolean") return v ? "true" : "false"
+  if (typeof v === "number") return String(v)
+  if (typeof v === "string") {
+    if (v.length === 0) return '""'
+    if (v.length > 120 || v.includes("\n")) return null
+    return v
+  }
+  if (Array.isArray(v) && v.length === 0) return "[]"
+  if (typeof v === "object" && v && Object.keys(v as object).length === 0) return "{}"
+  return null
+}
+
+function formatBlock(v: unknown): string {
+  if (typeof v === "string") return v
+  try {
+    return JSON.stringify(v, null, 2)
+  } catch {
+    return String(v)
+  }
+}
+
 function ErrorBlock({ text }: { text: string }) {
   return (
     <OutputBlock label={tStatic("messageList.errorLabel")} copyText={text} tone="error">
@@ -909,6 +1006,7 @@ function toolLabel(name: string): string {
 function toolPreview(name: string, input: unknown): string {
   const i = (input as Record<string, unknown>) ?? {}
   if (name === "bash") return oneLine(String(i.command ?? ""))
+  if (name === "question") return oneLine(String(i.prompt ?? ""))
   if (i.path) return String(i.path)
   return oneLine(JSON.stringify(input))
 }
@@ -1012,8 +1110,19 @@ function Welcome() {
                 "radial-gradient(circle, var(--codezal-accent, #f5b544) 0%, transparent 70%)",
             }}
           />
-          <div className="relative text-codezal-accent">
-            <CodezalGlyph size={56} />
+          <div className="relative flex h-14 w-14 items-center justify-center">
+            <img
+              src="/codezal-glyph-1024.png"
+              alt=""
+              aria-hidden
+              className="block h-full w-full object-contain dark:hidden"
+            />
+            <img
+              src="/codezal-glyph-white-1024.png"
+              alt=""
+              aria-hidden
+              className="hidden h-full w-full object-contain dark:block"
+            />
           </div>
         </div>
 

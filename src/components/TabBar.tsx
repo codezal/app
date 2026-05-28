@@ -8,6 +8,7 @@ import {
   GitBranch,
   MessageSquare,
   Notebook,
+  PanelLeftOpen,
   PanelRight,
   ShieldCheck,
   Sparkles,
@@ -54,9 +55,13 @@ const MODE_ICON: Record<PanelMode, React.ComponentType<{ className?: string }>> 
 type Props = {
   panelMode: PanelMode | null
   onSetPanelMode: (m: PanelMode | null) => void
+  // True when the sidebar is collapsed. In that state TabBar takes over the
+  // top-left titlebar region (reserves space for traffic lights + expand button).
+  sidebarHidden?: boolean
+  onExpandSidebar?: () => void
 }
 
-export function TabBar({ panelMode, onSetPanelMode }: Props) {
+export function TabBar({ panelMode, onSetPanelMode, sidebarHidden, onExpandSidebar }: Props) {
   const t = useT()
   const active = useSessionsStore((s) => s.active)
   const setActiveFile = useSessionsStore((s) => s.setActiveFile)
@@ -69,8 +74,24 @@ export function TabBar({ panelMode, onSetPanelMode }: Props) {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-[42px] items-end border-b border-codezal bg-codezal-sidebar pl-4 pr-3"
+      className={cn(
+        "relative flex h-[46px] items-end border-b border-codezal bg-codezal-sidebar pr-3",
+        // Sidebar collapsed: traffic lights overlay this row at x=20 y=24 (Tauri config).
+        // Reserve ~120px so first tab clears 3 traffic lights (~60px wide) + expand button.
+        sidebarHidden ? "pl-[120px]" : "pl-4",
+      )}
     >
+      {sidebarHidden && onExpandSidebar && (
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          onClick={onExpandSidebar}
+          title="Kenar çubuğunu göster"
+          className="absolute left-[80px] top-[12px] z-20 flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+        >
+          <PanelLeftOpen className="h-3.5 w-3.5" />
+        </button>
+      )}
       <div className="flex h-full min-w-0 flex-1 items-end overflow-x-auto">
         {/* Sohbet tab — daima sol başta, pinned */}
         {active && (

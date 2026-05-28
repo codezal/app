@@ -1,10 +1,12 @@
 // Sol sidebar — traffic lights başlığı, yeni oturum, nav, proje grupları, user footer.
 // Codezal Klasik tasarımı.
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronUp,
   Folder,
   MessageSquare,
+  MoreVertical,
+  PanelLeftClose,
   Play,
   Plus,
   Search,
@@ -14,9 +16,10 @@ import {
   Trash2,
   Zap,
 } from "lucide-react"
+import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import { useSessionsStore } from "@/store/sessions"
 import { useSettingsStore } from "@/store/settings"
-import { basename } from "@/lib/workspace"
+import { basename, pickWorkspaceFolder } from "@/lib/workspace"
 import type { SessionMeta } from "@/store/types"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
@@ -26,9 +29,11 @@ type Props = {
   onOpenRoutines?: () => void
   // Bir geçmiş session'ın user mesajlarını yeni session'da yeniden çalıştır.
   onReplay?: (id: string) => void
+  // Collapse the sidebar — toggle button next to traffic lights triggers this.
+  onCollapse?: () => void
 }
 
-export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
+export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay, onCollapse }: Props) {
   const { index, activeId, create, open, remove } = useSessionsStore()
   const settings = useSettingsStore((s) => s.settings)
   const [query, setQuery] = useState("")
@@ -47,6 +52,14 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
     await create(settings.defaultProvider, settings.defaultModel, undefined)
   }
 
+  async function onNewProject() {
+    // Klasör seçici aç → seçilen path yeni session'ın workspace'i olur,
+    // sidebar'da o klasör adıyla yeni bir proje grubu olarak görünür.
+    const path = await pickWorkspaceFolder()
+    if (!path) return
+    await create(settings.defaultProvider, settings.defaultModel, path)
+  }
+
   function onOpen(m: SessionMeta) {
     void open(m.id)
   }
@@ -57,11 +70,24 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
 
   return (
     <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-codezal bg-codezal-sidebar">
-      {/* Native traffic lights için drag region. Trafficlight position: x=14 y=14 (tauri.conf) */}
+      {/* Drag region. Tauri config: trafficLightPosition x=20 y=16, close button h=12 → center y=22.
+          Region h=44 → vertical center y=22. Toggle button h=22 top=11 → center y=22. All aligned. */}
       <div
         data-tauri-drag-region
-        className="h-[38px] w-full"
-      />
+        className="relative h-[44px] w-full"
+      >
+        {onCollapse && (
+          <button
+            type="button"
+            data-tauri-drag-region="false"
+            onClick={onCollapse}
+            title="Kenar çubuğunu gizle"
+            className="absolute left-[80px] top-[11px] z-20 flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+          >
+            <PanelLeftClose className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* Yeni oturum butonu */}
       <div className="px-2.5 pb-2 pt-1">
@@ -112,63 +138,115 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay }: Props) {
             {query ? t("sidebar.noSearchResults") : t("sidebar.noSessions")}
           </div>
         ) : (
-          groupByWorkspace(filtered).map(([wsKey, items]) => (
-            <ProjectGroup
-              key={wsKey}
-              name={wsKey === "" ? t("sidebar.chats") : basename(wsKey)}
-              isLoose={wsKey === ""}
-            >
-              <ul className="flex flex-col gap-0.5">
-                {items.map((m) => (
-                  <li key={m.id}>
-                    <div
-                      className={cn(
-                        "group flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px]",
-                        activeId === m.id
-                          ? "bg-codezal-accent-dim text-codezal-text"
-                          : "text-codezal-dim hover:bg-codezal-panel-2",
-                      )}
-                    >
-                      <span
+          (() => {
+            const grouped = groupByWorkspace(filtered)
+            const loose = grouped.find(([k]) => k === "")
+            const projects = grouped.filter(([k]) => k !== "")
+            const renderGroup = ([wsKey, items]: [string, SessionMeta[]]) => (
+              <ProjectGroup
+                key={wsKey}
+                name={wsKey === "" ? t("sidebar.chats") : basename(wsKey)}
+                isLoose={wsKey === ""}
+                workspacePath={wsKey || undefined}
+                onNewInWorkspace={
+                  wsKey
+                    ? () =>
+                        void create(
+                          settings.defaultProvider,
+                          settings.defaultModel,
+                          wsKey,
+                        )
+                    : undefined
+                }
+                onDeleteAllInWorkspace={
+                  wsKey
+                    ? () => {
+                        for (const it of items) void remove(it.id)
+                      }
+                    : undefined
+                }
+                onOpenInFinder={
+                  wsKey ? () => void openPathInFinder(wsKey) : undefined
+                }
+              >
+                <ul className="flex flex-col gap-0.5">
+                  {items.map((m) => (
+                    <li key={m.id}>
+                      <div
                         className={cn(
-                          "h-1.5 w-1.5 shrink-0 rounded-full",
+                          "group flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px]",
                           activeId === m.id
-                            ? "bg-codezal-accent ring-accent-glow"
-                            : "bg-codezal-mute/60",
+                            ? "bg-codezal-accent-dim text-codezal-text"
+                            : "text-codezal-dim hover:bg-codezal-panel-2",
                         )}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => onOpen(m)}
-                        className="flex flex-1 items-center gap-2 truncate text-left"
                       >
-                        <MessageSquare className="hidden h-3 w-3 shrink-0 opacity-60" />
-                        <span className="truncate">{m.title}</span>
-                      </button>
-                      {onReplay && (
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                            activeId === m.id
+                              ? "bg-codezal-accent ring-accent-glow"
+                              : "bg-codezal-mute/60",
+                          )}
+                        />
                         <button
                           type="button"
-                          onClick={() => onReplay(m.id)}
-                          className="rounded p-0.5 opacity-0 hover:bg-codezal-panel-2 hover:text-codezal-accent group-hover:opacity-100"
-                          title={t("sidebar.replaySession")}
+                          onClick={() => onOpen(m)}
+                          className="flex flex-1 items-center gap-2 truncate text-left"
                         >
-                          <Play className="h-3 w-3" />
+                          <MessageSquare className="hidden h-3 w-3 shrink-0 opacity-60" />
+                          <span className="truncate">{m.title}</span>
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onRemove(m.id)}
-                        className="rounded p-0.5 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                        title={t("sidebar.deleteSession")}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </ProjectGroup>
-          ))
+                        {onReplay && (
+                          <button
+                            type="button"
+                            onClick={() => onReplay(m.id)}
+                            className="rounded p-0.5 opacity-0 hover:bg-codezal-panel-2 hover:text-codezal-accent group-hover:opacity-100"
+                            title={t("sidebar.replaySession")}
+                          >
+                            <Play className="h-3 w-3" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onRemove(m.id)}
+                          className="rounded p-0.5 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                          title={t("sidebar.deleteSession")}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </ProjectGroup>
+            )
+            return (
+              <>
+                {loose && renderGroup(loose)}
+                {/* "Projeler" başlığı — daima görünür, projeler yoksa bile + buton ile yeni proje açılabilir */}
+                <div className="group/projhead mb-1 mt-2 flex items-center gap-1.5 px-2.5 pb-1">
+                  <span className="flex-1 text-[12px] text-codezal-mute">
+                    Projeler
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void onNewProject()}
+                    title="Yeni proje (klasör seç)"
+                    className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {projects.length === 0 ? (
+                  <div className="px-3 pb-2 text-[11.5px] text-codezal-mute">
+                    Henüz proje yok. + ile bir klasör seç.
+                  </div>
+                ) : (
+                  projects.map(renderGroup)
+                )}
+              </>
+            )
+          })()
         )}
       </div>
 
@@ -221,31 +299,151 @@ function NavItem({
   )
 }
 
-// Proje başlığı + altındaki session listesi
+// Proje başlığı + altındaki session listesi.
+// Bound projects (workspacePath !== "") get + (new session in this workspace)
+// and ⋯ (context menu) on hover. Loose chats group hides both.
 function ProjectGroup({
   name,
   isLoose,
+  workspacePath,
+  onNewInWorkspace,
+  onDeleteAllInWorkspace,
+  onOpenInFinder,
   children,
 }: {
   name: string
   isLoose?: boolean
+  workspacePath?: string
+  onNewInWorkspace?: () => void
+  onDeleteAllInWorkspace?: () => void
+  onOpenInFinder?: () => void
   children: React.ReactNode
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  // Outside-click to close menu
+  useEffect(() => {
+    if (!menuOpen) return
+    function onDoc(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [menuOpen])
+
   return (
-    <div className="mb-3">
-      <div className="mb-1 flex items-center gap-1.5 px-2.5 pb-1">
+    <div className="group/proj mb-3">
+      <div className="relative mb-1 flex items-center gap-1.5 px-2.5 pb-1">
         {!isLoose && <Folder className="h-2.5 w-2.5 text-codezal-mute" />}
-        <span className="text-[11px] font-medium uppercase tracking-wide text-codezal-mute">
+        <span className="flex-1 truncate text-[12.5px] text-codezal-dim">
           {name}
         </span>
+        {!isLoose && (
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/proj:opacity-100">
+            {onNewInWorkspace && (
+              <button
+                type="button"
+                onClick={onNewInWorkspace}
+                title="Bu projede yeni sohbet"
+                className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                title="Proje seçenekleri"
+                className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-md border border-codezal bg-codezal-panel py-1 text-[12px] shadow-lg">
+                  {onNewInWorkspace && (
+                    <MenuItem
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onNewInWorkspace()
+                      }}
+                    >
+                      Yeni sohbet
+                    </MenuItem>
+                  )}
+                  {onOpenInFinder && workspacePath && (
+                    <MenuItem
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onOpenInFinder()
+                      }}
+                    >
+                      Finder'da aç
+                    </MenuItem>
+                  )}
+                  {onDeleteAllInWorkspace && (
+                    <MenuItem
+                      danger
+                      onClick={() => {
+                        setMenuOpen(false)
+                        if (window.confirm(`"${name}" altındaki tüm sohbetler silinsin mi?`)) {
+                          onDeleteAllInWorkspace()
+                        }
+                      }}
+                    >
+                      Tüm sohbetleri sil
+                    </MenuItem>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {children}
     </div>
   )
 }
 
+function MenuItem({
+  children,
+  onClick,
+  danger,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "block w-full px-3 py-1.5 text-left",
+        danger
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-codezal-text hover:bg-codezal-panel-2",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 // Yardımcı: marka logosu daha sonra TitleStrip'te kullanılacak
 export { Sparkles as TitleSpark }
+
+// Reveal a workspace path in Finder/Explorer/Files via Tauri opener.
+async function openPathInFinder(path: string): Promise<void> {
+  try {
+    await revealItemInDir(path)
+  } catch (e) {
+    console.warn("[sidebar] revealItemInDir failed:", e)
+  }
+}
 
 // Session metalarını workspacePath bazlı grupla; "" key = klasörsüz
 // Sıralama: klasörsüz en altta, diğerleri içindeki en yeni session'a göre

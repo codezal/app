@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Fira+Code:wght@400;500;700&family=Cascadia+Code:wght@400;500;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -116,6 +116,14 @@
 }
 
 @layer base {
+  :root {
+    /* Defaults — overwritten at runtime by applyAppearance() */
+    --codezal-ui-font: "Roboto";
+    --codezal-code-font: "JetBrains Mono";
+    --codezal-ui-font-size: 14px;
+    --codezal-code-font-size: 13px;
+  }
+
   * {
     @apply border-border;
   }
@@ -126,23 +134,79 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: var(--codezal-ui-font), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
-    font-size: 14px;
+    font-size: var(--codezal-ui-font-size);
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
-  /* Mono — kod blokları + inline code + path için.
-     IBM Plex Mono okunabilir + dengeli x-height. Fallback olarak sistem mono. */
+  /* Mono — code blocks, inline code, paths. Falls back to system mono.
+     !important on font-size so Tailwind text-[Npx] utilities on parent containers
+     don't override the user-chosen code font size on actual code/pre elements. */
   .font-mono,
   code,
   pre,
   kbd {
-    font-family: "IBM Plex Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--codezal-code-font), "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
     font-feature-settings: "liga" 0;
+    font-size: var(--codezal-code-font-size) !important;
+  }
+
+  /* Font smoothing toggle (data-font-smoothing=off → disable subpixel AA) */
+  html[data-font-smoothing="off"] body {
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+  }
+
+  /* Reduce motion override.
+     - data-reduce-motion=on   → kill all animations/transitions
+     - data-reduce-motion=off  → ignore OS preference, full motion
+     - data-reduce-motion=system → defer to @media (prefers-reduced-motion) */
+  html[data-reduce-motion="on"] *,
+  html[data-reduce-motion="on"] *::before,
+  html[data-reduce-motion="on"] *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html[data-reduce-motion="system"] *,
+    html[data-reduce-motion="system"] *::before,
+    html[data-reduce-motion="system"] *::after {
+      animation-duration: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0ms !important;
+    }
+  }
+
+  /* Pointer cursor — show pointer on hover for interactive elements */
+  html[data-pointer-cursor="on"] button,
+  html[data-pointer-cursor="on"] a,
+  html[data-pointer-cursor="on"] [role="button"] {
+    cursor: pointer;
+  }
+
+  /* Diff style toggle: data-diff-style=symbols → hide background color bars,
+     rely on +/- glyphs only. Components opt in via [data-diff-row] markers. */
+  html[data-diff-style="symbols"] [data-diff-row="add"],
+  html[data-diff-style="symbols"] [data-diff-row="del"] {
+    background-color: transparent !important;
+  }
+
+}
+
+/* Translucent sidebar — must live AFTER the .bg-codezal-sidebar utility
+   declaration to win the cascade. Tailwind's @layer utilities comes after
+   @layer base, so this rule is placed in the utilities layer. */
+@layer utilities {
+  html[data-translucent-sidebar="on"] .bg-codezal-sidebar {
+    background-color: hsl(var(--codezal-sidebar) / 0.72) !important;
+    backdrop-filter: saturate(140%) blur(14px);
+    -webkit-backdrop-filter: saturate(140%) blur(14px);
   }
 }
 
@@ -177,5 +241,43 @@
 
   .ring-accent-glow {
     box-shadow: 0 0 6px hsl(var(--codezal-accent) / 0.55);
+  }
+
+  /* Polished select — strips the native chrome and paints our own chevron.
+     Use .codezal-select on any <select> that should match the settings styling. */
+  .codezal-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: hsl(var(--codezal-input));
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
+    border: 1px solid rgb(var(--codezal-line-rgb) / 0.18);
+    border-radius: 0.375rem;
+    color: hsl(var(--codezal-text));
+    font-size: 12.5px;
+    padding: 6px 30px 6px 10px;
+    line-height: 1.3;
+    min-height: 32px;
+    min-width: 12rem;
+    width: 100%;
+    cursor: pointer;
+    transition: border-color 120ms, box-shadow 120ms;
+  }
+  /* When the select sits in an auto-width container (e.g. Settings Row's shrink-0),
+     don't force 100% — fall back to min-width. Override by adding `w-auto` class. */
+  .codezal-select.w-auto { width: auto; }
+  .codezal-select:hover {
+    border-color: rgb(var(--codezal-line-rgb) / 0.32);
+  }
+  .codezal-select:focus {
+    outline: none;
+    border-color: hsl(var(--codezal-accent));
+    box-shadow: 0 0 0 3px hsl(var(--codezal-accent) / 0.18);
+  }
+  .codezal-select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
