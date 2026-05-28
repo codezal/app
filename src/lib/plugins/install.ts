@@ -27,6 +27,11 @@ function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, `'\\''`) + "'"
 }
 
+// Cross-platform timeout wrapper (macOS'ta `timeout` yok, Homebrew'de `gtimeout`).
+function withTimeout(cmd: string, secs: number): string {
+  return `T="$(command -v timeout || command -v gtimeout || true)"; \${T:+$T ${secs} }${cmd}`
+}
+
 async function pluginsRoot(): Promise<string> {
   const home = await homeDir()
   const r = home.replace(/[\\/]+$/, "") + "/.codezal/plugins"
@@ -51,7 +56,7 @@ async function fetchPluginSource(
       ? source.repo
       : `https://github.com/${source.repo}.git`
     const cloneCmd = `git clone --filter=blob:none --no-checkout ${shellQuote(repoUrl)} ${shellQuote(tmpDir)}`
-    const c = await Command.create("bash", ["-lc", `timeout 180 ${cloneCmd}`]).execute()
+    const c = await Command.create("bash", ["-lc", withTimeout(cloneCmd, 180)]).execute()
     if (c.code !== 0) {
       throw new Error(`git clone başarısız: ${c.stderr.trim()}`)
     }

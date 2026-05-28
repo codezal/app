@@ -21,6 +21,12 @@ function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, `'\\''`) + "'"
 }
 
+// Cross-platform timeout wrapper. Linux'ta `timeout`, macOS Homebrew'de `gtimeout`,
+// ikisi de yoksa komut direkt çalışır (git kendi network timeout'una bırakılır).
+function withTimeout(cmd: string, secs: number): string {
+  return `T="$(command -v timeout || command -v gtimeout || true)"; \${T:+$T ${secs} }${cmd}`
+}
+
 async function marketplacesRoot(): Promise<string> {
   const home = await homeDir()
   const r = home.replace(/[\\/]+$/, "") + "/.codezal/marketplaces"
@@ -47,7 +53,7 @@ export async function addMarketplace(url: string): Promise<RegisteredMarketplace
 
   if (!(await exists(localPath))) {
     const cmd = `git clone --depth 1 ${shellQuote(url)} ${shellQuote(localPath)}`
-    const r = await Command.create("bash", ["-lc", `timeout 120 ${cmd}`]).execute()
+    const r = await Command.create("bash", ["-lc", withTimeout(cmd, 120)]).execute()
     if (r.code !== 0) {
       throw new Error(`Marketplace clone başarısız: ${r.stderr.trim() || r.stdout.trim()}`)
     }
@@ -83,7 +89,7 @@ export async function addMarketplace(url: string): Promise<RegisteredMarketplace
 // Marketplace'i pull et (mevcut clone'u güncelle).
 export async function pullMarketplace(localPath: string): Promise<void> {
   const cmd = `cd ${shellQuote(localPath)} && git fetch --depth 1 && git reset --hard origin/HEAD`
-  const r = await Command.create("bash", ["-lc", `timeout 120 ${cmd}`]).execute()
+  const r = await Command.create("bash", ["-lc", withTimeout(cmd, 120)]).execute()
   if (r.code !== 0) {
     throw new Error(`Marketplace pull başarısız: ${r.stderr.trim()}`)
   }
