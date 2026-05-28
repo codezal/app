@@ -15,6 +15,7 @@ export type PtySpawnOpts = {
   cols: number
   cwd?: string
   shell?: string
+  env?: Record<string, string>
 }
 
 export type PtyHandle = {
@@ -35,6 +36,7 @@ export async function spawnPty(opts: PtySpawnOpts): Promise<PtyHandle> {
     cols: opts.cols,
     cwd: opts.cwd,
     shell: opts.shell,
+    env: opts.env,
   })
 
   // Active listener'lar — dispose'da temizlenir

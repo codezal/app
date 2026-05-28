@@ -32,8 +32,11 @@ type Props = {
 
 const PANEL_W_KEY = "codezal.contextPanel.width"
 const PANEL_W_MIN = 240
-const PANEL_W_MAX = 800
+const PANEL_W_MAX = 1200
 const PANEL_W_DEFAULT = 320
+// Terminal needs more cols; bump default and per-mode key so non-terminal panels stay compact.
+const PANEL_W_KEY_TERMINAL = "codezal.contextPanel.terminalWidth"
+const PANEL_W_TERMINAL_DEFAULT = 560
 
 export function ContextPanel({ mode, onClose }: Props) {
   const t = useT()
@@ -42,16 +45,26 @@ export function ContextPanel({ mode, onClose }: Props) {
   // Terminal kendi scroll'u olur — diğerlerinde overflow + padding kullan
   const isTerminal = mode === "terminal"
 
-  // Drag-to-resize: sol kenardan sürükleyince panel genişler/daralır
+  // Drag-to-resize: sol kenardan sürükleyince panel genişler/daralır.
+  // Terminal modu kendi key'inde — kod paneli dar, terminal geniş tutulabilir.
+  const storageKey = isTerminal ? PANEL_W_KEY_TERMINAL : PANEL_W_KEY
+  const defaultW = isTerminal ? PANEL_W_TERMINAL_DEFAULT : PANEL_W_DEFAULT
   const [width, setWidth] = useState<number>(() => {
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(PANEL_W_KEY) : null
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null
     const n = raw ? Number(raw) : NaN
-    return Number.isFinite(n) && n >= PANEL_W_MIN && n <= PANEL_W_MAX ? n : PANEL_W_DEFAULT
+    return Number.isFinite(n) && n >= PANEL_W_MIN && n <= PANEL_W_MAX ? n : defaultW
   })
 
+  // Mod değişince yeni key'in saved değerine geç
   useEffect(() => {
-    window.localStorage.setItem(PANEL_W_KEY, String(width))
-  }, [width])
+    const raw = window.localStorage.getItem(storageKey)
+    const n = raw ? Number(raw) : NaN
+    setWidth(Number.isFinite(n) && n >= PANEL_W_MIN && n <= PANEL_W_MAX ? n : defaultW)
+  }, [storageKey, defaultW])
+
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, String(width))
+  }, [storageKey, width])
 
   function startResize(e: React.MouseEvent) {
     e.preventDefault()
@@ -80,13 +93,13 @@ export function ContextPanel({ mode, onClose }: Props) {
       style={{ width }}
       className="relative flex h-full shrink-0 flex-col border-l border-codezal bg-codezal-bg"
     >
-      {/* Sol kenar drag handle — 6px hit area, hover/drag'de accent çizgi */}
+      {/* Sol kenar drag handle — 6px hit area, idle'de hafif çizgi, hover/drag'de accent */}
       <div
         onMouseDown={startResize}
         className="group absolute left-0 top-0 z-20 h-full w-[6px] -translate-x-[3px] cursor-col-resize"
         title={t("contextPanel.resizeTitle")}
       >
-        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-transparent transition-colors group-hover:bg-codezal-accent" />
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-codezal-hair transition-colors group-hover:bg-codezal-accent" />
       </div>
       <header className="flex shrink-0 items-center gap-2 border-b border-codezal px-3 py-2">
         <span className="text-[12px] font-semibold uppercase tracking-wider text-codezal-dim">

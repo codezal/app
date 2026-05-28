@@ -7,6 +7,8 @@ import { WebLinksAddon } from "@xterm/addon-web-links"
 import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-react"
 import { useTerminalsStore, type TerminalSession } from "@/store/terminals"
 import { spawnPty, type PtyHandle } from "@/lib/pty"
+import { rcfileEnv } from "@/lib/terminal-rcfile"
+import { useSettingsStore } from "@/store/settings"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { t as tStatic } from "@/lib/i18n"
@@ -240,6 +242,8 @@ function TerminalView({
   const fitRef = useRef<FitAddon | null>(null)
   const patch = useTerminalsStore((s) => s.patch)
   const [error, setError] = useState<string | null>(null)
+  // Default true — kullanıcı Settings'ten kapatabilir.
+  const shortPrompt = useSettingsStore((s) => s.settings.terminalShortPrompt ?? true)
 
   // Mount + PTY spawn (sadece bir kez per session)
   useEffect(() => {
@@ -264,7 +268,15 @@ function TerminalView({
     term.loadAddon(fit)
     term.loadAddon(links)
     term.open(el)
-    fit.fit()
+    // fit() race: container layout henüz hesaplanmamış olabilir → RAF ile ertele.
+    // Ek olarak this._renderer.value.dimensions hatası için try/catch.
+    requestAnimationFrame(() => {
+      try {
+        fit.fit()
+      } catch {
+        // xterm internal race — sonraki ResizeObserver ile zaten fit eder
+      }
+    })
 
     termRef.current = term
     fitRef.current = fit
@@ -272,10 +284,12 @@ function TerminalView({
     let mounted = true
     ;(async () => {
       try {
+        const env = await rcfileEnv({ shortPrompt }).catch(() => undefined)
         const handle = await spawnPty({
           rows: term.rows,
           cols: term.cols,
           cwd: workspacePath,
+          env,
         })
         if (!mounted) {
           await handle.dispose()

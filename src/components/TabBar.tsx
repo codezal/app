@@ -10,6 +10,7 @@ import {
   Notebook,
   PanelLeftOpen,
   PanelRight,
+  Search,
   ShieldCheck,
   Sparkles,
   Terminal as TerminalIcon,
@@ -59,9 +60,10 @@ type Props = {
   // top-left titlebar region (reserves space for traffic lights + expand button).
   sidebarHidden?: boolean
   onExpandSidebar?: () => void
+  onOpenSearch?: () => void
 }
 
-export function TabBar({ panelMode, onSetPanelMode, sidebarHidden, onExpandSidebar }: Props) {
+export function TabBar({ panelMode, onSetPanelMode, sidebarHidden, onExpandSidebar, onOpenSearch }: Props) {
   const t = useT()
   const active = useSessionsStore((s) => s.active)
   const setActiveFile = useSessionsStore((s) => s.setActiveFile)
@@ -73,26 +75,44 @@ export function TabBar({ panelMode, onSetPanelMode, sidebarHidden, onExpandSideb
 
   return (
     <header
-      data-tauri-drag-region
       className={cn(
-        "relative flex h-[46px] items-end border-b border-codezal bg-codezal-sidebar pr-3",
+        "relative flex h-[52px] items-end border-b border-codezal bg-codezal-sidebar pr-3",
         // Sidebar collapsed: traffic lights overlay this row at x=20 y=24 (Tauri config).
-        // Reserve ~120px so first tab clears 3 traffic lights (~60px wide) + expand button.
-        sidebarHidden ? "pl-[120px]" : "pl-4",
+        // Reserve ~128px so first tab clears 3 traffic lights (~60px wide) + expand button + search button.
+        sidebarHidden ? "pl-[128px]" : "pl-4",
       )}
     >
+      {/* Draggable background area that starts after the buttons when sidebar is hidden to prevent click blocking */}
+      <div
+        data-tauri-drag-region
+        className={cn(
+          "absolute inset-y-0 right-0 z-0",
+          sidebarHidden ? "left-[124px]" : "left-0"
+        )}
+      />
       {sidebarHidden && onExpandSidebar && (
-        <button
-          type="button"
-          data-tauri-drag-region="false"
-          onClick={onExpandSidebar}
-          title="Kenar çubuğunu göster"
-          className="absolute left-[80px] top-[12px] z-20 flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
-        >
-          <PanelLeftOpen className="h-3.5 w-3.5" />
-        </button>
+        <div className="absolute left-[82px] top-[9px] z-20 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onExpandSidebar}
+            title="Kenar çubuğunu göster"
+            className="flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+          >
+            <PanelLeftOpen className="h-3.5 w-3.5" />
+          </button>
+          {onOpenSearch && (
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              title={t("common.search")}
+              className="flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       )}
-      <div className="flex h-full min-w-0 flex-1 items-end overflow-x-auto">
+      <div className="relative z-10 flex h-full min-w-0 flex-1 items-end overflow-x-auto">
         {/* Sohbet tab — daima sol başta, pinned */}
         {active && (
           <button
@@ -206,7 +226,7 @@ function PanelMenu({
   const items: PanelMode[] = ["files", "git", "agents", "skills", "memory", "rules", "terminal"]
 
   return (
-    <div ref={ref} className="relative mb-1">
+    <div ref={ref} className="relative z-10 mb-1">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

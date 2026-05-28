@@ -21,7 +21,14 @@ import {
   X,
   Coins,
 } from "lucide-react"
-import { PROVIDERS, type ProviderId } from "@/lib/providers"
+import {
+  listProviderAdapters,
+  modelsFor,
+  defaultModelFor,
+  isConnectedSync,
+  type ProviderId,
+} from "@/lib/providers"
+import { modelDetail, type ProvidersCatalog } from "@/lib/providers-catalog"
 import { useSettingsStore } from "@/store/settings"
 import { useSessionsStore } from "@/store/sessions"
 import { listMcpStatus, parseMcpServersJson, type McpServerConfig, type McpStatus } from "@/lib/mcp"
@@ -179,36 +186,7 @@ function GeneralTab() {
       </Section>
 
       <Section title={t("settings.drawer.defaultProviderModelTitle")}>
-        <div className="grid grid-cols-2 gap-2">
-          <select
-            value={settings.defaultProvider}
-            onChange={(e) => {
-              const id = e.target.value as ProviderId
-              void update({
-                defaultProvider: id,
-                defaultModel: PROVIDERS[id].defaultModel,
-              })
-            }}
-            className="codezal-select"
-          >
-            {Object.values(PROVIDERS).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={settings.defaultModel}
-            onChange={(e) => void update({ defaultModel: e.target.value })}
-            className="codezal-select"
-          >
-            {PROVIDERS[settings.defaultProvider].models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
+        <DefaultProviderModelSelector />
         <p className="mt-2 text-[11px] text-codezal-mute">
           {t("settings.drawer.defaultProviderModelHint")}
         </p>
@@ -315,6 +293,79 @@ function GeneralTab() {
           {t("settings.drawer.compactExplain")}
         </p>
       </Section>
+    </div>
+  )
+}
+
+// Default provider/model picker — catalog-aware replacement for the old
+// PROVIDERS[id].models lookup. Lists only connected providers (otherwise
+// the user couldn't actually run the selected default). Falls back to the
+// raw model id when models.dev has no friendly name.
+function DefaultProviderModelSelector() {
+  const t = useT()
+  const settings = useSettingsStore((s) => s.settings)
+  const update = useSettingsStore((s) => s.update)
+  const catalog = settings.providerCatalog?.data as ProvidersCatalog | undefined
+
+  const adapters = listProviderAdapters(catalog)
+  const connected = adapters
+    .filter((p) => isConnectedSync(p, settings))
+    .sort((a, b) => {
+      if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
+      return a.label.localeCompare(b.label)
+    })
+
+  if (connected.length === 0) {
+    return (
+      <p className="text-[12px] text-codezal-mute">
+        {t("composer.noProvidersConnected")}
+      </p>
+    )
+  }
+
+  const currentId = settings.defaultProvider
+  // Active provider may no longer be connected (user disconnected it). Fall
+  // back to the first connected entry so the dropdowns always have a valid
+  // selection.
+  const activeProvider = connected.find((p) => p.id === currentId) ?? connected[0]
+  const models = modelsFor(activeProvider.id, catalog, settings.modelStatus)
+  const currentModel = models.includes(settings.defaultModel)
+    ? settings.defaultModel
+    : defaultModelFor(activeProvider.id, catalog)
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <select
+        value={activeProvider.id}
+        onChange={(e) => {
+          const id = e.target.value as ProviderId
+          void update({
+            defaultProvider: id,
+            defaultModel: defaultModelFor(id, catalog),
+          })
+        }}
+        className="codezal-select"
+      >
+        {connected.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      <select
+        value={currentModel}
+        onChange={(e) => void update({ defaultModel: e.target.value })}
+        className="codezal-select"
+      >
+        {models.map((m) => {
+          const name = modelDetail(catalog, activeProvider.id, m)?.name?.trim()
+          return (
+            <option key={m} value={m}>
+              {name || m}
+            </option>
+          )
+        })}
+      </select>
     </div>
   )
 }
@@ -1757,6 +1808,18 @@ function AppearanceTab() {
               { value: "symbols", label: "+/-" },
             ]}
             onChange={(v) => patch({ diffStyle: v })}
+          />
+        </Row>
+      </Section>
+
+      <Section title="Terminal">
+        <Row
+          label="Kısa terminal prompt"
+          description="Codezal terminalde sadece geçerli klasör + % gösterir. ~/.zshrc dokunulmaz; sadece bu uygulama içinde geçerlidir. Değişiklik yeni terminal session'larında etkindir."
+        >
+          <Toggle
+            checked={settings.terminalShortPrompt ?? true}
+            onChange={(v) => void update({ terminalShortPrompt: v })}
           />
         </Row>
       </Section>

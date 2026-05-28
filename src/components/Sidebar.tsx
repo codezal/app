@@ -31,13 +31,66 @@ type Props = {
   onReplay?: (id: string) => void
   // Collapse the sidebar — toggle button next to traffic lights triggers this.
   onCollapse?: () => void
+  onOpenSearch?: () => void
 }
 
-export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay, onCollapse }: Props) {
+const SIDEBAR_MIN_W = 232
+const SIDEBAR_MAX_W = 480
+const SIDEBAR_W_KEY = "codezal.sidebarWidth"
+
+export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay, onCollapse, onOpenSearch }: Props) {
   const { index, activeId, create, open, remove } = useSessionsStore()
   const settings = useSettingsStore((s) => s.settings)
   const [query, setQuery] = useState("")
   const t = useT()
+
+  // Resizable width — drag right edge to expand. Persists to localStorage.
+  const [width, setWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_W_KEY)
+      const n = saved ? parseInt(saved, 10) : SIDEBAR_MIN_W
+      return Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, isNaN(n) ? SIDEBAR_MIN_W : n))
+    } catch {
+      return SIDEBAR_MIN_W
+    }
+  })
+  const draggingRef = useRef(false)
+  const widthRef = useRef(width)
+  useEffect(() => {
+    widthRef.current = width
+  }, [width])
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (!draggingRef.current) return
+      const w = Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, e.clientX))
+      setWidth(w)
+    }
+    function onUp() {
+      if (!draggingRef.current) return
+      draggingRef.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+      try {
+        localStorage.setItem(SIDEBAR_W_KEY, String(widthRef.current))
+      } catch {
+        // localStorage unavailable; ignore
+      }
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+    return () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+  }, [])
+
+  function startDrag(e: React.MouseEvent) {
+    e.preventDefault()
+    draggingRef.current = true
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+  }
 
   const filtered = useMemo(() => {
     return query.trim()
@@ -69,23 +122,43 @@ export function Sidebar({ onOpenSettings, onOpenRoutines, onReplay, onCollapse }
   }
 
   return (
-    <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-codezal bg-codezal-sidebar">
-      {/* Drag region. Tauri config: trafficLightPosition x=20 y=16, close button h=12 → center y=22.
-          Region h=44 → vertical center y=22. Toggle button h=22 top=11 → center y=22. All aligned. */}
+    <aside
+      style={{ width: `${width}px` }}
+      className="relative flex h-full shrink-0 flex-col border-r border-codezal bg-codezal-sidebar"
+    >
+      {/* Resize handle — drag right edge to expand. 4px wide hit area, hover highlight. */}
       <div
-        data-tauri-drag-region
-        className="relative h-[44px] w-full"
-      >
+        onMouseDown={startDrag}
+        title="Sidebar genişliğini ayarla"
+        className="absolute right-0 top-0 z-40 h-full w-1 cursor-col-resize hover:bg-codezal-accent/40"
+      />
+      <div className="relative h-[52px] w-full">
+        {/* Draggable background area that starts after the buttons to avoid blocking click events */}
+        <div
+          data-tauri-drag-region
+          className="absolute inset-y-0 right-0 left-[124px] z-0"
+        />
         {onCollapse && (
-          <button
-            type="button"
-            data-tauri-drag-region="false"
-            onClick={onCollapse}
-            title="Kenar çubuğunu gizle"
-            className="absolute left-[80px] top-[11px] z-20 flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
-          >
-            <PanelLeftClose className="h-3.5 w-3.5" />
-          </button>
+          <div className="absolute left-[82px] top-[9px] z-20 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onCollapse}
+              title="Kenar çubuğunu gizle"
+              className="flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+            >
+              <PanelLeftClose className="h-3.5 w-3.5" />
+            </button>
+            {onOpenSearch && (
+              <button
+                type="button"
+                onClick={onOpenSearch}
+                title={t("common.search")}
+                className="flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+              >
+                <Search className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
