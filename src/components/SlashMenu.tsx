@@ -56,7 +56,13 @@ export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex,
                   {c.description}
                 </span>
                 <span className="ml-auto rounded bg-codezal-chip px-1.5 py-0.5 text-[10px] text-codezal-dim">
-                  {c.scope === "builtin" ? t("slashMenu.builtin") : c.scope === "project" ? t("slashMenu.project") : t("slashMenu.global")}
+                  {c.scope === "builtin"
+                    ? t("slashMenu.builtin")
+                    : c.scope === "project"
+                      ? t("slashMenu.project")
+                      : c.scope === "plugin"
+                        ? "plugin"
+                        : t("slashMenu.global")}
                 </span>
               </button>
             )

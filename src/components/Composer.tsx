@@ -69,14 +69,20 @@ export function Composer({
   const updateSettings = useSettingsStore((s) => s.update)
   const approvalMode = settings.approvalMode
 
-  // Slash command kataloğu — workspace değişince yenile
+  // Slash command kataloğu — workspace değişince + plugin register/unregister
+  // event'inde (codezal:commands-changed) yenile.
   useEffect(() => {
     let alive = true
-    void listAllCommands(active?.workspacePath).then((cmds) => {
-      if (alive) setCommands(cmds)
-    })
+    function refresh() {
+      void listAllCommands(active?.workspacePath).then((cmds) => {
+        if (alive) setCommands(cmds)
+      })
+    }
+    refresh()
+    window.addEventListener("codezal:commands-changed", refresh)
     return () => {
       alive = false
+      window.removeEventListener("codezal:commands-changed", refresh)
     }
   }, [active?.workspacePath])
 
