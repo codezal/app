@@ -173,7 +173,7 @@ export type Settings = {
   theme: "light" | "dark" | "system"
   // Arayüz yazı ölçeği — S/M/L/XL (S=13px, M=14px, L=15px, XL=16px)
   fontScale?: "s" | "m" | "l" | "xl"
-  // Arayüz dili — i18n locale kodu. Yoksa default ('tr') kullanılır.
+  // UI language — i18n locale code. Falls back to DEFAULT_LOCALE if unset.
   language?: Locale
   // Yeni session açılınca otomatik bağlanacak klasör (boş = bağlı değil)
   defaultWorkspacePath?: string

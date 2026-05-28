@@ -1,20 +1,20 @@
-// Locale dosyalarının tek-doğru kayıt yeri. Yeni dil eklerken:
-// 1. locales/<code>.ts oluştur (varsayılan export Messages)
-// 2. Aşağıya satır ekle (lazy import)
-// 3. types.ts → LOCALES dizisine meta ekle
+// Single source of truth for locale files. To add a new language:
+// 1. Create locales/<code>.ts (default export = Messages)
+// 2. Add a loader entry below (lazy import)
+// 3. Add metadata to LOCALES in types.ts
 //
-// TR base — eksik anahtar fallback olarak buradan okunur (bk. i18n/index.ts).
-// Diğer diller henüz tam çevrilmediyse partial olabilir; tip sistemi tam Messages
-// beklediği için her dil dosyasında bütün anahtarlar dolu olmalı (TR placeholder olarak başla).
+// EN is the base language — missing keys fall back to it (see i18n/index.ts).
+// Other languages may be partial; the type system requires every key to be
+// present in every locale file (use the EN value as a placeholder when starting).
 
 import type { Locale } from "../types"
 import type { Messages } from "../types-messages"
-import tr from "./tr"
+import en from "./en"
 
-// Lazy yükleyiciler — chunk split: aktif olmayan diller bundle'a girmesin.
+// Lazy loaders — chunk split: inactive languages should not enter the bundle.
 const LOADERS: Record<Locale, () => Promise<{ default: Messages }>> = {
-  tr: () => Promise.resolve({ default: tr }),
-  en: () => import("./en"),
+  en: () => Promise.resolve({ default: en }),
+  tr: () => import("./tr"),
   "zh-CN": () => import("./zh-CN"),
   "zh-TW": () => import("./zh-TW"),
   ko: () => import("./ko"),
@@ -38,10 +38,10 @@ export async function loadLocaleMessages(code: Locale): Promise<Messages> {
     const mod = await LOADERS[code]()
     return mod.default
   } catch (e) {
-    console.warn(`[i18n] '${code}' locale yüklenemedi, TR fallback:`, e)
-    return tr
+    console.warn(`[i18n] failed to load locale '${code}', falling back to EN:`, e)
+    return en
   }
 }
 
-// Senkron TR — uygulama açılışında ilk render için (diğer diller async yüklenir)
-export const BASE_MESSAGES: Messages = tr
+// Synchronous EN — used for the very first render at app start; other locales load async.
+export const BASE_MESSAGES: Messages = en

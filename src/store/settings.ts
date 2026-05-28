@@ -54,7 +54,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       autoCompact: { ...DEFAULT.autoCompact, ...(loaded.autoCompact ?? {}) },
     }
     set({ settings: merged, loaded: true })
-    // i18n: kaydedilmiş locale'i uygula (yoksa default tr)
+    // i18n: apply persisted locale (falls back to DEFAULT_LOCALE if absent)
     void useI18nStore.getState().setLocale(merged.language ?? DEFAULT_LOCALE)
   },
 

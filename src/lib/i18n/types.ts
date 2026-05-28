@@ -51,7 +51,7 @@ export const LOCALES: readonly LocaleMeta[] = [
   { code: "tr", nativeName: "Türkçe" },
 ] as const
 
-export const DEFAULT_LOCALE: Locale = "tr"
+export const DEFAULT_LOCALE: Locale = "en"
 
 export function isLocale(v: unknown): v is Locale {
   return typeof v === "string" && LOCALES.some((l) => l.code === v)
