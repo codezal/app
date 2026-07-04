@@ -1,5 +1,7 @@
 # Codezal
 
+[Website](https://codezal.com) · [GitHub](https://github.com/codezal/app)
+
 Codezal is an open-source desktop AI coding workspace for working with hosted
 models, local models, tools, plugins, terminals, files, and long-running coding
 sessions in one native app.
