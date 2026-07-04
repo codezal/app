@@ -1,0 +1,15 @@
+Watch a long-running command's output live and act on matching lines.
+
+Spawns `command` in the background. Each stdout/stderr line is tested against `pattern` (a regex); every matching line becomes an event. Use this instead of polling with bash_status when you want to be told the moment something happens (a log line appears, a build emits an error, a server prints "ready").
+
+Actions (`action`):
+- `start` (default): begin watching. Requires `command`. Optional `pattern` (regex; omit to match every line), `description` (short UI title in the user's language), and `on_event` (override the default behavior for this watch).
+- `stop`: stop a watcher. Requires `id` (returned by start).
+- `list`: list active watchers.
+
+What happens on each matching line is controlled by `on_event` (or the user's default monitor setting when omitted):
+- `respond`: automatically start a new assistant turn in this session with the matched line — strongest, but every event costs tokens.
+- `chat`: post the line into the chat as a passive message; no new turn.
+- `notify`: post to chat AND send a desktop notification.
+
+Coverage matters: silence is not success. Your `pattern` must match the FAILURE signatures too (errors, tracebacks, "FAILED", "Killed"), not only the happy path — otherwise a crash looks identical to "still running". When unsure, widen the regex rather than narrow it.

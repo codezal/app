@@ -1,0 +1,12 @@
+Run a bash command in the workspace directory. Returns stdout, stderr, and the exit code.
+
+Usage:
+- The default timeout is 30s. For long-running work (build, test, dev servers) pass background:true — it starts in the background without the 30s limit and returns a jobId; track its output and status with bash_status.
+- Always pass a short description (5-10 words) of what the command does — it is shown as the title in the UI. Write it in the user's language.
+- This tool is for terminal operations like git, npm, pnpm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) — use the specialized tools (read_file, write_file, edit_file, grep, glob) for those instead.
+
+Git and GitHub:
+- Only commit, amend, push, or create PRs when explicitly requested.
+- Before committing, inspect git status and git diff; stage only the intended files and never commit secrets.
+- Do not update git config, skip hooks, use interactive -i, or force-push unless explicitly requested.
+- Use gh for GitHub tasks (PRs, issues, checks); return the PR URL when done.

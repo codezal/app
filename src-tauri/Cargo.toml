@@ -1,0 +1,144 @@
+[package]
+# In dev mode the dock label comes from the cargo binary name, so keep it
+# capitalized. Production bundles use tauri.conf.json > productName.
+name = "Codezal"
+version = "0.4.5"
+description = "Codezal - multi-LLM desktop chat"
+authors = ["Erhan Erbas"]
+license = "Apache-2.0"
+repository = ""
+edition = "2021"
+rust-version = "1.96.1"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+# Session/message/part store. "bundled" builds SQLite from source, so macOS and
+# Windows use the same library behavior. We keep one connection for real
+# transactions because plugin-sql pooling broke cross-call transactions.
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Code Map v2 regex parser for symbol/call extraction. This was already
+# transitive; keeping it direct documents the parser dependency. Rust regex does
+# not support lookbehind/lookahead, so Go type patterns are handled by trailing
+# token checks in the code_map parser.
+regex = "1"
+# Local OpenAI/Ollama-compatible HTTP server (server.rs). tiny_http keeps this a
+# small synchronous dependency instead of pulling axum/tokio into the shell.
+tiny_http = "0.12"
+tauri = { version = "2.11.3", features = ["protocol-asset", "tray-icon", "image-png"] }
+tauri-plugin-log = "2"
+tauri-plugin-fs = { version = "2", features = ["watch"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2.3.5"
+tauri-plugin-http = "2"
+portable-pty = "0.8"
+tauri-plugin-oauth = "2.0.0"
+tauri-plugin-process = "2"
+# Desktop notifications for the notify tool and monitor notify behavior.
+tauri-plugin-notification = "2"
+# OS platform and arch metadata for reports.
+tauri-plugin-os = "2"
+# Autopilot startup on login through macOS LaunchAgent and Windows registry.
+tauri-plugin-autostart = "2"
+# Secret storage: OS-native keychain (macOS Keychain + Windows Credential
+# Manager). No default features in keyring 3.x - each platform store must be
+# named explicitly. We target macOS + Windows only; other platforms fall back
+# to keyring's in-memory mock store (never shipped).
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+# LSP server lazy-download: HTTP (rustls) plus gzip/zip/tar.gz/tar.xz unpacking.
+ureq = "2"
+flate2 = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+xz2 = "0.1"
+# Headless browser (CDP) for model-driven visual verification (browser.rs).
+headless_chrome = "1"
+base64 = "0.22"
+
+# Local in-process inference (llama.cpp Rust binding). OPTIONAL - gated behind
+# the `local-llm` feature so a normal `tauri dev` build does NOT compile
+# llama.cpp (it builds the C/C++ lib via CMake). Backend is picked per OS via
+# the `llm-*` features below. Pin/bump the version with `cargo update` as the
+# crate evolves.
+llama-cpp-2 = { version = "0.1", optional = true, default-features = false }
+# Stateful UTF-8 decoder used by llama-cpp-2's token_to_piece for streaming
+# (a multi-byte codepoint can straddle two tokens). Only pulled with local-llm.
+encoding_rs = { version = "0.8", optional = true }
+# Phase 6 - render the model's own embedded Jinja chat template ourselves, so chat +
+# tool-call rendering no longer depends on llama-cpp-2's oai-compat helpers (which
+# upstream removed after 0.1.146). minijinja-contrib/pycompat adds the Python string
+# methods (.startswith/.split/.strip/etc.) that Hugging Face chat templates rely on.
+# `json` -> tojson support; `preserve_order` -> object key order survives (chat
+# templates embed tool schemas with `{{ tools | tojson }}` and the model was
+# trained on the original key order, not an alphabetised one).
+minijinja = { version = "2", optional = true, features = ["json", "preserve_order"] }
+minijinja-contrib = { version = "2", optional = true, features = ["pycompat"] }
+# Physical-RAM query -> clamp the local context window so weights+KV can't swap the
+# machine into a freeze (12B Q6_K + 131072 KV on an 18 GB Mac). local-llm only.
+sysinfo = { version = "0.36.1", optional = true }
+
+# Local LLM GPU backend, picked per-OS so the default build (no feature flag) uses the
+# right one. macOS -> Metal (built into the OS, no SDK). Windows stays CPU baseline by
+# default (Vulkan needs its SDK at build time) -> opt in with `--features llm-vulkan`.
+# Cargo unions feature sets per target, so this just augments the base llama-cpp-2 dep
+# above with `metal` on macOS.
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1", optional = true, default-features = false, features = ["metal"] }
+libloading = { version = "0.8", optional = true }
+# NSWindow opaque backgroundColor support for lib.rs setup. This fixes hollow
+# inactive traffic lights with the overlay transparent titlebar. objc2-app-kit
+# is already a Tauri transitive dependency; Cargo unions features.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSColor", "NSWindow"] }
+
+# Updater is desktop-only - it is not compiled for mobile targets.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+
+[features]
+# Local in-process LLM inference is ON by default - it's a core feature, so a plain
+# `tauri dev` / `tauri build` ships it with no flag. The GPU backend is auto-selected
+# per-OS via the target-specific llama-cpp-2 dep above (macOS -> Metal; Windows -> CPU
+# baseline). For a light build that SKIPS llama.cpp entirely (fast frontend-only Rust
+# iteration), use `--no-default-features`. The llm-* features force a specific backend:
+#   macOS   -> llm-metal   (Metal - already the default on macOS)
+#   Windows -> llm-vulkan  (Vulkan - covers NVIDIA + AMD + Intel; opt-in)
+#   NVIDIA  -> llm-cuda    (opt-in, faster on NVIDIA - Phase 1.5)
+# The oai helpers (apply_chat_template_oaicompat, ChatTemplateResult) used by
+# llm_chat are unconditional in llama-cpp-2 0.1.x - no extra feature needed
+# (llama-cpp-sys-2 always builds llama.cpp's `common`).
+default = ["local-llm"]
+# `llama-cpp-2/mtmd` builds llama.cpp's multimodal (clip/mtmd) layer so local models
+# with a sibling mmproj-*.gguf can take image input (vision). Backend-agnostic.
+local-llm = ["dep:llama-cpp-2", "dep:encoding_rs", "dep:minijinja", "dep:minijinja-contrib", "dep:sysinfo", "llama-cpp-2/mtmd"]
+llm-metal = ["local-llm", "llama-cpp-2/metal"]
+llm-mlx = ["dep:libloading"]
+llm-vulkan = ["local-llm", "llama-cpp-2/vulkan"]
+llm-cuda = ["local-llm", "llama-cpp-2/cuda"]
+sysinfo = ["dep:sysinfo"]
+
+# Phase 1 vertical-slice PoC. Compiles only when a local-llm feature is on, e.g.:
+#   cargo run --release --example llm_poc --features llm-metal  -- model.gguf
+[[example]]
+name = "llm_poc"
+required-features = ["local-llm"]
+
+# Local inference C++ (llama.cpp via llama-cpp-sys-2) must be optimized even in
+# dev/`tauri dev` builds - at the default dev opt-level the ggml host code runs
+# ~6x slower (observed 3.5 vs 23 tok/s). Optimize ONLY these packages so the app
+# itself still compiles fast in debug.
+[profile.dev.package."llama-cpp-sys-2"]
+opt-level = 3
+
+[profile.dev.package."llama-cpp-2"]
+opt-level = 3

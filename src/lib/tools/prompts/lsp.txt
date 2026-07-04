@@ -1,0 +1,22 @@
+Interact with Language Server Protocol (LSP) servers to get code intelligence features.
+
+Supported operations:
+- hover: Get hover information (type, signature, documentation) for the symbol at a position.
+- definition: Find where a symbol is defined.
+- references: Find all references to a symbol.
+- implementation: Find implementations of an interface or abstract method.
+- documentSymbol: List all symbols (functions, classes, variables) in a file.
+- workspaceSymbol: List project-wide symbols matching a query string.
+- prepareCallHierarchy: Get the call-hierarchy item at a position (functions/methods).
+- incomingCalls: Find all functions/methods that call the symbol at a position.
+- outgoingCalls: Find all functions/methods called by the symbol at a position.
+- diagnostics: Get errors/warnings for a file.
+
+Parameters:
+- path: The workspace-relative file to operate on (required).
+- line, character: 1-based position (as shown in editors). Required for hover, definition, references, implementation, prepareCallHierarchy, incomingCalls, outgoingCalls.
+- query: Filter string for workspaceSymbol. Empty string requests all symbols.
+
+For workspaceSymbol, path is not sent in the LSP request — it is used only to select and start the matching language server.
+
+Note: a language server must be configured for the file type (typescript-language-server, pyright, rust-analyzer, gopls). If none is available, an "unavailable" message is returned. Results are returned as JSON; diagnostics as a formatted list.

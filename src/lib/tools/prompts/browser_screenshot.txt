@@ -1,0 +1,9 @@
+Capture a screenshot of the current page in the headless preview browser and return it as an image. Call browser_navigate first to load the page.
+
+Only call this if YOU can actually interpret images (you are vision/multimodal capable). If you cannot see images, a screenshot is useless to you — don't take one just because the tool exists; inspect the page another way instead (browser_read_console for errors/logs, or read the source/DOM with other tools). Decide from your own capabilities, not from any catalog.
+
+When you are vision-capable, this is your primary way to verify UI work — layout, spacing, colors, whether an element renders correctly — exactly as a user would see it, rather than guessing from the code.
+
+Returns the rendered viewport as an image.
+
+To act on the page (not just look), use browser_snapshot for element refs + browser_click/browser_fill — those don't require vision.

@@ -1,0 +1,1 @@
+Move the mouse over an element (`target` = ref from browser_snapshot or CSS selector) to reveal hover-triggered menus, tooltips, or dropdowns. Returns a fresh snapshot (newly revealed elements get refs).

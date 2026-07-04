@@ -1,0 +1,18 @@
+Edit a single cell of a Jupyter notebook (.ipynb) file.
+
+The notebook is parsed as JSON, the cell operation is applied, and the file is written back as valid notebook JSON. `path` is relative to the workspace root.
+
+Modes (`edit_mode`):
+- `replace` (default): replace the source of the target cell with `new_source`. Pass `cell_type` to also change the cell's type (code <-> markdown).
+- `insert`: add a NEW cell containing `new_source`. `cell_type` is REQUIRED. The cell is inserted at index `cell_number` (0-based), or after the cell with `cell_id`, or at the top if neither is given.
+- `delete`: remove the target cell.
+
+Targeting:
+- `cell_number`: 0-based index of the cell.
+- `cell_id`: nbformat 4.5+ cell id (takes precedence over `cell_number`).
+For `replace`/`delete` you must identify an existing cell (by number or id). For `insert`, both are optional positioning hints.
+
+Notes:
+- `new_source` is the full new contents of the cell (plain text; multi-line allowed).
+- Read the notebook first (read_file) to find the right cell number/id before editing.
+- Code cells keep their outputs/execution_count cleared on edit; the rest of the notebook (nbformat version, metadata) is preserved.

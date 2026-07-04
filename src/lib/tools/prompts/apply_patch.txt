@@ -1,0 +1,35 @@
+Use the apply_patch tool to make multiple edits across one or more files in a single atomic patch. The patch language is a stripped-down, file-oriented diff format designed to be easy to parse and safe to apply. Context lines locate each change, so line numbers are not needed.
+
+Envelope:
+
+*** Begin Patch
+[ one or more file sections ]
+*** End Patch
+
+Each file section starts with one of three headers. You MUST include a header to specify the action you are taking:
+
+*** Add File: <path> — create a new file. Every following line is a + line (the initial contents).
+*** Delete File: <path> — remove an existing file. Nothing follows.
+*** Update File: <path> — patch an existing file in place (optionally with a rename).
+
+For an Update, use @@ hunks. Within a hunk, prefix context lines with a space, removed lines with -, and added lines with +. The context lines must be enough to locate the change uniquely.
+
+To rename a file while updating it, put *** Move to: <new-path> immediately after the *** Update File header (before any hunk).
+
+Example:
+
+*** Begin Patch
+*** Add File: hello.txt
++Hello world
+*** Update File: src/app.py
+*** Move to: src/main.py
+@@ def greet():
+-print("Hi")
++print("Hello, world!")
+*** Delete File: obsolete.txt
+*** End Patch
+
+It is important to remember:
+- Always include a header (Add/Delete/Update) for each file.
+- Prefix every new line with + even when creating a new file.
+- Multiple @@ hunks and multiple *** Update File sections can appear in the same patch.

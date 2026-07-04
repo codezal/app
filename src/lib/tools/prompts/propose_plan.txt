@@ -1,0 +1,9 @@
+Propose switching to read-only plan mode BEFORE implementing a non-trivial task, so you can explore the code and design an approach for the user to approve.
+
+Prefer proposing plan mode unless the task is simple. Propose it when the request is a new feature, touches multiple files, has more than one reasonable approach, requires an architectural decision, or the requirements are unclear. When unsure, err on the side of proposing a plan.
+
+Usage:
+- Only call this in build mode.
+- reason: explain why planning helps first — which uncertainty, risk, or design choice you want to resolve. The user sees this before approving.
+- If the user approves, the mode switches to plan: write_file/edit_file/bash/apply_patch are blocked, while read-only tools (read_file, grep, list_dir, webfetch) stay available. Explore, write the full implementation plan, then call propose_build with it.
+- If the user declines, continue in build mode.

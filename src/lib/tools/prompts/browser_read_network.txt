@@ -1,0 +1,1 @@
+Return recent network requests (fetch and XMLHttpRequest) made by the current page in the headless preview browser, one per line as "[METHOD] status url (durationMs)". Use this to debug API calls, failed requests, and slow responses. Call browser_navigate first; capture begins after navigation, so trigger the requests (or reload via browser_navigate) before reading.

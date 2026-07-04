@@ -1,0 +1,10 @@
+Send a message directly to another chat session (a "peer" agent) by its handle, and wake it to act on the message.
+
+Use this for autonomous multi-agent coordination — e.g. a build orchestrator pinging a reviewer/CTO session: send_to_session({ to: "cto", message: "PR 234 is ready, I need your sign-off" }). The target wakes immediately in the background (you are NOT interrupted, and the user's foreground is not stolen). If the target is mid-turn, the message is queued and delivered the moment its current turn ends.
+
+- `to`: the target session's handle (with or without a leading "@"), e.g. "cto". Resolution is case-insensitive. The handles available to you are listed in your system prompt under "PEER SESSIONS"; sending to an unknown handle returns the current list.
+- `message`: a self-contained instruction. The target cannot see this conversation — include all the context it needs (PR/issue numbers, file paths, what "done" looks like).
+
+The delivered message is tagged with your handle so the target knows who pinged it and can reply with send_to_session back to you. Keep exchanges purposeful — there is a per-minute rate limit per target to prevent ping-pong loops.
+
+Only sessions that have set a handle (via set_session_handle) can be addressed.

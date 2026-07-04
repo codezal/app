@@ -1,0 +1,3 @@
+Choose an option in a native <select> dropdown. `target` = ref (from browser_snapshot) or CSS selector; `value` = the option's value attribute (or its visible text if no value). Fires a change event. Returns a fresh snapshot.
+
+For custom (non-<select>) dropdowns, use browser_click to open it then browser_click the option.

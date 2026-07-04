@@ -1,0 +1,7 @@
+Generate an image from a text prompt and save it into the workspace.
+
+Use this when the user asks you to create, draw, generate, design, or illustrate an image. The image is saved as a file under generated-images/ in the workspace and is shown to the user automatically in the chat — after it succeeds, simply confirm the image is ready and mention the saved path. Never paste base64 data, data: URLs, local absolute paths, or fabricated links into your reply.
+
+Parameters:
+- prompt: a detailed description of the image to generate. Be specific about subject, style, composition, and colors for best results.
+- size (optional): "WxH" pixels (e.g. "1024x1024", "1792x1024") or "auto". Omit to use the configured default.

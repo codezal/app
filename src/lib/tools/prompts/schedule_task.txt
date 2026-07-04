@@ -1,0 +1,23 @@
+Create, list, or delete a scheduled task (routine) that runs a prompt automatically on a cron schedule.
+
+A routine is stored as a markdown file under `.codezal/routines/`. When its cron schedule fires (while the app is open), a new chat session opens and the routine's prompt is sent automatically.
+
+Actions (`action`):
+- `create`: save a new routine. Requires `name` and `prompt`. Optional: `schedule` (cron, recurring), `delay` (one-shot), `description`, `scope` ("project" default, or "global").
+- `list`: list all routines (project + global) with their cron and next fire time. One-shot routines are marked `[tek-sefer]`.
+- `delete`: remove a routine. Requires `path` (from `list`).
+
+Cron format (`schedule`): 5 fields, local time — `minute hour day-of-month month day-of-week`.
+Examples: `0 9 * * 1-5` = weekdays at 09:00; `*/15 * * * *` = every 15 minutes; `0 0 1 * *` = first of each month at midnight.
+
+One-shot delay (`delay`): fire ONCE after a delay, then the routine auto-deletes itself. Format: `5m`, `30s`, `2h`, `1d` (units: s/m/h/d). Seconds round up to the nearest minute. Mutually exclusive with `schedule` — pass one or the other, never both.
+
+Self-rescheduling loop ("wait, then run again by itself"):
+- To build a loop where the agent works, waits, then runs again — use `delay` and make the routine's own `prompt` re-arm the next run by calling schedule_task with `delay` again at the end.
+- Each fire opens a FRESH session with no memory, so the prompt must be fully self-contained AND must re-schedule itself to keep the loop alive (omit the re-schedule call to stop the loop).
+- Choose the delay based on how active the work is: shorter while things are changing, longer when quiet.
+
+Notes:
+- Omit both `schedule` and `delay` to create a manual routine (saved, but only runs when triggered by hand).
+- Scheduling only fires while the app is running; missed fires (app closed) are not caught up.
+- Write the routine `prompt` to be fully self-contained — each fire starts a fresh session with no memory of this conversation.

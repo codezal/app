@@ -1,0 +1,9 @@
+List or read resources exposed by connected MCP servers.
+
+MCP servers can expose "resources" (documents, files, data blobs) in addition to tools. This tool surfaces them.
+
+Actions (`action`):
+- `list` (default): list every resource available from currently connected MCP servers, grouped by server, with each resource's URI and name.
+- `read`: fetch the contents of one resource. Requires `server` (the server name from `list`) and `uri` (the resource URI from `list`).
+
+Use `list` first to discover what is available, then `read` the specific URI you need. Returns the resource's text contents.

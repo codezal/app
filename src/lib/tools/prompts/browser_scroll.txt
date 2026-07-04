@@ -1,0 +1,3 @@
+Scroll the page in the headless preview browser. Pass `target` (a ref or CSS selector) to scroll that element into view, OR omit it and pass `dy` (pixels; default 600, negative scrolls up) to scroll the window. Returns a fresh snapshot.
+
+You do NOT need to scroll to find or click elements — browser_snapshot already lists the whole page and you can click any ref directly. Use scroll only to load lazy content (infinite lists) or to position the page before a browser_screenshot.

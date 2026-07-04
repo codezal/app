@@ -1,0 +1,13 @@
+Searches the web and returns a concise list of the most relevant results.
+
+- Provides up-to-date information for current events and recent data beyond the knowledge cutoff.
+- Returns a short answer summary (when the provider supports it) followed by titled results with their URLs and snippets.
+- The number of results is configurable via max_results.
+
+Usage notes:
+- Requires a web search provider configured in Settings > Web Search (Tavily, Brave, or Exa). The tool is unavailable when no provider key is set.
+- Use clear, focused keywords for the best results.
+- This tool is read-only. To fetch the full content of a specific result, use webfetch on its URL.
+
+The current year is {{year}}. You MUST use this year when searching for recent information or current events.
+- Example: if the current year is 2026 and the user asks for "latest AI news", search for "AI news 2026", NOT "AI news 2025".

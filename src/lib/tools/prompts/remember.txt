@@ -1,0 +1,15 @@
+Persist a durable fact or preference to long-term memory so it survives across sessions and is auto-injected into future system prompts.
+
+Use this ONLY for stable, reusable knowledge the user would want remembered later:
+- explicit user preferences ("always run tests before committing", "use tabs not spaces")
+- durable project facts ("the API base URL is in src/config.ts", "deploys go through GitHub Actions")
+- conventions and decisions that outlive the current task
+
+Do NOT use it for transient state: the current bug, today's task list, file contents, or anything you can re-read from the codebase. When unsure, prefer NOT remembering.
+
+Parameters:
+- text: one concise sentence stating the fact/preference.
+- scope: "project" (this workspace only) or "global" (all projects). Default to "project" unless the preference clearly applies everywhere.
+- category: optional section heading to group the note under (e.g. "Conventions", "Deploy"). Omit for general notes.
+
+This writes to Codezal's learned-memory database and requires user approval each time. Call it sparingly — one well-phrased note beats many noisy ones.

@@ -1,0 +1,3 @@
+Run arbitrary JavaScript in the page and return its result as JSON. Escape hatch for what the dedicated tools can't do: read computed values, query the DOM in complex ways, dispatch custom events. Runs only in the page context (sandboxed headless browser, never your host machine).
+
+This action REQUIRES user approval each time. Prefer the dedicated tools (browser_snapshot/click/fill/select/press) when they suffice — they are clearer and need no approval. Keep the script small and return a JSON-serializable value.

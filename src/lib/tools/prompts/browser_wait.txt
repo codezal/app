@@ -1,0 +1,1 @@
+Wait until an element matching the CSS `selector` appears, up to `timeoutMs` milliseconds (default 5000). Use after an action that triggers async loading (SPA route change, fetch, lazy content) before you snapshot or interact again. Returns a fresh snapshot once the element is present; errors if it never appears within the timeout.

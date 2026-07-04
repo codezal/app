@@ -1,0 +1,7 @@
+Bir workflow run'ının ilerlemesini ve (bitince) final sonucunu oku. run_workflow'un döndürdüğü runId ile çağrılır.
+
+- runId verilirse: o run'ın durumu — faz/agent özeti, token, ve tamamlandıysa final sonuç.
+- runId verilmezse: tüm workflow run'larını listele.
+- wait:true → run bitene kadar (bounded ~30s) blokla; hâlâ koşuyorsa running snapshot döner, tekrar çağır.
+
+Run bitene kadar periyodik poll et (wait:true ile). Final sonuç döndüğünde onu kullanıcıya sentezle.

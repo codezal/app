@@ -1,0 +1,3 @@
+Generate a concise markdown overview of the current workspace root: detected stack (package.json / Cargo.toml / pyproject.toml / go.mod), the first lines of the README, git remote / branch / recent commits, and a top-level file tree. Call this first to orient yourself in a new project.
+
+Takes no parameters — it always inspects the connected workspace. Do not reprint the output to the user; just note in one sentence that you checked the overall state.

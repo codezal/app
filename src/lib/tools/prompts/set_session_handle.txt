@@ -1,0 +1,7 @@
+Give THIS session a short handle so other sessions can address it with send_to_session.
+
+Example: set_session_handle({ handle: "cto" }) — now other agents can reach this session with send_to_session({ to: "cto", message: "..." }).
+
+- `handle`: a single word — letters, digits, "-" or "_" (e.g. "cto", "build-lead"). Case-insensitive when addressed. Must be unique across sessions. Pass an empty string to clear the handle.
+
+Set this once when you take on a named role in a multi-agent workflow (orchestrator, reviewer, CTO, builder, …). It persists across restarts.

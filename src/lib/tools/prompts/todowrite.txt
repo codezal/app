@@ -1,0 +1,31 @@
+Create and maintain a structured task list for the current session. Tracks progress, organizes multi-step work, and surfaces status live to the user in the side panel. Pass the FULL list every call — it replaces the previous list (replace semantics).
+
+## When to use
+Use proactively when:
+- The task requires 3+ distinct steps or actions (not just 3 tool calls for one conceptual step)
+- The work is non-trivial and benefits from planning
+- The user provides multiple tasks (numbered or comma-separated) or explicitly asks for a todo list
+- New instructions arrive — capture them as todos
+- You start a task — mark it in_progress (exactly ONE at a time) before working
+- You finish a task — mark it completed and add any follow-ups discovered during the work
+
+## When NOT to use
+Skip when the work is a single straightforward task (<3 trivial steps), the request is purely informational, or tracking adds no organizational value.
+
+## States
+- pending — not started
+- in_progress — actively working (exactly ONE at a time)
+- completed — finished successfully
+- cancelled — no longer needed
+
+## Priority
+- high / medium / low — optional hint for ordering work.
+
+## Rules
+- Update status in real time; don't batch completions.
+- Mark completed only after the work is actually done, including any required verification. Never based on intent.
+- Keep exactly one in_progress while work remains.
+- If blocked or partial, keep it in_progress and add a follow-up todo describing the blocker.
+- Items should be specific and actionable; break large work into smaller steps.
+
+When in doubt, use it.

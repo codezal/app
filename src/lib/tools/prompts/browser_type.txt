@@ -1,0 +1,1 @@
+Type free text into the currently focused element, key by key. Use browser_fill to set a specific field's value by ref; use browser_type when an element is already focused (e.g. after browser_click on a contenteditable or canvas). Returns a fresh snapshot.

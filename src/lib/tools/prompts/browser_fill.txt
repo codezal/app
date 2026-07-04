@@ -1,0 +1,3 @@
+Fill a text input or textarea. `target` = ref number (from browser_snapshot) or CSS selector; `text` = the value to enter. The field is cleared first, then typed like a real user — input and change events fire, so React/Vue controlled inputs update correctly. Returns a fresh snapshot.
+
+For dropdowns use browser_select; to submit, browser_press "Enter" or click the submit button.

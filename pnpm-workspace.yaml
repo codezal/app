@@ -1,0 +1,4 @@
+allowBuilds:
+  core-js: true
+  fs-xattr: set this to true or false
+  macos-alias: set this to true or false

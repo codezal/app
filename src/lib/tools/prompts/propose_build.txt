@@ -1,0 +1,7 @@
+Propose switching to build mode once your plan is complete, so the user can review the full plan and approve it before you start editing files.
+
+Usage:
+- Only call this in plan mode, and only when planning is genuinely complete.
+- plan: the full implementation plan in markdown — which files change, what changes in each, in what order, plus any decisions or trade-offs. The user sees this entire plan and approves it before any file is touched.
+- If the user approves, the mode switches to build automatically and all tools (write_file, edit_file, bash, apply_patch) become active — then execute the plan exactly as approved.
+- If the user declines, keep refining the plan in plan mode.

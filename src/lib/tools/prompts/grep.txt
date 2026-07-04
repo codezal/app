@@ -1,0 +1,10 @@
+Fast content search across the workspace that works with any codebase size (ripgrep when available, grep fallback).
+
+Usage:
+- query is matched as a fixed string by default. Set regex:true to treat it as a regular expression with full regex syntax (e.g. "log.*Error", "function\s+\w+").
+- Filter which files are searched with the glob option (e.g. "*.ts", "*.{ts,tsx}").
+- Matching is smart-case by default. Set case_sensitive:true to force a case-sensitive match.
+- Returns matching lines grouped by file with line numbers, sorted by modification time (most recently changed first), capped at 100 matches.
+- Use this tool for LITERAL text: string contents, comments, log messages, config values, or a pattern you expect verbatim.
+- For STRUCTURAL questions — where a symbol is defined, what calls it, what a change would break — prefer the Code Map tools (code_search, code_callers, code_callees, code_impact, code_context). They are exact, follow dynamic-dispatch edges grep can't, return fewer tokens, and stay indexed automatically. Don't grep for a symbol's callers or definition.
+- When a search may require multiple rounds of grepping and globbing, it is better to batch several searches in one response.

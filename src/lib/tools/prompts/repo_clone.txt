@@ -1,0 +1,8 @@
+Clone a git repository and connect the active session to the cloned folder.
+
+Usage:
+- url: an https://, git@, or ssh:// git URL.
+- target: optional absolute path; defaults to ~/Documents/<repo-name>.
+- branch: optional branch to check out after cloning.
+- depth: optional shallow-clone depth (e.g. 1 = last commit only); omit for full history.
+- On success the workspace is connected automatically — subsequent tool calls run inside the cloned folder.

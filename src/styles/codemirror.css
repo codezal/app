@@ -1,0 +1,25 @@
+
+:root {
+  --cm-comment: hsl(36 10% 45%);
+  --cm-keyword: #d73a49;
+  --cm-type: #6f42c1;
+  --cm-func: #6f42c1;
+  --cm-string: #032f62;
+  --cm-number: #005cc5;
+  --cm-regexp: #b31d28;
+  --cm-edit-bg: 210 60% 93%;
+  --cm-edit-accent: 211 100% 47%;
+}
+
+/* --- Dark (`html.dark` scope) --- */
+html.dark {
+  --cm-comment: hsl(0 0% 50%);
+  --cm-keyword: #ff7b72;
+  --cm-type: #d2a8ff;
+  --cm-func: #d2a8ff;
+  --cm-string: #a5d6ff;
+  --cm-number: #79c0ff;
+  --cm-regexp: #ffa198;
+  --cm-edit-bg: 213 40% 15%;
+  --cm-edit-accent: 210 100% 66%;
+}

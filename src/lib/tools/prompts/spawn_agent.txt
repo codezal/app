@@ -1,0 +1,12 @@
+Launch a subagent to handle a complex, multi-step subtask autonomously in an isolated context. The agent runs its own tool loop and returns only its final summary.
+
+When NOT to use:
+- To read a specific file, use read_file or glob directly — it's faster.
+- To find a definition or a pattern like "class Foo", use grep directly.
+- To read content in 2-3 known files, use read_file directly.
+
+Usage notes:
+- name must be one of the agent types listed in your system prompt.
+- task should be a detailed, self-contained description of what the agent must do and exactly what it should return in its final message.
+- State clearly whether the agent should write code or only research (search, reads, web fetches), and how to verify its work (e.g. which tests to run).
+- The agent's result is not shown to the user — relay a concise summary yourself.

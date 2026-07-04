@@ -1,0 +1,12 @@
+Send a desktop (OS) notification to the user.
+
+Use this to pull the user's attention back when something is worth knowing now and they may have stepped away — for example: a long-running task finished, a build or test run completed, or you have hit a decision that blocks further progress and need their input.
+
+Parameters:
+- `title`: short headline (lead with what the user would act on).
+- `body` (optional): one extra line of detail.
+
+Guidance:
+- Be sparing. A notification the user did not need is annoying. Do not notify for routine progress or for things they are clearly watching happen in real time.
+- Keep it short and write it in the user's language.
+- This does not replace your normal chat reply — it is an out-of-band ping, not the answer itself.

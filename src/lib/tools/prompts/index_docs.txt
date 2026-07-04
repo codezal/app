@@ -1,0 +1,16 @@
+Index external documentation URLs into the workspace semantic index so later
+turns can retrieve them by meaning (like Cursor's @Docs).
+
+Use when the user points you at docs/API references/guides you'll need across
+the task (a framework's docs, an RFC, a changelog). Each URL is fetched as
+markdown, chunked, embedded with the index's model, and stored under a
+`docs:<url>` path. Afterwards `code_query` and per-turn auto-context surface
+these snippets alongside code — no need to re-fetch the page every turn.
+
+Requirements & behavior:
+- The workspace semantic index must already exist (Settings → Semantic → build).
+  Docs reuse its embedding model/dimension; without an index this errors.
+- Re-indexing a URL replaces its previous chunks (safe to refresh).
+- A URL that fails to fetch is skipped; the rest still index.
+
+Input: urls — 1 to 20 absolute http(s) URLs. Returns how many chunks were added.

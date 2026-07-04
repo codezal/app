@@ -1,0 +1,811 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codezal-settings",
+  "title": "Codezal settings",
+  "description": "Schema for Codezal's settings.json. Generated from the runtime zod schema — edit src/lib/config/schema.ts and run `npm run schema`, do not hand-edit this file.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number"
+    },
+    "apiKeys": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "defaultProvider": {
+      "default": "openai",
+      "type": "string"
+    },
+    "defaultModel": {
+      "default": "gpt-5.4-mini",
+      "type": "string"
+    },
+    "theme": {
+      "default": "system",
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "system"
+      ]
+    },
+    "fontScale": {
+      "default": "m",
+      "type": "string",
+      "enum": [
+        "s",
+        "m",
+        "l",
+        "xl"
+      ]
+    },
+    "language": {
+      "default": "en",
+      "type": "string"
+    },
+    "defaultWorkspacePath": {
+      "type": "string"
+    },
+    "defaultAgent": {
+      "type": "string"
+    },
+    "bashTimeoutMs": {
+      "type": "number"
+    },
+    "sessionSpendCapUsd": {
+      "type": "number"
+    },
+    "commitAttribution": {
+      "type": "boolean"
+    },
+    "cleanupPeriodDays": {
+      "type": "number"
+    },
+    "approvalMode": {
+      "default": "ask",
+      "type": "string",
+      "enum": [
+        "ask",
+        "auto-review",
+        "bypass"
+      ]
+    },
+    "approvalRules": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "ask"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "session",
+              "persistent"
+            ]
+          }
+        },
+        "required": [
+          "tool",
+          "decision"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "permission": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "ask"
+            ]
+          }
+        },
+        "required": [
+          "permission",
+          "pattern",
+          "action"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "mcpServers": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "transport": {
+            "type": "string",
+            "enum": [
+              "http",
+              "sse",
+              "stdio"
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "oauth": {},
+          "timeout": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "pluginId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "autoCompact": {
+      "default": {
+        "enabled": true,
+        "triggerPct": 90,
+        "targetPct": 40,
+        "keepLast": 10
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "triggerPct": {
+          "default": 90,
+          "type": "number"
+        },
+        "targetPct": {
+          "default": 40,
+          "type": "number"
+        },
+        "model": {
+          "type": "string"
+        },
+        "keepLast": {
+          "default": 10,
+          "type": "number"
+        }
+      }
+    },
+    "localLlm": {
+      "type": "object",
+      "properties": {
+        "contextWindow": {
+          "default": 32768,
+          "type": "number"
+        },
+        "flashAttention": {
+          "default": "enabled",
+          "type": "string",
+          "enum": [
+            "enabled",
+            "auto",
+            "disabled"
+          ]
+        },
+        "batchSize": {
+          "default": 2048,
+          "type": "number"
+        },
+        "threads": {
+          "default": 0,
+          "type": "number"
+        },
+        "batchThreads": {
+          "default": 0,
+          "type": "number"
+        },
+        "speculativeMode": {
+          "default": "off",
+          "type": "string",
+          "enum": [
+            "off",
+            "mtp"
+          ]
+        },
+        "draftTokens": {
+          "default": 4,
+          "type": "number"
+        },
+        "draftModel": {
+          "default": "",
+          "type": "string"
+        },
+        "agentMode": {
+          "default": true,
+          "type": "boolean"
+        }
+      }
+    },
+    "localLlmByModel": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "contextWindow": {
+            "default": 32768,
+            "type": "number"
+          },
+          "flashAttention": {
+            "default": "enabled",
+            "type": "string",
+            "enum": [
+              "enabled",
+              "auto",
+              "disabled"
+            ]
+          },
+          "batchSize": {
+            "default": 2048,
+            "type": "number"
+          },
+          "threads": {
+            "default": 0,
+            "type": "number"
+          },
+          "batchThreads": {
+            "default": 0,
+            "type": "number"
+          },
+          "speculativeMode": {
+            "default": "off",
+            "type": "string",
+            "enum": [
+              "off",
+              "mtp"
+            ]
+          },
+          "draftTokens": {
+            "default": 4,
+            "type": "number"
+          },
+          "draftModel": {
+            "default": "",
+            "type": "string"
+          },
+          "agentMode": {
+            "default": true,
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "webSearch": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "tavily",
+            "brave",
+            "exa",
+            "duckduckgo"
+          ]
+        },
+        "apiKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ]
+    },
+    "firecrawl": {
+      "type": "object",
+      "properties": {
+        "apiKey": {
+          "type": "string"
+        }
+      }
+    },
+    "imageGeneration": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "providerId": {
+          "default": "",
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "type": "string"
+        },
+        "defaultSize": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number"
+        }
+      }
+    },
+    "providerCatalog": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "hooks": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "PreToolUse",
+              "PostToolUse",
+              "UserPromptSubmit",
+              "Stop",
+              "SubagentStart",
+              "SubagentStop",
+              "PreCompact",
+              "PermissionRequest"
+            ]
+          },
+          "matcher": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "timeoutMs": {
+            "type": "number"
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "pluginId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "command"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "semantic": {
+      "default": {
+        "enabled": false,
+        "provider": "ollama",
+        "baseUrl": "",
+        "model": "nomic-embed-text",
+        "apiKey": "",
+        "topK": 5
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "ollama",
+            "custom"
+          ]
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "topK": {
+          "type": "number"
+        },
+        "autoContext": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "provider",
+        "model"
+      ]
+    },
+    "appearance": {
+      "default": {
+        "mode": "system",
+        "lightPreset": "codezal-light",
+        "darkPreset": "codezal-dark",
+        "uiFont": "SF Pro Text",
+        "codeFont": "JetBrains Mono",
+        "uiFontSizePx": 14,
+        "codeFontSizePx": 13,
+        "contrastLight": 50,
+        "contrastDark": 50,
+        "reduceMotion": "system",
+        "diffStyle": "color",
+        "fontSmoothing": true,
+        "pointerCursor": false,
+        "mascotCharacter": "istanbul-simit"
+      },
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "tokenSavers": {
+      "default": {
+        "briefMode": {
+          "enabled": false,
+          "level": "full"
+        },
+        "compactOutput": {
+          "enabled": false,
+          "filters": {
+            "git": true,
+            "test": true,
+            "build": true,
+            "grep": true,
+            "lint": true,
+            "pkg": true,
+            "generic": true
+          }
+        },
+        "codeMap": {
+          "enabled": true,
+          "autoReindex": true,
+          "languages": []
+        },
+        "deferMcpTools": true,
+        "compressToolDescriptions": false,
+        "historyHygiene": {
+          "enabled": false,
+          "maxLines": 200,
+          "maxBytes": 16384
+        }
+      },
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "memory": {
+      "default": {
+        "dynamicAttach": true,
+        "autonomousRemember": true,
+        "autoLearn": true,
+        "autoLearnSkipToolChats": false,
+        "instructions": [],
+        "maxFileBytes": 32000,
+        "totalBudgetBytes": 96000,
+        "memoryStoreEnabled": true,
+        "memoryStoreBudgetTokens": 800
+      },
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "privacy": {
+      "default": {
+        "enabled": false,
+        "detectors": {
+          "EMAIL": true,
+          "PHONE": true,
+          "SSN": true,
+          "CARD": true,
+          "IBAN": true,
+          "AWS_KEY": true,
+          "GH_TOKEN": true,
+          "PRIVATE_KEY": true,
+          "JWT": true,
+          "SECRET": true,
+          "IP": false,
+          "CUSTOM": true
+        },
+        "customPatterns": [],
+        "scrubAssistant": false
+      },
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "inferenceServer": {
+      "default": {
+        "enabled": false,
+        "port": 1456,
+        "expose": false
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "port": {
+          "default": 1456,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "expose": {
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "providerConfigs": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "customProviders": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "default": {
+          "id": "",
+          "name": "",
+          "baseURL": "",
+          "models": []
+        },
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "baseURL": {
+            "type": "string",
+            "minLength": 1
+          },
+          "models": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "headers": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "baseURL"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "envFallback": {
+      "default": true,
+      "type": "boolean"
+    },
+    "modelStatus": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "terminalShortPrompt": {
+      "type": "boolean"
+    },
+    "terminalRestore": {
+      "type": "boolean"
+    },
+    "openFilesPanelOnLaunch": {
+      "default": true,
+      "type": "boolean"
+    },
+    "suggestionsEnabled": {
+      "default": false,
+      "type": "boolean"
+    },
+    "autoLintOnEdit": {
+      "default": true,
+      "type": "boolean"
+    },
+    "securityScan": {
+      "default": true,
+      "type": "boolean"
+    },
+    "narrateProgress": {
+      "default": true,
+      "type": "boolean"
+    },
+    "crashReporting": {
+      "default": true,
+      "type": "boolean"
+    },
+    "feedbackNoticeSeen": {
+      "default": false,
+      "type": "boolean"
+    },
+    "onboardingCompleted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "forkSubagent": {
+      "default": false,
+      "type": "boolean"
+    },
+    "vimMode": {
+      "default": false,
+      "type": "boolean"
+    },
+    "autoUpdate": {
+      "default": true,
+      "type": "boolean"
+    },
+    "disabledSkills": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "monitorAction": {
+      "default": "respond",
+      "type": "string",
+      "enum": [
+        "respond",
+        "chat",
+        "notify"
+      ]
+    },
+    "autopilot": {
+      "default": {
+        "runInBackground": false,
+        "autostart": false,
+        "keepAwake": false
+      },
+      "type": "object",
+      "properties": {
+        "runInBackground": {
+          "default": false,
+          "type": "boolean"
+        },
+        "autostart": {
+          "default": false,
+          "type": "boolean"
+        },
+        "keepAwake": {
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "additionalProperties": {}
+}

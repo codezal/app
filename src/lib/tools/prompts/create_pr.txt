@@ -1,0 +1,25 @@
+Open a GitHub pull request for the current branch's committed work.
+
+Use this as the FINAL step after you have implemented a change and committed it
+on a feature branch (e.g. inside a worktree spun up for a task or issue). It
+pushes the current branch to origin (push -u) and opens a PR against the base
+branch.
+
+Preconditions (the tool checks these and returns an actionable error if unmet —
+fix the cause and call again):
+- The workspace must be a GitHub repository (origin remote on github.com).
+- A GitHub token with the `repo` scope must be saved (Settings → GitHub).
+- The working tree must be clean — commit everything first, or the changes won't
+  be in the PR.
+- You must be on a feature branch, not the base/default branch. Create one (a
+  worktree or `git checkout -b`) before committing.
+
+Inputs:
+- title: concise PR title (imperative, like a commit subject).
+- body: PR description (Markdown). When the work resolves a GitHub issue, include
+  a closing keyword like "Closes #123" so merging auto-closes it.
+- base: branch to merge into. Omit to use the repository default branch.
+- draft: open as a draft PR (default false).
+
+Returns the new PR number and URL. If a PR already exists for this branch, GitHub
+rejects the call and the existing-PR message is surfaced — don't retry blindly.

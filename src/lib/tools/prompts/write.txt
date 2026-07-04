@@ -1,0 +1,9 @@
+Writes a file to the workspace.
+
+Usage:
+- This tool overwrites the existing file if there is one at the provided path.
+- If this is an existing file, you MUST read it first with read_file. Prefer edit_file for changes to existing files.
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if the user explicitly requests it.
+- Only write emojis to a file if the user explicitly requests it.
+- Parent directories are created automatically when they do not exist.

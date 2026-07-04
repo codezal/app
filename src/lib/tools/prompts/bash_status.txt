@@ -1,0 +1,7 @@
+Manage background bash jobs started with bash(background:true).
+
+Usage:
+- action: read (default — returns the job's output and status) | wait (block until the job finishes; prefer this over polling) | kill (terminate the job) | list (all jobs) | clear (remove finished jobs).
+- id is the jobId; required for read/wait/kill, omitted for list/clear.
+- For read/wait, pass cursor (the previous call's nextCursor) to fetch only new output lines and avoid repeats.
+- For wait, timeoutMs caps the wait; if it elapses, a running snapshot is returned.

@@ -1,0 +1,46 @@
+import type { SlashCommand } from "./types"
+import { INIT_TEMPLATE, REVIEW_TEMPLATE } from "./templates"
+
+export const BUILTINS: SlashCommand[] = [
+  { name: "clear", description: "Aktif sohbet mesajlarını temizle", scope: "builtin", action: "clear" },
+  { name: "btw", description: "Yan sohbet — ana thread'i kirletmeden, mevcut bağlamı miras alan paralel/araçsız soru. /btw <soru>", scope: "builtin", action: "side-chat", needsArg: true },
+  { name: "branch", description: "Bu sohbetten çatal — çatala geç (orijinal korunur). /branch [isim]", scope: "builtin", action: "branch" },
+  { name: "fork", description: "/branch aliası. forkSubagent açıksa: arka planda çatal, sonucu buraya getir", scope: "builtin", action: "fork", needsArg: true },
+  { name: "model", description: "Model değiştir (palette aç)", scope: "builtin", action: "model" },
+  { name: "agent", description: "Tek uzman ajanla sohbet — sen seçersin (preset persona)", scope: "builtin", action: "agent", needsArg: true },
+  { name: "workspace", description: "Workspace klasörü seç", scope: "builtin", action: "workspace" },
+  { name: "search", description: "Workspace içinde ara", scope: "builtin", action: "search" },
+  { name: "autopilot", description: "Autopilot'u aç", scope: "builtin", action: "routines" },
+  { name: "orchestra", description: "Çok-ajan modu: model işi worker havuzuna paralel dağıtır (havuzu konfigüre et + moda geç)", scope: "builtin", action: "orchestra" },
+  { name: "workflows", description: "Workflow run'ları — deterministik script orkestrasyonu (kod-driven), çalışan/biteni göster", scope: "builtin", action: "workflows" },
+  { name: "plugins", description: "Eklentileri yönet (SettingsDrawer)", scope: "builtin", action: "plugins" },
+  { name: "sdd", description: "SDD hattı başlat — gereksinim → tasarım → prototip → plan → build", scope: "builtin", action: "sdd" },
+  { name: "settings", description: "Ayarları aç", scope: "builtin", action: "settings" },
+  { name: "stop", description: "Devam eden stream'i durdur", scope: "builtin", action: "stop" },
+  {
+    name: "init",
+    description: "AGENTS.md oluştur/güncelle (proje talimat dosyası)",
+    scope: "builtin",
+    template: INIT_TEMPLATE,
+  },
+  {
+    name: "review",
+    description: "Değişiklikleri incele [commit|branch|pr], varsayılan: commit edilmemiş",
+    scope: "builtin",
+    template: REVIEW_TEMPLATE,
+    subtask: true,
+  },
+  {
+    name: "goal",
+    description: "Persistent goal — model goal tamamlanana kadar otomatik devam eder ('/goal stop' ile iptal)",
+    scope: "builtin",
+    action: "goal",
+    needsArg: true,
+  },
+  { name: "codemap-index", description: "Code Map index'ini oluştur (Token Saving aracı)", scope: "builtin", action: "codemap-index" },
+  { name: "memory", description: "Bellek dosyalarını yönet (görüntüle/düzenle)", scope: "builtin", action: "memory" },
+  { name: "compact", description: "Bağlamı şimdi sıkıştır — eski mesajları memory özetine indir (eşikten bağımsız)", scope: "builtin", action: "compact" },
+  { name: "rename", description: "Aktif sohbeti yeniden adlandır — /rename <yeni başlık>", scope: "builtin", action: "rename", needsArg: true },
+  { name: "resume", description: "Sohbet listesini aç (isimle ara ve devam et)", scope: "builtin", action: "resume" },
+  { name: "help", description: "Tüm komutları göster", scope: "builtin", action: "help" },
+]

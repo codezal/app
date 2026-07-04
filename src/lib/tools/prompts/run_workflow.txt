@@ -1,0 +1,55 @@
+Bir JS workflow script'i ile çok sayıda alt-ajanı deterministik orkestre et. Tool HEMEN bir runId döner — script ARKA PLANDA koşar, session responsive kalır. İlerleme + final sonucu `workflow_status({ runId })` ile oku.
+
+NE ZAMAN: Tek konuşmanın koordine edemeyeceği kadar çok ajan gerektiğinde (kod-tabanı denetimi, büyük migrasyon, çapraz-doğrulamalı araştırma, çok açıdan plan). Tek-iki delege iş için `spawn_agent` yeterli.
+
+
+İlk satır ZORUNLU — saf literal `meta`:
+  export const meta = {
+    name: 'audit-endpoints',
+    description: 'Tek satır ne yaptığı',
+    phases: [{ title: 'Tara' }, { title: 'Doğrula' }],
+  }
+  phase('Tara')
+  const bulgular = await agent('src/routes altındaki endpoint'leri auth eksikliği için tara', { schema: SCHEMA })
+  ...
+  return sonuç
+
+`meta` SAF LİTERAL olmalı — değişken/fonksiyon-çağrısı/spread/template yasak. Gövde düz JavaScript (TypeScript DEĞİL). async context — doğrudan `await`.
+
+## Enjekte edilen hook'lar
+
+- agent(prompt, opts?) → alt-ajan spawn. opts: { label?, phase?, schema?, model?, agentType?, maxSteps? }. schema YOKSA metin döner; schema (JSON Schema obje) VARSA doğrulanmış obje döner. Ajan tüm araçlara erişir (read/grep/bash/edit) ama spawn_agent/dispatch_workers/run_workflow ÇAĞIRAMAZ.
+- parallel(thunks[]) → BARİYER: hepsini eşzamanlı başlat, hepsini bekle. Patlayan thunk → null (kullanmadan önce .filter(Boolean)).
+- pipeline(items, stage1, stage2, ...) → BARİYERSİZ: her item tüm stage'leri bağımsız geçer (A stage3'te iken B stage1'de). Stage cb (prev, item, idx) alır. VARSAYILAN çok-stage aracı — barrier yerine bunu kullan.
+- log(msg) → ilerleme satırı (kullanıcıya görünür).
+- phase(title) → sonraki agent'ları bu faz altında grupla.
+- args → tool'a verilen args (yoksa undefined).
+- budget → { total, spent(), remaining() } — paylaşımlı token havuzu; total null ise sınırsız.
+- workflow(nameOrRef, args?) → kayıtlı/alt workflow'u çağır (tek seviye iç içe).
+
+
+Script içinde Date.now(), Math.random(), argümansız new Date() YASAK (throw eder) — resume replay'i bozar. Çeşitlilik gerekiyorsa index/label kullan; zaman damgası gerekiyorsa args ile geç.
+
+## Limitler
+
+Eşzamanlı en fazla ~16 ajan (fazlası kuyrukta). Run başına toplam 1000 ajan tavanı.
+
+
+- pipeline-default: çok-stage işte bariyersiz pipeline kullan — yavaş item hızlıların slot'unu israf etmesin.
+- bariyer SADECE cross-item bağımlılıkta: tüm bulguları dedup/merge, ya da toplam-sıfır early-exit.
+- loop-until-count: `while (bugs.length < 10) { ... }`.
+- adversarial-verify: her bulgu için N bağımsız şüpheci spawn et (REDDETMEYE çalışsın), çoğunluk reddederse at.
+- judge-panel: N bağımsız deneme üret, paralel jüriyle puanla, kazanandan sentezle.
+
+Kanonik şablon (pipeline — her boyut review'i biter bitmez doğrulanır):
+  const DIMENSIONS = [{key:'bugs',prompt:'...'},{key:'perf',prompt:'...'}]
+  const results = await pipeline(
+    DIMENSIONS,
+    d => agent(d.prompt, { label: `review:${d.key}`, phase: 'Review', schema: FINDINGS }),
+    review => parallel(review.findings.map(f => () =>
+      agent(`Şu bulguyu adversarial doğrula: ${f.title}`, { phase: 'Verify', schema: VERDICT })
+        .then(v => ({ ...f, verdict: v })))),
+  )
+  return results.flat().filter(Boolean).filter(f => f.verdict?.isReal)
+
+resumeFromRunId verilirse: değişmemiş agent() prefix'i cache'ten anında döner, ilk değişen/yeni çağrıdan canlı koşar.
