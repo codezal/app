@@ -6,10 +6,10 @@ import type { Settings } from "@/store/types"
 import { gitDiffAll, gitDiffStaged } from "@/lib/git"
 
 const SYSTEM =
-  "Sen bir git commit mesajı yazarısın. Verilen staged diff için TEK bir kısa " +
-  "Conventional Commits mesajı üret (örn `feat: ...`, `fix: ...`, `refactor: ...`). " +
-  "Yalnız commit mesajını döndür — emir kipinde kısa başlık satırı, gerekiyorsa boş " +
-  "satır + kısa gövde. Kod bloğu, sarmalayan tırnak veya açıklama YOK. Türkçe yaz."
+  "You write git commit messages. For the staged diff, produce exactly one short " +
+  "Conventional Commits message (for example `feat: ...`, `fix: ...`, `refactor: ...`). " +
+  "Return only the commit message: a short imperative subject line, and if needed a blank " +
+  "line plus a brief body. Do not include code fences, wrapping quotes, or explanations. Write in English."
 
 function clean(raw: string): string {
   let t = raw.trim()
@@ -34,7 +34,7 @@ export async function generateCommitMessage(opts: {
     settings: opts.settings,
   })
 
-  // Gated provider'lar (Kimi For Coding, Z.AI Coding vb.) bare generateText'i 403'ler;
+  // Gated providers (Kimi For Coding, Z.AI Coding, etc.) 403 bare generateText;
   const gated = isCodingAgentGated(opts.providerId)
   const tools = gated
     ? { noop: tool({ description: "unused", inputSchema: z.object({}), execute: async () => "" }) }

@@ -7,11 +7,11 @@ import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import type { Settings } from "@/store/types"
 
 const SYSTEM =
-  "Sen bir prompt geliştirme asistanısın. Kullanıcının yazdığı ham prompt'u daha NET, " +
-  "yapılandırılmış ve eyleme dönük hale getir: amacı KORU, kullanıcının yazdığı DİLİ " +
-  "koru, eksik bağlamı makul biçimde aç. YENİ gereksinim uydurma, varsayım ekleme, soru " +
-  "SORMA ve cevabı yazma. Yalnız geliştirilmiş prompt METNİNİ döndür — markdown çiti, " +
-  "açıklama, ön söz veya tırnak YOK."
+  "You are a prompt-improvement assistant. Rewrite the user's raw prompt so it is clearer, " +
+  "more structured, and more actionable: preserve the intent, preserve the language the user " +
+  "used, and make missing context reasonably explicit. Do not invent new requirements, add " +
+  "assumptions, ask questions, or answer the prompt. Return only the improved prompt text: no " +
+  "markdown fences, explanation, preface, or quotes."
 
 function stripFence(raw: string): string {
   const t = raw.replace(/\r\n/g, "\n").trim()
@@ -28,14 +28,14 @@ export async function enhancePrompt(args: {
 }): Promise<string> {
   const catalog = args.settings.providerCatalog?.data as ProvidersCatalog | undefined
   const modelId = pickSmallModel(catalog, args.providerId) ?? args.fallbackModel
-  if (!modelId) throw new Error("Kullanılabilir model yok")
+  if (!modelId) throw new Error("No available model")
 
   const model = await buildLanguageModel({
     providerId: args.providerId,
     modelId,
     settings: args.settings,
   })
-  // Gated provider'lar (Kimi For Coding, Z.AI Coding) bare generate'i 403'ler →
+  // Gated providers (Kimi For Coding, Z.AI Coding) 403 bare generate calls.
   const gated = isCodingAgentGated(args.providerId)
   const tools = gated
     ? { noop: tool({ description: "unused", inputSchema: z.object({}), execute: async () => "" }) }
@@ -43,7 +43,7 @@ export async function enhancePrompt(args: {
   const result = streamText({
     model,
     system: SYSTEM,
-    prompt: `Ham prompt:\n\n${args.text}\n\nGeliştirilmiş prompt:`,
+    prompt: `Raw prompt:\n\n${args.text}\n\nImproved prompt:`,
     tools,
     toolChoice: gated ? "none" : undefined,
     stopWhen: stepCountIs(1),

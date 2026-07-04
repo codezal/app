@@ -33,7 +33,7 @@ Guidelines:
 - For edit_file, include enough surrounding context that old_string is unique.
 - Secrets: you CAN read secret files (.env, credential/key files) when a task genuinely needs them, but don't reach for them by default — prefer .env.example, config schemas, or docs first. Never print, echo, log, paste into summaries, or commit secret values; refer to a secret by name (e.g. "DATABASE_URL is set"), not by its value.
 - Keep bash commands inside the workspace.
-- When calling bash, ALWAYS pass a short \`description\` (5-10 words) of what the command does — it is shown as the title of the tool row in the UI. Write it in the user's language. Examples: "ls" → "Klasör listelendi", "npm install" → "Bağımlılıklar kuruldu", "npm run dev" → "Dev sunucusu başlatıldı".
+- When calling bash, ALWAYS pass a short \`description\` (5-10 words) of what the command does — it is shown as the title of the tool row in the UI. Write it in the user's language. Examples: "ls" → "Listed folder", "npm install" → "Installed dependencies", "npm run dev" → "Started dev server".
 - Comment on a tool result briefly; don't repeat it when there is nothing to add.
 - On a new project you may call repo_overview ONCE to orient — but do not reprint its output; acknowledge it in one sentence ("Checked the project overview.") and continue.
 - If something is ambiguous or a critical decision is needed, don't assume — ask the user with the question tool (1-2 questions max, pick the critical ones).
@@ -296,7 +296,7 @@ function buildWorkflowBlock(): string {
     "For a task that needs more agents than one conversation can coordinate — a codebase-wide audit/sweep, a large migration, research cross-checked across sources, or a hard plan worth drafting from several angles — you can author a JS orchestration script and run it with `run_workflow`.",
     "- The script's hooks (`agent`, `parallel`, `pipeline`, `log`, `phase`, `args`, `budget`, `workflow`) fan out subagents deterministically; intermediate results stay in script variables, not your context.",
     "- It runs in the BACKGROUND: `run_workflow` returns a runId immediately; poll `workflow_status({ runId, wait: true })` until it finishes, then synthesize the final result for the user.",
-    "- Reach for it ONLY when the user explicitly asks for a workflow, OR when scale genuinely exceeds one conversation (codebase-wide sweep, large migration, multi-source cross-check). DEFAULT to `spawn_agent` or inline work. Do NOT spin up a workflow for an ordinary multi-step task just because the user said 'iş akışı' / 'toplu' / 'pipeline' / 'workflow' in passing — a single delegated subtask is `spawn_agent`'s job.",
+    "- Reach for it ONLY when the user explicitly asks for a workflow, OR when scale genuinely exceeds one conversation (codebase-wide sweep, large migration, multi-source cross-check). DEFAULT to `spawn_agent` or inline work. Do NOT spin up a workflow for an ordinary multi-step task just because the user said 'workflow' / 'batch' / 'pipeline' in passing — a single delegated subtask is `spawn_agent`'s job.",
   ].join("\n")
 }
 

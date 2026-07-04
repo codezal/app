@@ -175,7 +175,7 @@ describe("checkSubagentPolicy", () => {
   ])("bashAllow + %s → reddedilir (bypass engeli)", (_label, command) => {
     const r = checkSubagentPolicy({ bashAllow: ["pnpm test"] }, "bash", { command })
     expect(r.allowed).toBe(false)
-    expect(r.reason).toMatch(/metakarakter/)
+    expect(r.reason).toMatch(/metacharacters/)
   })
 })
 

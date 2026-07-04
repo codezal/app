@@ -393,7 +393,7 @@ export function buildMemorySystemPrompt(
   const parts: string[] = []
   let used = 0
   for (const f of sorted) {
-    const header = `## ${f.scope === "project" ? "Proje" : "Global"}: ${f.name}\n`
+    const header = `## ${f.scope === "project" ? "Project" : "Global"}: ${f.name}\n`
     const block = header + f.content.trim() + "\n"
     if (used + byteLen(block) > budget) break
     parts.push(block)
@@ -403,8 +403,8 @@ export function buildMemorySystemPrompt(
   if (parts.length === 0) return ""
 
   return [
-    "# Aktif Bellek ve Kurallar",
-    "Aşağıdaki yönergeler kullanıcı tarafından yüklenmiştir. Görevleri yaparken bunlara uy.",
+    "# Active Memory and Rules",
+    "The following instructions were loaded by the user. Follow them while working on tasks.",
     "",
     parts.join("\n"),
   ].join("\n")

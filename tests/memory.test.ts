@@ -35,7 +35,7 @@ describe("buildMemorySystemPrompt", () => {
 
   it("başlık ve talimat bloğu içerir", () => {
     const r = buildMemorySystemPrompt([file("CLAUDE.md", "Follow TDD.")])
-    expect(r).toContain("Aktif Bellek")
+    expect(r).toContain("Active Memory")
     expect(r).toContain("Follow TDD.")
   })
 
@@ -50,7 +50,7 @@ describe("buildMemorySystemPrompt", () => {
 
   it("proje dosyası 'Proje:' etiketi alır", () => {
     const r = buildMemorySystemPrompt([file("CLAUDE.md", "content", "project")])
-    expect(r).toContain("## Proje: CLAUDE.md")
+    expect(r).toContain("## Project: CLAUDE.md")
   })
 
   it("global dosya 'Global:' etiketi alır", () => {

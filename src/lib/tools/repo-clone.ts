@@ -16,14 +16,14 @@ export type CloneResult = {
 //   https://gitlab.com/group/sub/repo
 function parseRepoName(url: string): string {
   let last = url.trim()
-  // .git eki at
+  // Strip .git suffix.
   last = last.replace(/\.git\/?$/, "")
-  // Son segment
+  // Last path segment.
   const idx = Math.max(last.lastIndexOf("/"), last.lastIndexOf(":"))
   const name = idx >= 0 ? last.slice(idx + 1) : last
-  if (!name) throw new Error(`URL'den repo adı çıkarılamadı: ${url}`)
+  if (!name) throw new Error(`Could not infer repo name from URL: ${url}`)
   if (name === "." || name === ".." || !/^[a-zA-Z0-9._-]+$/.test(name)) {
-    throw new Error(`Geçersiz repo adı: ${name}`)
+    throw new Error(`Invalid repo name: ${name}`)
   }
   return name
 }
@@ -31,7 +31,7 @@ function parseRepoName(url: string): string {
 function validateBranch(branch: string): void {
   if (!/^[A-Za-z0-9/_.-]+$/.test(branch) || branch.startsWith("-") || branch.includes("..")) {
     throw new Error(
-      `Geçersiz branch adı: ${branch} — yalnızca harf/rakam/_/./- içerebilir, '-' ile başlayamaz, '..' içeremez`,
+      `Invalid branch name: ${branch}; only letters/digits/_/./- are allowed, it cannot start with '-', and it cannot contain '..'`,
     )
   }
 }
@@ -43,9 +43,9 @@ export async function cloneRepo(opts: {
   depth?: number
 }): Promise<CloneResult> {
   const { url, branch, depth } = opts
-  if (!url) throw new Error("URL gerekli")
+  if (!url) throw new Error("URL is required")
   if (!/^(https?:\/\/|git@|ssh:\/\/)/i.test(url)) {
-    throw new Error("Desteklenmeyen URL şeması — https://, git@ veya ssh:// gerekir")
+    throw new Error("Unsupported URL scheme: https://, git@, or ssh:// required")
   }
 
   const repoName = parseRepoName(url)
@@ -61,7 +61,7 @@ export async function cloneRepo(opts: {
   const dest = target
   return withLock(`repo-clone:${dest}`, async () => {
     if (await exists(dest)) {
-      throw new Error(`Hedef klasör zaten var: ${dest} — farklı 'target' parametresi ver veya elle sil`)
+      throw new Error(`Target folder already exists: ${dest}; provide a different 'target' or delete it manually`)
     }
 
     const flags: string[] = []
@@ -71,7 +71,7 @@ export async function cloneRepo(opts: {
 
     if (result.code !== 0) {
       throw new Error(
-        `git clone başarısız (exit ${result.code}):\n${result.stderr.trim() || result.stdout.trim()}`,
+        `git clone failed (exit ${result.code}):\n${result.stderr.trim() || result.stdout.trim()}`,
       )
     }
 

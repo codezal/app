@@ -9,13 +9,13 @@ import { useSettingsStore } from "@/store/settings"
 import { errorMessage } from "@/lib/errors"
 import type { WorkerEvent } from "../types"
 
-const DEFAULT_WORKFLOW_SYSTEM = `Sen bir Codezal workflow ajanısın. Sana verilen tek görevi araçlarla tamamla ve final cevabını üret.
+const DEFAULT_WORKFLOW_SYSTEM = `You are a Codezal workflow agent. Complete the single assigned task with tools, then produce the final answer.
 
-Disiplin:
-- Final cevabın DÖNÜŞ DEĞERİDİR — bir workflow script'i onu programatik kullanır, kullanıcıya gösterilmez. Gevezelik/selamlama yok; sadece istenen veriyi/özeti döndür.
-- Kök nedeni çöz, semptomu değil.
-- Kod değiştirdiysen rapor etmeden önce kendin doğrula (test + tip kontrolü).
-- Bir schema istendiyse cevabın tam o schema'ya uymalı.`
+Discipline:
+- Your final answer is the RETURN VALUE: a workflow script uses it programmatically; it is not shown directly to the user. No chatter or greetings; return only the requested data/summary.
+- Fix the root cause, not the symptom.
+- If you changed code, verify it yourself before reporting (tests + type check).
+- If a schema was requested, your answer must conform exactly to that schema.`
 
 const FORBIDDEN_AGENT_TOOLS = new Set([
   "spawn_agent",
@@ -60,7 +60,7 @@ export async function runAgentInline(input: AgentCoreInput): Promise<AgentCoreRe
     settings.defaultProvider) as ProviderId
   const modelId = input.model?.modelId ?? preset?.model ?? settings.defaultModel
   if (!provider || !modelId) {
-    throw new Error("Workflow ajanı: provider/model belirlenemedi")
+    throw new Error("Workflow agent: provider/model could not be determined")
   }
 
   const systemPrompt = preset?.systemPrompt ?? input.systemPrompt ?? DEFAULT_WORKFLOW_SYSTEM
@@ -139,7 +139,7 @@ export async function runAgentInline(input: AgentCoreInput): Promise<AgentCoreRe
         model,
         messages: [
           ...resp.messages,
-          { role: "user", content: "Bulgularını final cevap olarak özetle." },
+          { role: "user", content: "Summarize your findings as the final answer." },
         ],
       })
       text = wrap.text.trim()
@@ -157,7 +157,7 @@ export async function runAgentInline(input: AgentCoreInput): Promise<AgentCoreRe
         messages: [
           {
             role: "user",
-            content: `Aşağıdaki görev sonucunu istenen şemaya tam uyacak şekilde yapılandır.\n\nGörev: ${input.prompt}\n\nSonuç:\n${text || "(boş)"}`,
+            content: `Structure the following task result so it conforms exactly to the requested schema.\n\nTask: ${input.prompt}\n\nResult:\n${text || "(empty)"}`,
           },
         ],
       })
@@ -167,7 +167,7 @@ export async function runAgentInline(input: AgentCoreInput): Promise<AgentCoreRe
         tokensOut = (tokensOut ?? 0) + (obj.usage.outputTokens ?? 0)
       }
     } catch (e) {
-      throw new Error(`Schema coercion başarısız: ${errorMessage(e)}`, { cause: e })
+      throw new Error(`Schema coercion failed: ${errorMessage(e)}`, { cause: e })
     }
   }
 
@@ -180,7 +180,7 @@ export async function runAgentInline(input: AgentCoreInput): Promise<AgentCoreRe
     return { text, structured, tokensIn, tokensOut }
   }
 
-  if (!text) text = "(workflow ajanı boş cevap döndürdü)"
+  if (!text) text = "(workflow agent returned an empty response)"
   input.emit({ type: "complete", text })
   return { text, structured, tokensIn, tokensOut }
 }

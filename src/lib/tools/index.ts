@@ -10,7 +10,7 @@ import { webfetch as webfetchImpl, websearch as websearchImpl, firecrawlScrape a
 import { repoOverview as repoOverviewImpl } from "./repo-overview"
 import { applyPatch as applyPatchImpl, formatApplyResult } from "./patch"
 import { cloneRepo as cloneRepoImpl } from "./repo-clone"
-// ile ham string import edilir. Prompt'u tune etmek index.ts'e dokunmadan olur.
+// Imported as raw strings so prompts can be tuned without touching index.ts.
 import READ_DESC from "./prompts/read.txt?raw"
 import GREP_DESC from "./prompts/grep.txt?raw"
 import GLOB_DESC from "./prompts/glob.txt?raw"
@@ -197,7 +197,7 @@ function lspResultString(
     if (res.data.length > CAP) {
       return (
         JSON.stringify(res.data.slice(0, CAP), null, 2) +
-        `\n\n(${res.data.length} sonuçtan ilk ${CAP} gösteriliyor — daha dar bir query kullan.)`
+        `\n\n(Showing the first ${CAP} of ${res.data.length} results; use a narrower query.)`
       )
     }
   }
@@ -206,10 +206,10 @@ function lspResultString(
 
 const GREP_LIMIT = 100
 function formatHits(hits: SearchHit[]): string {
-  if (hits.length === 0) return "Eşleşme yok"
+  if (hits.length === 0) return "No matches"
   const truncated = hits.length > GREP_LIMIT
   const shown = truncated ? hits.slice(0, GREP_LIMIT) : hits
-  const out = [`${hits.length} eşleşme bulundu${truncated ? ` (ilk ${GREP_LIMIT} gösteriliyor)` : ""}`]
+  const out = [`${hits.length} match${hits.length === 1 ? "" : "es"} found${truncated ? ` (showing first ${GREP_LIMIT})` : ""}`]
   let current = ""
   for (const h of shown) {
     if (current !== h.rel) {
@@ -217,11 +217,11 @@ function formatHits(hits: SearchHit[]): string {
       current = h.rel
       out.push(`${h.rel}:`)
     }
-    out.push(`  Satır ${h.line}: ${h.text}`)
+    out.push(`  Line ${h.line}: ${h.text}`)
   }
   if (truncated) {
     out.push("")
-    out.push(`(Sonuçlar kısaltıldı: ${hits.length} eşleşmeden ilk ${GREP_LIMIT} gösteriliyor. Daha dar bir desen veya yol kullan.)`)
+    out.push(`(Results truncated: showing first ${GREP_LIMIT} of ${hits.length} matches. Use a narrower pattern or path.)`)
   }
   return out.join("\n")
 }
@@ -237,7 +237,7 @@ const AGENT_SUMMARY_TIMEOUT_MS = 60_000
 
 function truncateForContext(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
-  return sliceCharsSafe(text, maxChars) + `\n\n[... kesildi, toplam ${text.length} char]`
+  return sliceCharsSafe(text, maxChars) + `\n\n[... truncated, ${text.length} total chars]`
 }
 
 function formatJobOutput(job: BackgroundJob, cursor?: number): string {
@@ -261,9 +261,9 @@ function formatJobOutput(job: BackgroundJob, cursor?: number): string {
   const body = lines.length
     ? lines.join("\n")
     : cursor != null
-      ? "(yeni çıktı yok)"
-      : "(çıktı yok)"
-  const note = gap > 0 ? `\n[not: ${gap} satır ring buffer'dan düştü]` : ""
+      ? "(no new output)"
+      : "(no output)"
+  const note = gap > 0 ? `\n[note: ${gap} lines fell out of the ring buffer]` : ""
   return `${head}\ncursor=${job.emitted}${note}\n${body}`
 }
 
@@ -307,8 +307,8 @@ function recordDoomAndWarn(tool: string, input: unknown, ownerSessionId: string)
   doomHistory.set(sid, hist)
   if (!repeat) return null
   return (
-    `⚠️ Doom-loop uyarısı: '${tool}' aynı argümanlarla ardışık ${DOOM_REPEAT} kez çağrıldı ve çıktı değişmedi. ` +
-    `Muhtemelen takıldın — aynı çağrıyı tekrar etme. Kök nedeni incele (ör. yanlış çalışma dizini, hatalı argüman, eksik bağımlılık) ve FARKLI bir yaklaşım dene.`
+    `Warning: doom-loop detected. '${tool}' was called ${DOOM_REPEAT} times in a row with the same arguments and unchanged output. ` +
+    `You are likely stuck; do not repeat the same call. Inspect the root cause (for example wrong working directory, bad arguments, missing dependency) and try a different approach.`
   )
 }
 
@@ -348,14 +348,14 @@ function wrapToolsWithPolicy(
       execute: async (args: unknown, ctx: unknown) => {
         const check = checkSubagentPolicy(policy, name, args)
         if (!check.allowed) {
-          throw new Error(check.reason ?? `Subagent '${name}' kullanamaz`)
+          throw new Error(check.reason ?? `Subagent cannot use '${name}'`)
         }
         if (check.requiresApproval) {
           const decision = await useApprovalsStore
             .getState()
             .request(name, args, { sessionId: ownerSessionId })
           if (decision === "deny") {
-            throw new Error(`Kullanıcı subagent '${name}' çağrısını reddetti`)
+            throw new Error(`The user denied subagent call '${name}'`)
           }
         }
         return original.execute!(args, ctx)
@@ -374,7 +374,7 @@ async function gate(
   const mode = useSessionsStore.getState().sessions[ownerSessionId]?.mode ?? "build"
   if (mode === "plan" && PLAN_BLOCKED.has(tool)) {
     throw new Error(
-      `Plan modunda '${tool}' çağrılamaz — bu mod salt-okunur (read_file, list_dir, grep, webfetch, question). Build moduna geç (⌘M) veya alternatif yaklaşım öner.`,
+      `Cannot call '${tool}' in plan mode: this mode is read-only (read_file, list_dir, grep, webfetch, question). Switch to build mode (⌘M) or suggest an alternative approach.`,
     )
   }
   // Effective hooks = global + active workspace's project config (warmed by the
@@ -391,7 +391,7 @@ async function gate(
       workspace,
     })
     if (r.blocked) {
-      throw new Error(`Hook tarafından engellendi: ${r.blockReason ?? "(sebep yok)"}`)
+      throw new Error(`Blocked by hook: ${r.blockReason ?? "(no reason)"}`)
     }
     if (r.modifiedInput !== undefined) {
       modifiedInput = r.modifiedInput
@@ -408,7 +408,7 @@ async function gate(
       workspace,
     })
     if (pr.blocked) {
-      throw new Error(`İzin reddedildi (hook): ${pr.blockReason ?? "(sebep yok)"}`)
+      throw new Error(`Permission denied by hook: ${pr.blockReason ?? "(no reason)"}`)
     }
     if (pr.autoApprove) {
       await captureCheckpoint(ownerSessionId, workspace)
@@ -422,7 +422,7 @@ async function gate(
     // retries — instead of a generic rejection it would just give up on.
     const findings =
       getEffectiveSettings(workspace).securityScan !== false ? scanToolInput(tool, input) : []
-    throw new Error(secretDenyGuidance(findings) ?? `Kullanıcı '${tool}' çağrısını reddetti`)
+    throw new Error(secretDenyGuidance(findings) ?? `The user denied '${tool}'`)
   }
   await captureCheckpoint(ownerSessionId, workspace)
   return modifiedInput
@@ -478,7 +478,7 @@ async function resolvePathOrAsk(workspace: string, rel: string, toolName: string
       tool: toolName,
       path: rel,
     })
-    if (decision === "deny") throw new Error(`Workspace dışı erişim reddedildi: ${rel}`, { cause: e })
+    if (decision === "deny") throw new Error(`Access outside the workspace was denied: ${rel}`, { cause: e })
     return rel
   }
 }
@@ -613,7 +613,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
       }),
       execute: async ({ url }) => {
         if (!/^https?:\/\//i.test(url)) {
-          return "Hata: yalnız http:// veya https:// adresleri açılabilir (file://, chrome://, data:// engelli)."
+          return "Error: only http:// or https:// URLs can be opened (file://, chrome://, data:// are blocked)."
         }
         const r = await browserNavigate(ownerSessionId, url)
         const ws = useSessionsStore.getState().sessions[ownerSessionId]?.workspacePath ?? ""
@@ -632,8 +632,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
       inputSchema: z.object({}),
       execute: async (_args, { toolCallId }) => {
         const b64 = await browserScreenshot(ownerSessionId)
-        // USER-message image olarak enjekte eder (tool-result image openai-uyumlu
-        // (abort) birikmesin.
+        // Injects as a USER-message image. Keep pending tool-result images bounded.
         if (pendingScreenshots.size >= 16) {
           const oldest = pendingScreenshots.keys().next().value
           if (oldest !== undefined) pendingScreenshots.delete(oldest)
@@ -909,7 +908,7 @@ export async function buildAllTools(
         const act = action ?? "list"
         if (act === "list") {
           const groups = listConnectedMcpResources()
-          if (!groups.length) return "Bağlı MCP server'da resource yok."
+          if (!groups.length) return "No resources on connected MCP servers."
           return groups
             .map(
               (g) =>
@@ -919,15 +918,15 @@ export async function buildAllTools(
             .join("\n\n")
         }
         // read
-        if (!uri) return "uri gerekli (read için)."
+        if (!uri) return "uri is required for read."
         const cfg = allMcps.find((m) => m.name === server)
-        if (!cfg) return `MCP server bulunamadı: ${server}`
+        if (!cfg) return `MCP server not found: ${server}`
         const res = await readMcpResource(cfg, uri)
         const contents = (res.contents ?? []) as Array<{ text?: string; blob?: string }>
         const parts = contents
-          .map((c) => c.text ?? (c.blob ? "(binary içerik)" : ""))
+          .map((c) => c.text ?? (c.blob ? "(binary content)" : ""))
           .filter(Boolean)
-        return parts.join("\n\n") || "(boş resource)"
+        return parts.join("\n\n") || "(empty resource)"
       },
     })
   }
@@ -1128,11 +1127,11 @@ function buildWebTools(ownerSessionId: string): ToolSet {
         const r = await cloneRepoImpl({ url, target, branch, depth })
         useSessionsStore.getState().updateMetaFor(ownerSessionId, { workspacePath: r.path })
         const lines = [
-          `Klonlandı: ${r.repoName}`,
-          `Yol: ${r.path}`,
+          `Cloned: ${r.repoName}`,
+          `Path: ${r.path}`,
         ]
-        if (r.branch) lines.push(`Aktif branch: ${r.branch}`)
-        lines.push("Workspace otomatik bağlandı — sonraki tool'lar bu klasörde çalışır.")
+        if (r.branch) lines.push(`Active branch: ${r.branch}`)
+        lines.push("Workspace attached automatically; subsequent tools run in this folder.")
         return lines.join("\n")
       },
     }),
@@ -1165,7 +1164,7 @@ function buildWebTools(ownerSessionId: string): ToolSet {
         const cfg = useSettingsStore.getState().settings.firecrawl
         if (!cfg?.apiKey) {
           throw new Error(
-            "Firecrawl yapılandırılmamış. Ayarlar > Web Arama'dan Firecrawl API anahtarı ekle.",
+            "Firecrawl is not configured. Add a Firecrawl API key in Settings > Web Search.",
           )
         }
         return firecrawlImpl(url, cfg.apiKey)
@@ -1227,7 +1226,7 @@ function buildWebTools(ownerSessionId: string): ToolSet {
           .map((q, i) => {
             const a = answers[i] ?? []
             const head = q.header ? `[${q.header}] ` : ""
-            return `${head}${q.question}\n→ ${a.join(", ") || "(cevap yok)"}`
+            return `${head}${q.question}\n-> ${a.join(", ") || "(no answer)"}`
           })
           .join("\n\n")
       },
@@ -1242,7 +1241,7 @@ function buildWebTools(ownerSessionId: string): ToolSet {
       execute: async ({ title, body }) => {
         await gateFor("notify", { title, body })
         await sendDesktopNotification(title, body)
-        return `Bildirim gönderildi: ${title}`
+        return `Notification sent: ${title}`
       },
     }),
   }
@@ -1253,12 +1252,12 @@ function formatWorkflowRun(run: WorkflowRun): string {
   let tokOut = 0
   for (const a of run.agents) tokOut += a.tokensOut ?? 0
   lines.push(
-    `Workflow "${run.name}" [${run.status}] — ${run.agents.length} ajan, ${run.phases.length} faz, ~${tokOut} çıktı-token`,
+    `Workflow "${run.name}" [${run.status}] - ${run.agents.length} agents, ${run.phases.length} phases, ~${tokOut} output tokens`,
   )
   const phaseOrder = run.phases.map((p) => p.title)
   const grouped = new Map<string, typeof run.agents>()
   for (const a of run.agents) {
-    const k = a.phase || "(faz yok)"
+    const k = a.phase || "(no phase)"
     const arr = grouped.get(k) ?? []
     arr.push(a)
     grouped.set(k, arr)
@@ -1270,29 +1269,29 @@ function formatWorkflowRun(run: WorkflowRun): string {
     const done = arr.filter((a) => a.status === "done").length
     const err = arr.filter((a) => a.status === "error").length
     const run_ = arr.filter((a) => a.status === "running" || a.status === "pending").length
-    lines.push(`  ${k}: ${arr.length} ajan (${done} bitti, ${run_} sürüyor, ${err} hata)`)
+    lines.push(`  ${k}: ${arr.length} agents (${done} done, ${run_} running, ${err} errors)`)
   }
   if (run.logLines.length > 0) {
-    lines.push("--- log (son 5) ---")
+    lines.push("--- log (last 5) ---")
     for (const l of run.logLines.slice(-5)) lines.push(`  ${l}`)
   }
   if (run.status === "done") {
-    lines.push("--- SONUÇ ---")
-    lines.push(truncateForContext(run.result ?? "(boş)", WORKER_OUTPUT_MAX))
+    lines.push("--- RESULT ---")
+    lines.push(truncateForContext(run.result ?? "(empty)", WORKER_OUTPUT_MAX))
   } else if (run.status === "error") {
-    lines.push(`HATA: ${run.error ?? "bilinmeyen"}`)
+    lines.push(`ERROR: ${run.error ?? "unknown"}`)
   } else if (run.status === "cancelled") {
-    lines.push("Durduruldu.")
+    lines.push("Cancelled.")
   } else {
-    lines.push("(hâlâ çalışıyor — workflow_status ile tekrar poll et)")
+    lines.push("(still running; poll again with workflow_status)")
   }
   return lines.join("\n")
 }
 
 function formatWorkflowList(runs: WorkflowRun[]): string {
-  if (runs.length === 0) return "Aktif/biten workflow run'ı yok."
+  if (runs.length === 0) return "No active or completed workflow runs."
   return runs
-    .map((r) => `${r.runId} — "${r.name}" [${r.status}] · ${r.agents.length} ajan`)
+    .map((r) => `${r.runId} - "${r.name}" [${r.status}] · ${r.agents.length} agents`)
     .join("\n")
 }
 
@@ -1317,7 +1316,7 @@ export function buildTools(
         path: z
           .string()
           .optional()
-          .describe("Workspace'e göre relative klasör. Boşsa '.' = kök"),
+          .describe("Workspace-relative directory. Empty means '.' = root"),
         recursive: z
           .boolean()
           .optional()
@@ -1426,13 +1425,13 @@ export function buildTools(
       }),
       execute: async ({ pattern }) => {
         const files = await globWorkspace(workspace, pattern)
-        if (files.length === 0) return "Dosya bulunamadı"
+        if (files.length === 0) return "No files found"
         const GLOB_LIMIT = 100
         const truncated = files.length > GLOB_LIMIT
         const shown = truncated ? files.slice(0, GLOB_LIMIT) : files
         let out = shown.join("\n")
         if (truncated) {
-          out += `\n\n(Sonuçlar kısaltıldı: ilk ${GLOB_LIMIT} gösteriliyor. Daha dar bir desen veya yol kullan.)`
+          out += `\n\n(Results truncated: showing first ${GLOB_LIMIT}. Use a narrower pattern or path.)`
         }
         return out
       },
@@ -1470,7 +1469,7 @@ export function buildTools(
         }
         const root = workspace ?? ""
 
-        // Pozisyon gerektirmeyen op'lar.
+        // Operations that do not require a position.
         if (operation === "diagnostics") {
           const res = await lspDiagnostics(root, abs)
           if (res.available) return formatDiagnostics(res.data)
@@ -1483,7 +1482,7 @@ export function buildTools(
           return lspResultString(await lspWorkspaceSymbol(root, abs, query ?? ""), operation)
         }
 
-        // Pozisyon gerektiren op'lar (hover/definition/references/implementation/callHierarchy).
+        // Operations that require a position (hover/definition/references/implementation/callHierarchy).
         if (line === undefined || character === undefined) {
           return `'${operation}' requires line and character (1-based).`
         }
@@ -1516,7 +1515,7 @@ export function buildTools(
         content: z.string().describe("Full contents of the file"),
       }),
       execute: async ({ path, content }, { toolCallId }) => {
-        // PreToolUse hook path/content rewrite edebilir (modifiedInput) — uygula.
+        // PreToolUse hooks can rewrite path/content (modifiedInput); apply it.
         const mod = (await gateFor("write_file", { path, content })) as
           | { path?: string; content?: string }
           | undefined
@@ -1542,7 +1541,7 @@ export function buildTools(
           .describe("Replace every occurrence — for renaming a variable/string. Default false."),
       }),
       execute: async ({ path, old_string, new_string, replace_all }) => {
-        // PreToolUse hook girdiyi rewrite edebilir (modifiedInput) — uygula.
+        // PreToolUse hooks can rewrite input (modifiedInput); apply it.
         const mod = (await gateFor("edit_file", { path, old_string, new_string })) as
           | { path?: string; old_string?: string; new_string?: string }
           | undefined
@@ -1557,7 +1556,7 @@ export function buildTools(
       },
     }),
 
-    // custom OpenAI/MiniMax endpoint) istek atar, sonucu workspace'e generated-images/
+    // Sends the request to the configured image endpoint and saves the result under generated-images/.
     generate_image: tool({
       description: GENERATE_IMAGE_DESC,
       inputSchema: z.object({
@@ -1611,7 +1610,7 @@ export function buildTools(
       execute: async ({ text, scope, category }) => {
         await gateFor("remember", { text, scope, category })
         const path = await appendMemory(scope, text, configWorkspace, category, "remember_tool")
-        return `Belleğe eklendi (${scope === "project" ? "proje" : "global"}): ${path}`
+        return `Added to memory (${scope === "project" ? "project" : "global"}): ${path}`
       },
     }),
 
@@ -1631,7 +1630,7 @@ export function buildTools(
       execute: async ({ name, description, steps, triggers, scope }) => {
         await gateFor("save_method", { name, scope })
         const path = await saveMethod({ scope, name, description, steps, triggers, workspace: configWorkspace })
-        return `Yöntem kaydedildi (${scope === "project" ? "proje" : "global"}): ${name} → ${path}`
+        return `Method saved (${scope === "project" ? "project" : "global"}): ${name} -> ${path}`
       },
     }),
 
@@ -1643,8 +1642,8 @@ export function buildTools(
           .string()
           .describe(
             "Short description of what the command does (5-10 words), shown as the UI title. " +
-              "Write it in the user's language. E.g. 'ls' -> 'Klasör listelendi', " +
-              "'npm install' -> 'Bağımlılıklar kuruldu', 'npm run dev' -> 'Dev sunucusu başlatıldı'.",
+              "Write it in the user's language. E.g. 'ls' -> 'Listed folder', " +
+              "'npm install' -> 'Installed dependencies', 'npm run dev' -> 'Started dev server'.",
           ),
         background: z
           .boolean()
@@ -1656,7 +1655,7 @@ export function buildTools(
         if (typeof mod?.command === "string") command = mod.command
         if (background) {
           const id = await useJobsStore.getState().start(workspace, command, ownerSessionId)
-          return `Arka plan işi başladı (id: ${id}). bash_status({ id: "${id}" }) ile çıktı ve durumu oku.`
+          return `Background job started (id: ${id}). Read output and status with bash_status({ id: "${id}" }).`
         }
         const compactOutput = useSettingsStore.getState().settings.tokenSavers?.compactOutput
         const out = await runBash(workspace, command, { compactOutput, sessionId: ownerSessionId })
@@ -1690,7 +1689,7 @@ export function buildTools(
 
         if (act === "list") {
           const jobs = store.list()
-          if (!jobs.length) return "Arka plan işi yok."
+          if (!jobs.length) return "No background jobs."
           return jobs
             .map(
               (j) =>
@@ -1702,21 +1701,21 @@ export function buildTools(
         }
         if (act === "clear") {
           const n = store.clearFinished()
-          return `${n} biten iş temizlendi.`
+          return `Cleared ${n} finished jobs.`
         }
-        if (!id) return "id gerekli (read/wait/kill için)."
+        if (!id) return "id is required for read/wait/kill."
         if (act === "kill") {
           await store.kill(id)
-          return `İş sonlandırıldı: ${id}`
+          return `Job terminated: ${id}`
         }
 
         let job = store.read(id)
-        if (!job) return `İş bulunamadı: ${id}`
+        if (!job) return `Job not found: ${id}`
         if (act === "wait") {
           const finished = await store.wait(id, timeoutMs)
           job = finished ?? job
           if (job.status === "running") {
-            return `${formatJobOutput(job, cursor)}\n[not: ${timeoutMs ?? DEFAULT_WAIT_MS}ms doldu, hâlâ çalışıyor]`
+            return `${formatJobOutput(job, cursor)}\n[note: ${timeoutMs ?? DEFAULT_WAIT_MS}ms elapsed; still running]`
           }
         }
         return formatJobOutput(job, cursor)
@@ -1736,28 +1735,28 @@ export function buildTools(
 
     create_worktree: tool({
       description:
-        "Yeni git worktree oluştur — aynı repo'da paralel bir branch'te çalış. " +
-        "baseRef verilirse yeni branch o ref'ten oluşturulur (-b). " +
-        "Yoksa branch mevcut olmalı (checkout edilir). " +
-        "target verilmezse repo kardeşinde '<repo>-wt-<branch>' adıyla oluşur.",
+        "Create a new git worktree to work on a parallel branch in the same repo. " +
+        "If baseRef is provided, create a new branch from that ref (-b). " +
+        "Otherwise the branch must already exist and will be checked out. " +
+        "If target is omitted, create '<repo>-wt-<branch>' next to the repo.",
       inputSchema: z.object({
-        branch: z.string().describe("Worktree'nin checkout edeceği branch adı"),
+        branch: z.string().describe("Branch name the worktree should check out"),
         baseRef: z
           .string()
           .optional()
-          .describe("Yeni branch oluşturulacaksa baz alınacak ref (örn 'main', 'origin/dev')"),
-        target: z.string().optional().describe("Worktree hedef path — absolute"),
+          .describe("Base ref to use when creating a new branch (for example 'main', 'origin/dev')"),
+        target: z.string().optional().describe("Target worktree path, absolute"),
       }),
       execute: async ({ branch, baseRef, target }) => {
         await gateFor("create_worktree", { branch, baseRef, target })
         const wt = await createWorktreeImpl({ repoPath: workspace, branch, baseRef, target })
         return [
-          `Worktree oluşturuldu`,
+          `Worktree created`,
           `Path: ${wt.path}`,
           `Branch: ${wt.branch ?? "(detached)"}`,
           `HEAD: ${wt.head}`,
           "",
-          "Bu worktree'de çalışmak için ayrı bir session aç ve workspace'i bu klasöre bağla.",
+          "Open a separate session and attach its workspace to this folder to work in this worktree.",
         ].join("\n")
       },
     }),
@@ -1771,13 +1770,13 @@ export function buildTools(
           .array(z.string().url())
           .min(1)
           .max(20)
-          .describe("Indexlenecek http(s) doküman URL'leri (1-20)"),
+          .describe("HTTP(S) documentation URLs to index (1-20)"),
       }),
       execute: async ({ urls }) => {
         await gateFor("index_docs", { urls })
         const sem = useSettingsStore.getState().settings.semantic
         if (!sem?.enabled) {
-          return "Semantic index kapalı. Ayarlar > Semantic'ten etkinleştir + index oluştur."
+          return "Semantic index is disabled. Enable it in Settings > Semantic and build the index."
         }
         const r = await indexDocs({
           workspace: configWorkspace ?? workspace,
@@ -1786,9 +1785,9 @@ export function buildTools(
           fetch: (u) => webfetchImpl(u, "markdown"),
         })
         return [
-          `${r.added} chunk eklendi (${r.urls.length}/${urls.length} URL).`,
-          r.urls.length ? `Indexlenen: ${r.urls.join(", ")}` : "",
-          "Artık code_query ve per-turn auto-context bu dokümanları getirir.",
+          `${r.added} chunks added (${r.urls.length}/${urls.length} URLs).`,
+          r.urls.length ? `Indexed: ${r.urls.join(", ")}` : "",
+          "code_query and per-turn auto-context can now retrieve these docs.",
         ]
           .filter(Boolean)
           .join("\n")
@@ -1797,22 +1796,22 @@ export function buildTools(
 
     code_query: tool({
       description:
-        "Workspace'in semantic index'inde doğal dil sorgusu çalıştır. " +
-        "Embedding vektör benzerliği ile en alakalı kod parçacıklarını döndürür (path:line0-line1 + snippet). " +
-        "İndex yoksa veya semantic kapalıysa hata döner — kullanıcının Ayarlar > Semantic'ten index üretmesi gerekir. " +
-        "grep'in yapamayacağı kavramsal aramalar için kullan (örn 'token refresh akışı', 'kullanıcı oturum kapatma').",
+        "Run a natural-language query against the workspace semantic index. " +
+        "Returns the most relevant code chunks by embedding similarity (path:line0-line1 + snippet). " +
+        "If the index is missing or semantic search is disabled, it returns an error; the user must build the index in Settings > Semantic. " +
+        "Use it for conceptual searches grep cannot handle (for example 'token refresh flow', 'user logout').",
       inputSchema: z.object({
-        query: z.string().describe("Doğal dil sorgusu — net ve özlü"),
-        top_k: z.number().int().min(1).max(20).optional().describe("Kaç sonuç döndürülsün (1-20, default 5)"),
+        query: z.string().describe("Natural-language query, clear and concise"),
+        top_k: z.number().int().min(1).max(20).optional().describe("How many results to return (1-20, default 5)"),
       }),
       execute: async ({ query, top_k }) => {
         const cfg = useSettingsStore.getState().settings.semantic
         if (!cfg || !cfg.enabled) {
-          return "Semantic index kapalı. Ayarlar > Semantic'ten etkinleştir."
+          return "Semantic index is disabled. Enable it in Settings > Semantic."
         }
         const idx = await loadIndex(workspace)
         if (!idx) {
-          return "Semantic index yok. Ayarlar > Semantic > 'İndex oluştur' butonu ile üret."
+          return "Semantic index is missing. Build it from Settings > Semantic > Build index."
         }
         const results = await queryIndex({
           index: idx,
@@ -1825,12 +1824,12 @@ export function buildTools(
           query,
           topK: top_k ?? cfg.topK ?? 5,
         })
-        if (results.length === 0) return "(eşleşme yok)"
+        if (results.length === 0) return "(no matches)"
         return results
           .map((r, i) => {
             const head = `## ${i + 1}. ${r.chunk.path}:${r.chunk.line0}-${r.chunk.line1}  (sim=${r.score.toFixed(3)})`
             const snippet =
-              r.chunk.text.length > 1500 ? sliceCharsSafe(r.chunk.text, 1500) + "\n… [kesildi]" : r.chunk.text
+              r.chunk.text.length > 1500 ? sliceCharsSafe(r.chunk.text, 1500) + "\n... [truncated]" : r.chunk.text
             return `${head}\n\`\`\`\n${snippet}\n\`\`\``
           })
           .join("\n\n")
@@ -1839,12 +1838,12 @@ export function buildTools(
 
     list_worktrees: tool({
       description:
-        "Mevcut repo'nun tüm git worktree'lerini listele (path, branch, head). Paralel session'larda hangi branch'lerin açık olduğunu görmek için.",
+        "List all git worktrees for the current repo (path, branch, head). Use it to see which branches are open in parallel sessions.",
       inputSchema: z.object({}),
       execute: async () => {
         await gateFor("list_worktrees", {})
         const entries = await listWorktreesImpl(workspace)
-        if (entries.length === 0) return "(worktree yok)"
+        if (entries.length === 0) return "(no worktrees)"
         return entries
           .map((e) => {
             const label = e.branch ? `branch=${e.branch}` : e.detached ? "(detached)" : ""
@@ -1857,72 +1856,72 @@ export function buildTools(
 
     remove_worktree: tool({
       description:
-        "Belirtilen worktree'yi sil (git worktree remove). force=true ile uncommitted değişikliklere rağmen siler. " +
-        "Aktif worktree (şu an bağlı olduğun) silinemez.",
+        "Remove the specified worktree (git worktree remove). force=true removes it despite uncommitted changes. " +
+        "The active worktree currently attached to this session cannot be removed.",
       inputSchema: z.object({
-        target: z.string().describe("Silinecek worktree absolute path"),
-        force: z.boolean().optional().describe("Uncommitted değişiklik olsa bile zorla sil"),
+        target: z.string().describe("Absolute path of the worktree to remove"),
+        force: z.boolean().optional().describe("Force removal even with uncommitted changes"),
       }),
       execute: async ({ target, force }) => {
         await gateFor("remove_worktree", { target, force })
         await removeWorktreeImpl(workspace, target, force ?? false)
-        return `Worktree silindi: ${target}`
+        return `Worktree removed: ${target}`
       },
     }),
 
     create_pr: tool({
       description: CREATE_PR_DESC,
       inputSchema: z.object({
-        title: z.string().describe("PR başlığı — kısa, emir kipinde (commit subject gibi)"),
+        title: z.string().describe("PR title, short and imperative like a commit subject"),
         body: z
           .string()
           .optional()
-          .describe("PR açıklaması (Markdown). Bir issue'yu çözüyorsa 'Closes #N' ekle."),
+          .describe("PR description (Markdown). If it resolves an issue, include 'Closes #N'."),
         base: z
           .string()
           .optional()
-          .describe("Merge edilecek temel branch. Verilmezse repo default branch'i kullanılır."),
-        draft: z.boolean().optional().describe("Draft PR olarak aç (default false)"),
+          .describe("Base branch to merge into. If omitted, the repo default branch is used."),
+        draft: z.boolean().optional().describe("Open as a draft PR (default false)"),
       }),
       execute: async ({ title, body, base, draft }) => {
         await gateFor("create_pr", { title, base, draft })
         const repo = await resolveRepo(workspace)
         if (!repo) {
           throw new Error(
-            "create_pr: workspace bir GitHub deposu değil (origin remote github.com olmalı).",
+            "create_pr: workspace is not a GitHub repo (origin remote must be github.com).",
           )
         }
         const token = await getGithubToken()
         if (!token) {
           throw new Error(
-            "create_pr: GitHub token yok. Ayarlar → GitHub'tan `repo` yetkili bir token ekle.",
+            "create_pr: missing GitHub token. Add a token with `repo` scope in Settings > GitHub.",
           )
         }
         const st = await gitStatus(workspace)
-        if (!st.isRepo) throw new Error("create_pr: burada git deposu yok.")
+        if (!st.isRepo) throw new Error("create_pr: no git repo here.")
         if (!st.info.clean) {
           throw new Error(
-            "create_pr: çalışma ağacı temiz değil — önce değişiklikleri commit'le " +
-              "(commit edilmemiş iş PR'a girmez).",
+            "create_pr: working tree is not clean; commit changes first " +
+              "(uncommitted work is not included in the PR).",
           )
         }
         const head = st.info.branch
         if (!head) {
-          throw new Error("create_pr: detached HEAD — bir feature branch'e geç (git checkout -b …).")
+          throw new Error("create_pr: detached HEAD; switch to a feature branch (git checkout -b ...).")
         }
         const baseBranch = base?.trim() || (await gitDefaultBranch(workspace)) || "main"
         if (head === baseBranch) {
           throw new Error(
-            `create_pr: '${baseBranch}' temel branch'indesin — önce bir feature branch oluştur (git checkout -b …).`,
+            `create_pr: you are on the base branch '${baseBranch}'; create a feature branch first (git checkout -b ...).`,
           )
         }
         await gitPublish(workspace)
         try {
           const pr = await createPullRequest(token, repo, { title, head, base: baseBranch, body, draft })
-          return [`PR açıldı #${pr.number}`, pr.htmlUrl, `${head} → ${baseBranch}`].join("\n")
+          return [`PR opened #${pr.number}`, pr.htmlUrl, `${head} -> ${baseBranch}`].join("\n")
         } catch (e) {
           if (e instanceof GithubApiError) {
-            throw new Error(`create_pr: GitHub reddetti — ${errorMessage(e)}`, { cause: e })
+            throw new Error(`create_pr: GitHub rejected the request: ${errorMessage(e)}`, { cause: e })
           }
           throw e
         }
@@ -1964,14 +1963,14 @@ export function buildTools(
       }),
       execute: async ({ name }) => {
         const s = await loadSkillByName(configWorkspace, name)
-        if (!s) return `Skill bulunamadı: ${name}`
+        if (!s) return `Skill not found: ${name}`
         const parts = [`# ${s.name} (${s.scope})`, s.description, "", "---", "", s.body]
         try {
           const files = await listSkillFiles(s.dir)
           if (files.length) {
             parts.push("", `Base directory: ${s.dir}`)
             parts.push(
-              "Bu skill'deki relative yollar (scripts/, reference/ vb.) yukarıdaki base dir'e göredir.",
+              "Relative paths in this skill (scripts/, reference/, etc.) are relative to the base directory above.",
             )
             parts.push("", "<skill_files>")
             parts.push(...files.map((f) => `  ${f}`))
@@ -2005,18 +2004,18 @@ export function buildTools(
         const done = todos.filter((t) => t.status === "completed").length
         const active = todos.find((t) => t.status === "in_progress")
         return (
-          `Todo güncellendi: ${todos.length} madde, ${done} tamam.` +
-          (active ? ` Şu an: ${active.content}` : "")
+          `Todo updated: ${todos.length} items, ${done} completed.` +
+          (active ? ` Current: ${active.content}` : "")
         )
       },
     }),
 
     dispatch_workers: tool({
       description:
-        "ORKESTRA MODU — worker havuzundan bir veya birden fazla worker'a PARALEL görev dağıt. " +
-        "Tüm worker'lar bitince sonuçlar JSON listesi olarak döner. Worker'lar bağımsız çalışır, " +
-        "aralarında doğrudan iletişim yoktur — sentezi sen yapacaksın. Mevcut worker havuzu " +
-        "system prompt katalogundadır.",
+        "ORCHESTRA MODE: dispatch one or more tasks to the worker pool in PARALLEL. " +
+        "When all workers finish, results return as a JSON list. Workers operate independently " +
+        "and have no direct communication with each other; you must synthesize the result. The current worker pool " +
+        "is listed in the system prompt catalog.",
       inputSchema: z.object({
         dispatches: z
           .array(
@@ -2026,10 +2025,10 @@ export function buildTools(
                 .int()
                 .min(1)
                 .max(5)
-                .describe("Havuzdaki worker indeksi (1-5)"),
+                .describe("Worker index in the pool (1-5)"),
               task: z
                 .string()
-                .describe("Worker'a verilecek görev — net, self-contained, kısa"),
+                .describe("Task for the worker: clear, self-contained, and concise"),
             }),
           )
           .min(1)
@@ -2038,14 +2037,14 @@ export function buildTools(
       execute: async ({ dispatches }, ctx) => {
         const sess = useSessionsStore.getState().sessions[ownerSessionId]
         if (!sess?.orchestra || sess.mode !== "orchestra") {
-          throw new Error("Orkestra modu aktif değil — dispatch_workers çağrılamaz")
+          throw new Error("Orchestra mode is not active; dispatch_workers cannot be called")
         }
         const pendingMsg = [...sess.messages]
           .reverse()
           .find((m) => m.role === "assistant" && m.pending)
-        if (!pendingMsg) throw new Error("Pending assistant mesajı bulunamadı")
+        if (!pendingMsg) throw new Error("Pending assistant message not found")
 
-        // Parent streamText'in abort sinyalini worker'lara propagate et (Composer "stop")
+        // Propagate the parent streamText abort signal to workers (Composer "stop").
         const parentSignal = (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal
 
         const { dispatchWorkers } = await import("../orchestra/runtime")
@@ -2062,7 +2061,7 @@ export function buildTools(
           output: truncateForContext(r.output, WORKER_OUTPUT_MAX),
           changedFiles:
             Array.isArray(r.changedFiles) && r.changedFiles.length > 50
-              ? [...r.changedFiles.slice(0, 50), `… +${r.changedFiles.length - 50} dosya daha`]
+              ? [...r.changedFiles.slice(0, 50), `... +${r.changedFiles.length - 50} more files`]
               : r.changedFiles,
           errorMessage: r.errorMessage
             ? truncateForContext(r.errorMessage, 2000)
@@ -2074,26 +2073,26 @@ export function buildTools(
 
     merge_workers: tool({
       description:
-        "ORKESTRA MODU — izole worker branch'lerini (codezal/wk-*) mevcut branch'e CONFLICT-AWARE merge et. " +
-        "dispatch_workers sonrası yazan her worker kendi branch'ine commit eder; bu tool onları sırayla birleştirir. " +
-        "Parent working tree KİRLİYSE güvenli şekilde atlar (kullanıcının commit'lenmemiş işini riske atmaz); " +
-        "conflict'i zorlamak yerine branch bazında raporlar (conflict'te o merge geri alınır, diğerlerine devam). " +
-        "Başarılı merge sonrası build/test ile DOĞRULA. Branch adlarını dispatch_workers sonuçlarındaki 'branch' alanından al.",
+        "ORCHESTRA MODE: conflict-aware merge of isolated worker branches (codezal/wk-*) into the current branch. " +
+        "Each writing worker commits to its own branch after dispatch_workers; this tool merges them sequentially. " +
+        "If the parent working tree is DIRTY, it safely skips to avoid risking the user's uncommitted work. " +
+        "Instead of forcing conflicts, it reports per branch; conflicted merges are aborted and the rest continue. " +
+        "After successful merges, VERIFY with build/tests. Take branch names from the 'branch' field in dispatch_workers results.",
       inputSchema: z.object({
         branches: z
           .array(z.string())
           .min(1)
-          .describe("Merge edilecek worker branch adları (örn 'codezal/wk-1-1-ab12cd34')"),
+          .describe("Worker branch names to merge (for example 'codezal/wk-1-1-ab12cd34')"),
       }),
       execute: async ({ branches }) => {
         const sess = useSessionsStore.getState().sessions[ownerSessionId]
         if (!sess?.orchestra || sess.mode !== "orchestra") {
-          throw new Error("Orkestra modu aktif değil — merge_workers çağrılamaz")
+          throw new Error("Orchestra mode is not active; merge_workers cannot be called")
         }
         const wsPath = sess.workspacePath
-        if (!wsPath) return "Workspace yok — merge yapılamaz."
+        if (!wsPath) return "No workspace; cannot merge."
         const repoPath = await findRepoRoot(wsPath)
-        if (!repoPath) return "Git repo değil — merge yapılamaz."
+        if (!repoPath) return "Not a git repo; cannot merge."
         await gateFor("merge_workers", { branches })
         const { mergeWorkerBranches } = await import("../orchestra/isolation")
         const results = await mergeWorkerBranches(repoPath, branches)
@@ -2101,9 +2100,9 @@ export function buildTools(
           .map((r) => {
             if (r.status === "merged") return `✅ ${r.branch} → merged (${r.mergeSha})`
             if (r.status === "conflict")
-              return `⚠️ ${r.branch} → CONFLICT: ${r.conflictFiles?.join(", ") ?? "?"} (geri alındı, merge edilmedi)`
-            if (r.status === "skipped") return `⏭️ ${r.branch} → atlandı: ${r.note ?? ""}`
-            return `❌ ${r.branch} → hata: ${r.note ?? ""}`
+              return `⚠️ ${r.branch} → CONFLICT: ${r.conflictFiles?.join(", ") ?? "?"} (aborted, not merged)`
+            if (r.status === "skipped") return `⏭️ ${r.branch} → skipped: ${r.note ?? ""}`
+            return `❌ ${r.branch} → error: ${r.note ?? ""}`
           })
           .join("\n")
       },
@@ -2118,7 +2117,7 @@ export function buildTools(
       execute: async ({ name, task }, ctx) => {
         await gateFor("spawn_agent", { name, task })
         const agent = await findAgent(configWorkspace, name)
-        if (!agent) return `Agent bulunamadı: ${name}`
+        if (!agent) return `Agent not found: ${name}`
 
         try {
           const startHooks = getEffectiveSettings(workspace).hooks ?? []
@@ -2146,18 +2145,18 @@ export function buildTools(
           }
         }
 
-        // Parent session'dan provider/model fallback
+        // Provider/model fallback from the parent session.
         const parent = useSessionsStore.getState().sessions[ownerSessionId]
         const provider = (agent.provider ?? parent?.provider) as ProviderId | undefined
         const modelId = agent.model ?? parent?.model
-        if (!provider || !modelId) return "Provider/model belirlenemedi"
+        if (!provider || !modelId) return "Provider/model could not be determined"
 
         const settings = useSettingsStore.getState().settings
         let model
         try {
           model = await buildLanguageModel({ providerId: provider, modelId, settings })
         } catch (e) {
-          return `Model kurulamadı: ${e instanceof Error ? e.message : String(e)}`
+          return `Model could not be initialized: ${e instanceof Error ? e.message : String(e)}`
         }
 
         const fullSet = buildTools(workspace, ownerSessionId)
@@ -2173,10 +2172,10 @@ export function buildTools(
           }
         }
 
-        // Policy uygula — bash whitelist/deny, approval_required, plan_mode
+        // Apply policy: bash whitelist/deny, approval_required, plan_mode.
         const policedTools = wrapToolsWithPolicy(subTools, agent.policy, ownerSessionId)
 
-        // createCardEmitter dinamik import: index → orchestra/runtime → runners → tools
+        // Dynamic import createCardEmitter to avoid index -> orchestra/runtime -> runners -> tools cycles.
         const sess = useSessionsStore.getState().sessions[ownerSessionId]
         const pendingMsg = sess
           ? [...sess.messages].reverse().find((m) => m.role === "assistant" && m.pending)
@@ -2292,7 +2291,7 @@ export function buildTools(
               } catch {
                 // Intentionally ignored.
               }
-              break // stream temiz bitti
+              break // stream completed cleanly
             } catch (e) {
               lastErr = e
               if (softStopped) break
@@ -2323,7 +2322,7 @@ export function buildTools(
           const msg = lastErr instanceof Error ? lastErr.message : String(lastErr)
           emit({ type: "error", message: msg })
           void fireSubagentStop("error")
-          return `Agent hatası: ${msg}`
+          return `Agent error: ${msg}`
         }
 
         if (!text && lastResult && !softStopped && !parentSignal?.aborted) {
@@ -2341,18 +2340,18 @@ export function buildTools(
             })
             text = wrap.text.trim()
           } catch {
-            // ignore — fall through to the empty-fallback message below
+            // Ignore; fall through to the empty fallback message below.
           } finally {
             clearTimeout(sumTimer)
           }
         }
-        if (!text) text = "(agent boş cevap döndürdü)"
+        if (!text) text = "(agent returned an empty response)"
         if (softStopped || parentSignal?.aborted) {
-          text += "\n\n_(not: ajan süre/sessizlik limitine takıldı ya da durduruldu — kısmi sonuç)_"
+          text += "\n\n_(note: agent hit the time/silence limit or was stopped; partial result)_"
         }
         emit({ type: "complete", text })
         void fireSubagentStop(parentSignal?.aborted ? "aborted" : "complete")
-        return `# ${agent.name} özeti\n${truncateForContext(text, SPAWN_OUTPUT_MAX)}`
+        return `# ${agent.name} summary\n${truncateForContext(text, SPAWN_OUTPUT_MAX)}`
       },
     }),
 
@@ -2363,12 +2362,12 @@ export function buildTools(
           .string()
           .min(20)
           .max(100_000)
-          .describe("export const meta = {…} ile başlayan tam workflow JS script'i"),
-        args: z.unknown().optional().describe("Script'e `args` globali olarak geçilecek değer"),
+          .describe("Full workflow JS script starting with export const meta = {...}"),
+        args: z.unknown().optional().describe("Value passed to the script as the global `args`"),
         resumeFromRunId: z
           .string()
           .optional()
-          .describe("Önceki run'dan resume — değişmemiş agent() prefix'i cache'ten döner"),
+          .describe("Resume from a previous run; unchanged agent() prefixes return from cache"),
       }),
       execute: async ({ script, args, resumeFromRunId }) => {
         await gateFor("run_workflow", { script })
@@ -2380,21 +2379,21 @@ export function buildTools(
           configWorkspace,
           resumeFromRunId,
         })
-        return `Workflow başladı (runId: ${runId}). workflow_status({ runId: "${runId}", wait: true }) ile ilerleme + final sonucu oku.`
+        return `Workflow started (runId: ${runId}). Read progress and final result with workflow_status({ runId: "${runId}", wait: true }).`
       },
     }),
 
     workflow_status: tool({
       description: WORKFLOW_STATUS_DESC,
       inputSchema: z.object({
-        runId: z.string().optional().describe("Run kimliği; verilmezse tüm run'ları listele"),
-        wait: z.boolean().optional().describe("true → run bitene kadar (bounded) blokla"),
+        runId: z.string().optional().describe("Run id; omit to list all runs"),
+        wait: z.boolean().optional().describe("true -> block until the run finishes, bounded"),
       }),
       execute: async ({ runId, wait }) => {
         const store = useWorkflowsStore.getState()
         if (!runId) return formatWorkflowList(store.list())
         let run = store.read(runId)
-        if (!run) return `Workflow bulunamadı: ${runId}`
+        if (!run) return `Workflow not found: ${runId}`
         if (wait && run.status === "running") {
           run = (await store.wait(runId, WF_DEFAULT_WAIT_MS)) ?? run
         }
@@ -2415,32 +2414,32 @@ export function buildTools(
       execute: async ({ plan }) => {
         const currentMode = useSessionsStore.getState().sessions[ownerSessionId]?.mode ?? "build"
         if (currentMode !== "plan") {
-          return "propose_build sadece plan modunda kullanılabilir. Zaten build modasındasın."
+          return "propose_build can only be used in plan mode. You are already in build mode."
         }
         const answer = await useQuestionsStore.getState().ask(ownerSessionId, [
           {
-            question: "Plan hazır. Build moduna geçilsin mi?",
+            question: "Plan is ready. Switch to build mode?",
             body: plan,
             options: [
-              { label: "Onayla", description: "Build moduna geç, planı uygula" },
-              { label: "Reddet", description: "Planda kal, geliştir" },
+              { label: "Approve", description: "Switch to build mode and apply the plan" },
+              { label: "Reject", description: "Stay in plan mode and improve it" },
             ],
             custom: true,
           },
         ])
         const picked = answer[0] ?? []
         const label = (picked[0] ?? "").trim()
-        if (label === "Onayla") {
+        if (label === "Approve") {
           useSessionsStore.getState().setModeFor(ownerSessionId, "build")
           return (
-            "Build moduna geçildi — write_file, edit_file, bash, apply_patch artık aktif. " +
-            "Planı uygula."
+            "Switched to build mode; write_file, edit_file, bash, and apply_patch are now active. " +
+            "Apply the plan."
           )
         }
-        if (label && label !== "Reddet" && label !== NO_ANSWER) {
-          return `Kullanıcı planı şöyle revize etmek istiyor:\n\n${label}\n\nPlanı bu geri bildirimle güncelle ve tekrar öner.`
+        if (label && label !== "Reject" && label !== NO_ANSWER) {
+          return `The user wants this plan revision:\n\n${label}\n\nUpdate the plan with this feedback and propose it again.`
         }
-        return "Plan moduna devam ediliyor. Planı daha da geliştir veya tekrar teklif et."
+        return "Continuing in plan mode. Improve the plan further or propose it again."
       },
     }),
 
@@ -2455,23 +2454,23 @@ export function buildTools(
       execute: async ({ reason }) => {
         const currentMode = useSessionsStore.getState().sessions[ownerSessionId]?.mode ?? "build"
         if (currentMode !== "build") {
-          return "propose_plan sadece build modunda kullanılabilir. Zaten plan modasındasın."
+          return "propose_plan can only be used in build mode. You are already in plan mode."
         }
         const answer = await useQuestionsStore.getState().ask(ownerSessionId, [
           {
-            question: "Model ek analiz istiyor. Plan moduna geçilsin mi?",
-            body: `**Neden:**\n${reason}`,
-            options: [{ label: "Evet, plan moduna geç" }, { label: "Hayır, build moduna devam et" }],
+            question: "The model wants more analysis. Switch to plan mode?",
+            body: `**Reason:**\n${reason}`,
+            options: [{ label: "Yes, switch to plan mode" }, { label: "No, continue build mode" }],
           },
         ])
-        if ((answer[0]?.[0] ?? "").startsWith("Evet")) {
+        if ((answer[0]?.[0] ?? "").startsWith("Yes")) {
           useSessionsStore.getState().setModeFor(ownerSessionId, "plan")
           return (
-            "Plan moduna geçildi — write_file, edit_file, bash, apply_patch devre dışı. " +
-            "read_file, grep, list_dir, webfetch aktif. Analizi tamamlayınca propose_build çağır."
+            "Switched to plan mode; write_file, edit_file, bash, and apply_patch are disabled. " +
+            "read_file, grep, list_dir, and webfetch remain active. Call propose_build when analysis is complete."
           )
         }
-        return "Build moduna devam ediliyor."
+        return "Continuing in build mode."
       },
     }),
 
@@ -2529,51 +2528,51 @@ export function buildTools(
             readUserRoutines(),
           ])
           const all = [...proj, ...user]
-          if (!all.length) return "Kayıtlı routine yok."
+          if (!all.length) return "No saved routines."
           return all
             .map((r) => {
               let next = ""
               if (r.schedule) {
                 try {
                   const d = nextFireAt(parseCron(r.schedule))
-                  if (d) next = ` → sonraki: ${d.toLocaleString()}`
+                  if (d) next = ` -> next: ${d.toLocaleString()}`
                 } catch {
                   // Intentionally ignored.
                 }
               }
-              return `- [${r.scope}] ${r.name}${r.once ? " [tek-sefer]" : ""}${r.schedule ? ` (cron: ${r.schedule})` : ""}${next}\n  ${r.path}`
+              return `- [${r.scope}] ${r.name}${r.once ? " [one-shot]" : ""}${r.schedule ? ` (cron: ${r.schedule})` : ""}${next}\n  ${r.path}`
             })
             .join("\n")
         }
         const mode = useSessionsStore.getState().sessions[ownerSessionId]?.mode ?? "build"
         if (mode === "plan") {
-          return "Plan modunda routine oluşturma/silme yapılamaz — build moduna geç."
+          return "Cannot create/delete routines in plan mode; switch to build mode."
         }
         if (action === "delete") {
-          if (!path) return "path gerekli (delete için — önce list ile bul)."
+          if (!path) return "path is required for delete; find it with list first."
           await gateFor("schedule_task", { action, path })
           await deleteRoutine(path)
           await refreshScheduler(configWorkspace)
-          return `Routine silindi: ${path}`
+          return `Routine deleted: ${path}`
         }
         // create
-        if (!name || !prompt) return "name ve prompt gerekli (create için)."
+        if (!name || !prompt) return "name and prompt are required for create."
         if (delay && schedule) {
-          return "delay ve schedule birlikte verilemez — biri tek-sefer, diğeri tekrar eden."
+          return "delay and schedule cannot be used together; choose one-shot delay or recurring schedule."
         }
         let effSchedule = schedule
         let once = false
         let fireAt: Date | undefined
         if (delay) {
           const mins = parseDelayMinutes(delay)
-          if (mins == null) return `Geçersiz delay: '${delay}' (örn '5m','30s','2h','1d').`
+          if (mins == null) return `Invalid delay: '${delay}' (for example '5m','30s','2h','1d').`
           const r = delayToCron(mins)
           effSchedule = r.cron
           fireAt = r.fireAt
           once = true
         } else if (schedule) {
           const err = validateCron(schedule)
-          if (err) return `Geçersiz cron: ${err}`
+          if (err) return `Invalid cron: ${err}`
         }
         await gateFor("schedule_task", { action, name, schedule: effSchedule })
         const p = await writeRoutine(
@@ -2583,9 +2582,9 @@ export function buildTools(
         )
         await refreshScheduler(configWorkspace)
         if (once && fireAt) {
-          return `Tek-sefer routine kaydedildi: ${p} → ${fireAt.toLocaleString()} (fire sonrası otomatik silinir)`
+          return `One-shot routine saved: ${p} -> ${fireAt.toLocaleString()} (auto-deletes after firing)`
         }
-        return `Routine kaydedildi: ${p}${effSchedule ? ` (cron: ${effSchedule})` : " (manuel — schedule yok)"}`
+        return `Routine saved: ${p}${effSchedule ? ` (cron: ${effSchedule})` : " (manual; no schedule)"}`
       },
     }),
 
@@ -2609,15 +2608,15 @@ export function buildTools(
         const act = action ?? "start"
         if (act === "list") {
           const ms = listMonitors()
-          return ms.length ? ms.map((m) => `${m.id}: ${m.command}`).join("\n") : "Aktif monitor yok."
+          return ms.length ? ms.map((m) => `${m.id}: ${m.command}`).join("\n") : "No active monitors."
         }
         if (act === "stop") {
-          if (!id) return "id gerekli (stop için)."
+          if (!id) return "id is required for stop."
           const ok = await stopMonitor(id)
-          return ok ? `Monitor durduruldu: ${id}` : `Monitor bulunamadı: ${id}`
+          return ok ? `Monitor stopped: ${id}` : `Monitor not found: ${id}`
         }
         // start
-        if (!command) return "command gerekli (start için)."
+        if (!command) return "command is required for start."
         await gateFor("monitor", { command })
         const behavior = on_event ?? useSettingsStore.getState().settings.monitorAction ?? "respond"
         const sid = ownerSessionId
@@ -2627,7 +2626,7 @@ export function buildTools(
           pattern,
           onEvent: (line) => {
             if (behavior === "respond") {
-              // Otomatik tur — App.tsx monitor-bus dinleyicisi ilgili session'a onSend eder.
+              // Automatic turn: the App.tsx monitor-bus listener calls onSend for the session.
               emitMonitor({ sessionId: sid, line, monitorId: monId })
             } else {
               const msg: Message = {
@@ -2640,7 +2639,7 @@ export function buildTools(
             }
           },
         })
-        return `Monitor başladı (id: ${monId}, davranış: ${behavior}). Durdurmak: monitor({ action: "stop", id: "${monId}" }).`
+        return `Monitor started (id: ${monId}, behavior: ${behavior}). Stop it with monitor({ action: "stop", id: "${monId}" }).`
       },
     }),
   }

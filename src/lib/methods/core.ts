@@ -45,7 +45,7 @@ export function selectMethods(
 
 export function renderMethodsCatalog(methods: Method[]): string {
   if (methods.length === 0) return ""
-  const lines = ["# Öğrenilmiş Yöntemler (methods)", "Bu görev biçimleri geçmiş başarılı işlerden damıtıldı; ilgiliyse adımları izle.", ""]
+  const lines = ["# Learned Methods", "These task patterns were distilled from past successful work. If relevant, follow the steps.", ""]
   for (const m of methods) {
     lines.push(`## ${m.name}`)
     lines.push(m.description)

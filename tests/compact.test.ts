@@ -87,7 +87,7 @@ describe("pruneToolOutputs", () => {
     ]
     const { messages: out, prunedTokens } = pruneToolOutputs(msgs)
     expect(prunedTokens).toBeGreaterThan(0)
-    expect(outputValue(out[2]!)).toContain("kaldırıldı")
+    expect(outputValue(out[2]!)).toContain("removed to save context")
     expect(outputValue(out[5]!)).toBe("x".repeat(10_000))
   })
 
@@ -155,7 +155,7 @@ describe("pruneToolOutputs — opts (recovery/guard)", () => {
     })
     expect(prunedTokens).toBeGreaterThan(0)
     const toolOut = out[2]!
-    expect(partValue(toolOut, 0)).toContain("kaldırıldı")
+    expect(partValue(toolOut, 0)).toContain("removed to save context")
     expect(partValue(toolOut, 15)).toBe("x".repeat(50_000)) // son part korundu
   })
 

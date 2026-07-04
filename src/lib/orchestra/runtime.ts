@@ -52,12 +52,12 @@ export type DispatchInput = {
 }
 
 function workerLabel(w: WorkerConfig, taskNum: number): string {
-  if (w.label) return `${w.label} · görev-${taskNum}`
+  if (w.label) return `${w.label} · task-${taskNum}`
   const kindTag =
     w.kind === "sdk"
       ? `${w.provider ?? "?"}/${w.model ?? "?"}`
       : w.kind
-  return `worker-${w.idx} · görev-${taskNum} · ${kindTag}`
+  return `worker-${w.idx} · task-${taskNum} · ${kindTag}`
 }
 
 function nextTaskNum(sessionId: string, workerIdx: number): number {

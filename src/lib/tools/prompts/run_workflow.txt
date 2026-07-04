@@ -1,55 +1,55 @@
-Bir JS workflow script'i ile çok sayıda alt-ajanı deterministik orkestre et. Tool HEMEN bir runId döner — script ARKA PLANDA koşar, session responsive kalır. İlerleme + final sonucu `workflow_status({ runId })` ile oku.
+Orchestrate many sub-agents deterministically with a JS workflow script. The tool returns a runId immediately; the script runs in the BACKGROUND and the session stays responsive. Read progress and the final result with `workflow_status({ runId })`.
 
-NE ZAMAN: Tek konuşmanın koordine edemeyeceği kadar çok ajan gerektiğinde (kod-tabanı denetimi, büyük migrasyon, çapraz-doğrulamalı araştırma, çok açıdan plan). Tek-iki delege iş için `spawn_agent` yeterli.
+WHEN TO USE: when a task needs more agents than one conversation can coordinate (codebase audit, large migration, cross-checked research, multi-angle planning). For one or two delegated tasks, `spawn_agent` is enough.
 
 
-İlk satır ZORUNLU — saf literal `meta`:
+The first line is REQUIRED: a pure literal `meta`:
   export const meta = {
     name: 'audit-endpoints',
-    description: 'Tek satır ne yaptığı',
-    phases: [{ title: 'Tara' }, { title: 'Doğrula' }],
+    description: 'One-line purpose',
+    phases: [{ title: 'Scan' }, { title: 'Verify' }],
   }
-  phase('Tara')
-  const bulgular = await agent('src/routes altındaki endpoint'leri auth eksikliği için tara', { schema: SCHEMA })
+  phase('Scan')
+  const findings = await agent('Scan endpoints under src/routes for missing auth', { schema: SCHEMA })
   ...
-  return sonuç
+  return result
 
-`meta` SAF LİTERAL olmalı — değişken/fonksiyon-çağrısı/spread/template yasak. Gövde düz JavaScript (TypeScript DEĞİL). async context — doğrudan `await`.
+`meta` must be a PURE LITERAL: variables, function calls, spreads, and templates are forbidden. The body is plain JavaScript (NOT TypeScript). It runs in an async context, so use `await` directly.
 
-## Enjekte edilen hook'lar
+## Injected Hooks
 
-- agent(prompt, opts?) → alt-ajan spawn. opts: { label?, phase?, schema?, model?, agentType?, maxSteps? }. schema YOKSA metin döner; schema (JSON Schema obje) VARSA doğrulanmış obje döner. Ajan tüm araçlara erişir (read/grep/bash/edit) ama spawn_agent/dispatch_workers/run_workflow ÇAĞIRAMAZ.
-- parallel(thunks[]) → BARİYER: hepsini eşzamanlı başlat, hepsini bekle. Patlayan thunk → null (kullanmadan önce .filter(Boolean)).
-- pipeline(items, stage1, stage2, ...) → BARİYERSİZ: her item tüm stage'leri bağımsız geçer (A stage3'te iken B stage1'de). Stage cb (prev, item, idx) alır. VARSAYILAN çok-stage aracı — barrier yerine bunu kullan.
-- log(msg) → ilerleme satırı (kullanıcıya görünür).
-- phase(title) → sonraki agent'ları bu faz altında grupla.
-- args → tool'a verilen args (yoksa undefined).
-- budget → { total, spent(), remaining() } — paylaşımlı token havuzu; total null ise sınırsız.
-- workflow(nameOrRef, args?) → kayıtlı/alt workflow'u çağır (tek seviye iç içe).
-
-
-Script içinde Date.now(), Math.random(), argümansız new Date() YASAK (throw eder) — resume replay'i bozar. Çeşitlilik gerekiyorsa index/label kullan; zaman damgası gerekiyorsa args ile geç.
-
-## Limitler
-
-Eşzamanlı en fazla ~16 ajan (fazlası kuyrukta). Run başına toplam 1000 ajan tavanı.
+- agent(prompt, opts?) -> spawn a sub-agent. opts: { label?, phase?, schema?, model?, agentType?, maxSteps? }. Without schema it returns text; with a schema (JSON Schema object) it returns a validated object. The agent has access to all tools (read/grep/bash/edit), but CANNOT call spawn_agent/dispatch_workers/run_workflow.
+- parallel(thunks[]) -> BARRIER: start all tasks concurrently and wait for all. A thrown thunk returns null (use .filter(Boolean) before consuming).
+- pipeline(items, stage1, stage2, ...) -> NON-BARRIER: each item moves through all stages independently (A can be at stage3 while B is at stage1). Stage callbacks receive (prev, item, idx). This is the DEFAULT multi-stage primitive; prefer it over a barrier.
+- log(msg) -> progress line visible to the user.
+- phase(title) -> group subsequent agents under this phase.
+- args -> args passed to the tool (undefined if omitted).
+- budget -> { total, spent(), remaining() } shared token pool; total is null when unlimited.
+- workflow(nameOrRef, args?) -> call a registered/sub-workflow (one nesting level).
 
 
-- pipeline-default: çok-stage işte bariyersiz pipeline kullan — yavaş item hızlıların slot'unu israf etmesin.
-- bariyer SADECE cross-item bağımlılıkta: tüm bulguları dedup/merge, ya da toplam-sıfır early-exit.
+Date.now(), Math.random(), and new Date() without arguments are FORBIDDEN inside scripts (they throw) because they break resume replay. If you need variety, use an index/label. If you need a timestamp, pass it through args.
+
+## Limits
+
+At most ~16 agents run concurrently (the rest queue). Each run is capped at 1000 total agents.
+
+
+- pipeline-default: for multi-stage work, use a non-barrier pipeline so slow items do not waste faster items' slots.
+- barrier ONLY for cross-item dependencies: dedupe/merge all findings, or total-zero early exit.
 - loop-until-count: `while (bugs.length < 10) { ... }`.
-- adversarial-verify: her bulgu için N bağımsız şüpheci spawn et (REDDETMEYE çalışsın), çoğunluk reddederse at.
-- judge-panel: N bağımsız deneme üret, paralel jüriyle puanla, kazanandan sentezle.
+- adversarial-verify: spawn N independent skeptical agents for each finding (try to REJECT it); discard it if the majority rejects it.
+- judge-panel: generate N independent attempts, score them with a parallel jury, then synthesize from the winner.
 
-Kanonik şablon (pipeline — her boyut review'i biter bitmez doğrulanır):
+Canonical template (pipeline: each dimension is verified as soon as its review finishes):
   const DIMENSIONS = [{key:'bugs',prompt:'...'},{key:'perf',prompt:'...'}]
   const results = await pipeline(
     DIMENSIONS,
     d => agent(d.prompt, { label: `review:${d.key}`, phase: 'Review', schema: FINDINGS }),
     review => parallel(review.findings.map(f => () =>
-      agent(`Şu bulguyu adversarial doğrula: ${f.title}`, { phase: 'Verify', schema: VERDICT })
+      agent(`Adversarially verify this finding: ${f.title}`, { phase: 'Verify', schema: VERDICT })
         .then(v => ({ ...f, verdict: v })))),
   )
   return results.flat().filter(Boolean).filter(f => f.verdict?.isReal)
 
-resumeFromRunId verilirse: değişmemiş agent() prefix'i cache'ten anında döner, ilk değişen/yeni çağrıdan canlı koşar.
+If resumeFromRunId is provided: unchanged agent() prefixes return instantly from cache, and the first changed/new call runs live.

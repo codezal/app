@@ -27,8 +27,8 @@ export function parseSkillFile(
 
 export function buildSkillsCatalog(skills: Skill[]): string {
   if (skills.length === 0) return ""
-  const lines = ["# Mevcut Skills (on-demand)"]
-  lines.push("Bu skill'leri kullanmak için `load_skill` tool'unu çağır.")
+  const lines = ["# Available Skills (on-demand)"]
+  lines.push("Call the `load_skill` tool to use these skills.")
   lines.push("")
   for (const s of skills) {
     const trig = s.triggers?.length ? ` · trig: ${s.triggers.join(", ")}` : ""

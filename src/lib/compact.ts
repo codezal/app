@@ -1,6 +1,6 @@
 //
-// Strateji:
-// 1) shouldCompact: effectiveContextTokens >= cap * (triggerPct/100) → tetikle
+// Strategy:
+// 1) shouldCompact: effectiveContextTokens >= cap * (triggerPct/100) -> trigger
 //
 
 import { generateText, type ModelMessage } from "ai"
@@ -15,7 +15,7 @@ import type { AutoCompactSettings, Settings } from "@/store/types"
 const PRUNE_PROTECT_TOKENS = 40_000
 const PRUNE_MIN_GAIN = 20_000
 const PRUNE_TAIL_TURNS = 2
-const PRUNE_PLACEHOLDER = "[önceki tool çıktısı — bağlam tasarrufu için kaldırıldı]"
+const PRUNE_PLACEHOLDER = "[previous tool output removed to save context]"
 const PER_TOOL_OVERHEAD = 12
 
 export const RECENT_TOOL_PROTECT_TOKENS = 64_000
@@ -142,33 +142,38 @@ export function resolveCompactModel(
   return { provider: activeProvider, model: activeModel }
 }
 
-const STRUCTURED_MEMORY_PROMPT = `Görevin: Aşağıdaki sohbet geçmişini AŞAĞIDAKİ BAŞLIKLAR ile yapısal bir "memory" notuna dönüştürmek.
-Bu memory, devam eden coding/agentic sohbette modelin kayıp bilgi olmadan çalışmasını sağlayacak.
+const STRUCTURED_MEMORY_PROMPT = `Task: convert the following conversation history into a structured "memory" note using the EXACT HEADINGS below.
+This memory lets the model continue the coding/agentic conversation without losing important context.
 
-Çıktı formatı (Markdown, başlıkları aynen koru, boş başlık varsa "—" yaz):
+Output format (Markdown; preserve headings exactly; write "-" under an empty heading):
 
-## Aktif Hedefler
-- (kullanıcının şu anda tamamlanmasını istediği görevler)
+## Active Goals
+- (tasks the user currently wants completed)
 
-## Mimari Kararlar
-- (proje yapısı, paternler, framework seçimleri, dosya organizasyonu)
+## Architecture Decisions
+- (project structure, patterns, framework choices, file organization)
 
-- (sıkça referans verilen fonksiyon/sınıf/dosya/endpoint isimleri ve kısa açıklamaları)
+## Key Symbols and Files
+- (frequently referenced function/class/file/endpoint names and brief descriptions)
 
-- (bilinen bug, başarısız test, eksik özellik)
+## Open Issues
+- (known bugs, failing tests, missing features)
 
-- (üzerinde aktif çalışılan dosyalar ve hangi durumdalar)
+## Active Files
+- (files being actively worked on and their current status)
 
-- (kullanıcının belirttiği stil/teknoloji/davranış kuralları, yapılması/yapılmaması gerekenler)
+## User Rules and Preferences
+- (style, technology, and behavior rules the user specified; do/don't items)
 
-- (asistanın yaptığı en kritik 5-10 eylem: ne, hangi dosya, sonuç)
+## Recent Actions
+- (the assistant's 5-10 most important actions: what, which file, result)
 
-KURALLAR:
-- Olgu odaklı yaz, dolgu yok.
-- Sohbet üslubunu KORUMA — özet bir not gibi yaz.
-- Kod parçalarını sadece kritik ise kısalt; uzun snippet'leri "dosya: X" şeklinde referansla geç.
-- Karar verilmemiş şeyleri "?" ile işaretle.
-- Türkçe yaz.`
+RULES:
+- Be factual; no filler.
+- Do not preserve chat tone; write like a concise note.
+- Include code snippets only when critical; otherwise reference long snippets as "file: X".
+- Mark unresolved decisions with "?".
+- Write in English.`
 
 async function summarizeOldMessages(
   oldMessages: ModelMessage[],
@@ -190,15 +195,15 @@ async function summarizeOldMessages(
   const transcript = renderTranscript(oldMessages)
 
   const anchor = previousMemory
-    ? `Aşağıda DAHA ÖNCE üretilmiş bir memory notu var. Görevin: bu notu yeni transkriptle GÜNCELLEMEK.\n` +
-      `- Hâlâ geçerli bilgiyi KORU.\n- Eskiyen/yanlışlanan/tamamlanan bilgiyi ÇIKAR veya güncelle.\n- Yeni olguları EKLE.\n\n` +
+    ? `Below is a previously generated memory note. Your task is to UPDATE it with the new transcript.\n` +
+      `- KEEP information that is still valid.\n- REMOVE or update information that is stale, contradicted, or completed.\n- ADD new facts.\n\n` +
       `<previous-summary>\n${previousMemory}\n</previous-summary>`
-    : `Aşağıdaki sohbet geçmişinden YENİ bir memory notu oluştur.`
+    : `Create a NEW memory note from the conversation history below.`
 
   const result = await generateText({
     model: llm,
     system: STRUCTURED_MEMORY_PROMPT,
-    prompt: `${anchor}\n\nSohbet transkripti:\n\n${transcript}\n\nYukarıdaki şablonu doldur.`,
+    prompt: `${anchor}\n\nConversation transcript:\n\n${transcript}\n\nFill the template above.`,
   })
   return { text: result.text, usage: result.usage, usedProvider: provider, usedModel: model }
 }
@@ -306,8 +311,8 @@ export async function compactMessages(args: {
   const memoryMsg: ModelMessage = {
     role: "system",
     content:
-      `<compacted-memory>\nAşağıdaki yapısal not, ${oldPart.length} adet eski mesajın özetidir. ` +
-      `Devam eden konuşmada bu bilgiyi gerçek bağlam gibi kullan.\n\n` +
+      `<compacted-memory>\nThe structured note below summarizes ${oldPart.length} older messages. ` +
+      `Use it as real context in the ongoing conversation.\n\n` +
       memoryText +
       `\n</compacted-memory>`,
   }

@@ -71,7 +71,7 @@ export function checkSubagentPolicy(
     if (blocked.has(toolName)) {
       return {
         allowed: false,
-        reason: `Subagent plan modunda — '${toolName}' kullanılamaz`,
+        reason: `Subagent is in plan mode; '${toolName}' cannot be used`,
         requiresApproval: false,
       }
     }
@@ -79,14 +79,14 @@ export function checkSubagentPolicy(
   if (policy.denyTools?.includes(toolName)) {
     return {
       allowed: false,
-      reason: `'${toolName}' subagent için kara listede`,
+      reason: `'${toolName}' is denylisted for this subagent`,
       requiresApproval: false,
     }
   }
   if (policy.tools && policy.tools.length > 0 && !policy.tools.includes(toolName)) {
     return {
       allowed: false,
-      reason: `'${toolName}' subagent whitelist'inde değil`,
+      reason: `'${toolName}' is not allowlisted for this subagent`,
       requiresApproval: false,
     }
   }
@@ -103,14 +103,14 @@ export function checkSubagentPolicy(
       if (/[;&|`\n<>]/.test(cmd) || cmd.includes("$(")) {
         return {
           allowed: false,
-          reason: `Bash komutu zincirleme/yönlendirme metakarakteri içeriyor (allowlist bypass riski)`,
+          reason: `Bash command contains chaining/redirection metacharacters (allowlist bypass risk)`,
           requiresApproval: false,
         }
       }
       if (!policy.bashAllow.some((p) => cmd.startsWith(p))) {
         return {
           allowed: false,
-          reason: `Bash komutu beyaz liste prefix'lerinden hiçbiriyle başlamıyor`,
+          reason: `Bash command does not start with any allowlisted prefix`,
           requiresApproval: false,
         }
       }
@@ -122,9 +122,9 @@ export function checkSubagentPolicy(
 
 export function buildAgentsCatalog(agents: AgentDef[]): string {
   if (agents.length === 0) return ""
-  const lines = ["# Mevcut Agents (delegate edilebilir)"]
+  const lines = ["# Available Agents (delegatable)"]
   lines.push(
-    "Karmaşık alt görevleri `spawn_agent` tool'u ile bir agent'a devret. Agent kendi tool döngüsünü çalıştırır ve final özeti döner.",
+    "Delegate complex subtasks to an agent with the `spawn_agent` tool. The agent runs its own tool loop and returns a final summary.",
   )
   lines.push("")
   for (const a of agents) {

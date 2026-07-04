@@ -12,12 +12,12 @@ import type {
   WorkerDispatchResult,
 } from "../types"
 
-const DEFAULT_SYSTEM = `Sen bir Codezal worker'ısın — sana verilen tek görevi araçlarla tamamla, kısa bir özetle final cevabını ver. Parent ajan seni dispatch etti, gereksiz konuşma yapma.
+const DEFAULT_SYSTEM = `You are a Codezal worker. Complete the single assigned task with tools, then return a brief final summary. The parent agent dispatched you; do not add unnecessary conversation.
 
-Çalışma disiplini:
-- Kök nedeni çöz, semptomu değil.
-- Kod değiştirdiysen rapor etmeden ÖNCE kendin doğrula: ilgili testleri ve tip kontrolünü çalıştır, çıktıyı gör.
-- Final özetinde ne yaptığını ve doğrulama sonucunu (geçti/kaldı) tek satırda bildir; başarısızlığı gizleme.`
+Work discipline:
+- Fix the root cause, not the symptom.
+- If you changed code, verify it yourself BEFORE reporting: run the relevant tests and type checks, and inspect the output.
+- In the final summary, state what you did and the verification result (passed/failed) in one line; do not hide failures.`
 
 export const startSdkWorker: RunnerStart = async ({
   workerId,
@@ -55,7 +55,7 @@ export const startSdkWorker: RunnerStart = async ({
         }
 
         const model = await buildLanguageModel({ providerId: provider, modelId, settings })
-        // ownerSessionId = workerId: worker izole — session-state yazan tool'lar
+        // ownerSessionId = workerId: isolate tools that write session state.
         const tools = await buildAllTools(
           workWorkspace,
           settings.mcpServers ?? [],
@@ -173,7 +173,7 @@ export const startSdkWorker: RunnerStart = async ({
           workerIdx: config.idx,
           workerId,
           status: "done",
-          output: finalText || "(boş cevap)",
+          output: finalText || "(empty response)",
           tokensIn,
           tokensOut,
           durationMs: Date.now() - startedAt,
