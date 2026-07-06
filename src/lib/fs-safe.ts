@@ -1,5 +1,5 @@
 //
-import { readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
+import { readDir, readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
 import { invoke } from "@tauri-apps/api/core"
 
 export function isScopeError(e: unknown): boolean {
@@ -26,6 +26,20 @@ export async function readFileSafe(abs: string): Promise<Uint8Array<ArrayBuffer>
     const arr = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
     return arr
+  }
+}
+
+export async function readDirSafe(abs: string): Promise<{ name: string; isDirectory: boolean }[]> {
+  try {
+    return await readDir(abs)
+  } catch (e) {
+    try {
+      const fallback = await invoke<{ name: string; isDirectory: boolean }[]>("fs_read_dir", { path: abs })
+      if (Array.isArray(fallback)) return fallback
+    } catch {
+      // Keep the original plugin error if the Rust fallback cannot read it either.
+    }
+    throw e
   }
 }
 

@@ -4,10 +4,16 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readDir: vi.fn(),
 }))
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}))
+
 import { readDir } from "@tauri-apps/plugin-fs"
+import { invoke } from "@tauri-apps/api/core"
 import { readWorkspaceDir } from "@/lib/workspace-tree"
 
 const mockReadDir = vi.mocked(readDir)
+const mockInvoke = vi.mocked(invoke)
 
 function entry(name: string, isDirectory: boolean) {
   return { name, isDirectory, isFile: !isDirectory, isSymlink: false }
@@ -75,6 +81,42 @@ describe("readWorkspaceDir", () => {
     ] as Awaited<ReturnType<typeof readDir>>)
     const r = await readWorkspaceDir("/workspace/src")
     expect(r[0].path).toBe("/workspace/src/foo.ts")
+  })
+
+  it("preserves backslashes for Windows paths", async () => {
+    mockReadDir.mockResolvedValue([
+      entry("foo.ts", false),
+    ] as Awaited<ReturnType<typeof readDir>>)
+    const r = await readWorkspaceDir("C:\\Users\\me\\project")
+    expect(r[0].path).toBe("C:\\Users\\me\\project\\foo.ts")
+  })
+
+  it("falls back to Rust fs_read_dir when plugin scope rejects the path", async () => {
+    mockReadDir.mockRejectedValue(new Error("path not allowed by scope"))
+    mockInvoke.mockResolvedValue([
+      entry("foo.ts", false),
+    ] as Awaited<ReturnType<typeof readDir>>)
+
+    const r = await readWorkspaceDir("C:\\Users\\me\\project")
+
+    expect(invoke).toHaveBeenCalledWith("fs_read_dir", {
+      path: "C:\\Users\\me\\project",
+    })
+    expect(r[0].path).toBe("C:\\Users\\me\\project\\foo.ts")
+  })
+
+  it("tries Rust fs_read_dir when plugin readDir reports a Windows path error", async () => {
+    mockReadDir.mockRejectedValue(new Error("failed to read directory: os error 3"))
+    mockInvoke.mockResolvedValue([
+      entry("foo.ts", false),
+    ] as Awaited<ReturnType<typeof readDir>>)
+
+    const r = await readWorkspaceDir("C:\\Users\\me\\project")
+
+    expect(invoke).toHaveBeenCalledWith("fs_read_dir", {
+      path: "C:\\Users\\me\\project",
+    })
+    expect(r[0].path).toBe("C:\\Users\\me\\project\\foo.ts")
   })
 
   it("dist, build, target, .next gizlenir", async () => {

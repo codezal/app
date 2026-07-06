@@ -1,6 +1,5 @@
 import {
   readFile as readBinaryFile,
-  readDir,
   mkdir,
   exists,
   stat,
@@ -11,6 +10,7 @@ import {
   readTextFileSafe as readTextSafe,
   readFileSafe as readBinarySafe,
   writeTextFileSafe as writeTextSafe,
+  readDirSafe,
 } from "../fs-safe"
 import { resolveInWorkspace } from "./paths"
 import { sliceCharsSafe } from "@/lib/text"
@@ -18,6 +18,7 @@ import { isBinary, isImage, isPdf, mimeForImage, toBase64 } from "../file-type"
 import { extractPdfText } from "../pdf"
 import { isBinaryDoc, extractBinaryDoc } from "@/lib/documents"
 import { replace } from "./replace"
+import { joinFsPath } from "@/lib/fs-path"
 
 async function readBase64Safe(abs: string): Promise<string> {
   try {
@@ -34,15 +35,6 @@ async function existsSafe(abs: string): Promise<boolean> {
   } catch (e) {
     if (!isScopeError(e)) throw e
     return await invoke<boolean>("fs_exists", { path: abs })
-  }
-}
-
-async function readDirSafe(dir: string): Promise<{ name: string; isDirectory: boolean }[]> {
-  try {
-    return await readDir(dir)
-  } catch (e) {
-    if (!isScopeError(e)) throw e
-    return await invoke<{ name: string; isDirectory: boolean }[]>("fs_read_dir", { path: dir })
   }
 }
 
@@ -110,7 +102,7 @@ export async function listDirAbs(
         truncated = true
         return
       }
-      const child = dir.replace(/[\\/]+$/, "") + "/" + e.name
+      const child = joinFsPath(dir, e.name)
       if (e.isDirectory) {
         lines.push(`${indent}d ${e.name}`)
         count++

@@ -45,6 +45,7 @@ import {
   subscribeFileClipboard,
   applyFileClipboardPaste,
 } from "@/lib/file-clipboard"
+import { joinFsPath } from "@/lib/fs-path"
 
 type Props = {
   mode: PanelMode
@@ -65,9 +66,6 @@ const FileTreeMenuCtx = createContext<FileTreeMenuValue | null>(null)
 
 function parentDir(p: string): string {
   return p.replace(/[/\\][^/\\]*$/, "")
-}
-function joinPath(dir: string, name: string): string {
-  return `${dir.replace(/[/\\]$/, "")}/${name}`
 }
 function relTo(root: string, p: string): string {
   const np = p.replace(/\\/g, "/")
@@ -457,7 +455,7 @@ function FileTree({ root }: { root: string }) {
     if (!target) return
     if (!validName(name)) return toast.error(t("contextPanel.ctxInvalidName"))
     const dir = parentDir(target.path)
-    const dest = joinPath(dir, name)
+    const dest = joinFsPath(dir, name)
     if (dest === target.path) return
     try {
       if (await exists(dest)) return toast.error(t("contextPanel.ctxExists"))
@@ -481,7 +479,7 @@ function FileTree({ root }: { root: string }) {
     setCreateT(null)
     if (!ct) return
     if (!validName(name)) return toast.error(t("contextPanel.ctxInvalidName"))
-    const dest = joinPath(ct.dir, name)
+    const dest = joinFsPath(ct.dir, name)
     try {
       if (await exists(dest)) return toast.error(t("contextPanel.ctxExists"))
       if (ct.kind === "dir") await mkdir(dest, { recursive: true })

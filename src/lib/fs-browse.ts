@@ -1,6 +1,7 @@
-import { readDir } from "@tauri-apps/plugin-fs"
 import { IGNORE_DIRS } from "./ignore"
 import { protectedNames } from "./protected"
+import { readDirSafe } from "./fs-safe"
+import { joinFsPath } from "./fs-path"
 
 export type DirEntry = {
   name: string
@@ -36,7 +37,7 @@ async function walk(
   if (out.length >= max) return
   let entries
   try {
-    entries = await readDir(cur)
+    entries = await readDirSafe(cur)
   } catch {
     return
   }
@@ -45,7 +46,7 @@ async function walk(
     if (IGNORE_DIRS.has(e.name)) continue
     if (depth === 0 && blocked.has(e.name)) continue
     if (e.name.startsWith(".") && e.name !== ".env.example") continue
-    const abs = cur.replace(/[\\/]+$/, "") + "/" + e.name
+    const abs = joinFsPath(cur, e.name)
     const rel = abs.startsWith(root)
       ? abs.slice(root.length).replace(/^[\\/]+/, "")
       : abs

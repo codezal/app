@@ -1,5 +1,6 @@
-import { readDir } from "@tauri-apps/plugin-fs"
 import { IGNORE_DIRS } from "./ignore"
+import { readDirSafe } from "./fs-safe"
+import { joinFsPath } from "./fs-path"
 
 export type FsEntry = {
   name: string
@@ -9,13 +10,13 @@ export type FsEntry = {
 
 
 export async function readWorkspaceDir(absPath: string): Promise<FsEntry[]> {
-  const entries = await readDir(absPath)
+  const entries = await readDirSafe(absPath)
   const out: FsEntry[] = []
   for (const e of entries) {
     if (IGNORE_DIRS.has(e.name)) continue
     out.push({
       name: e.name,
-      path: absPath.replace(/[\\/]+$/, "") + "/" + e.name,
+      path: joinFsPath(absPath, e.name),
       isDir: !!e.isDirectory,
     })
   }
