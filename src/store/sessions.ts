@@ -97,7 +97,14 @@ type UsageDelta = {
 type MetaPatch = Partial<
   Pick<
     Session,
-    "title" | "provider" | "model" | "workspacePath" | "workspaceReadOnly" | "reasoningEffort" | "permission"
+    | "title"
+    | "provider"
+    | "model"
+    | "workspacePath"
+    | "workspaceReadOnly"
+    | "reasoningEffort"
+    | "nativeAgent"
+    | "permission"
   >
 >
 

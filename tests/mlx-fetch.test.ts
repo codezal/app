@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 
 const mock = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -34,11 +34,16 @@ import { useLocalRuntimeStore } from "@/store/local-runtime"
 
 describe("mlxFetch", () => {
   beforeEach(() => {
+    vi.useRealTimers()
     mock.invoke.mockResolvedValue(undefined)
     mock.nextId = "llm_mlx_test"
     mock.listeners.clear()
     mock.disposed.clear()
     useLocalRuntimeStore.getState().setLastStats(null)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it("mlx_chat and abort cancel use the same genId", async () => {
@@ -63,6 +68,7 @@ describe("mlxFetch", () => {
     expect(invoke).toHaveBeenCalledWith("mlx_cancel", {
       args: { genId: "llm_mlx_test" },
     })
+    expect(mock.disposed.has("mlx:chat:llm_mlx_test")).toBe(true)
   })
 
   it("stream cancel sends targeted cancel and disposes the listener", async () => {
@@ -103,5 +109,22 @@ describe("mlxFetch", () => {
       tokens: 42,
       ttftMs: 350,
     })
+  })
+
+  it("times out stalled streams and disposes the listener", async () => {
+    vi.useFakeTimers()
+    const response = await mlxFetch("http://mlx.local.invalid/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "mlx-community/Qwen3-4B-4bit", messages: [] }),
+    })
+
+    const text = expect(response.text()).rejects.toThrow("MLX stream timed out")
+    await vi.advanceTimersByTimeAsync(180_000)
+
+    await text
+    expect(invoke).toHaveBeenCalledWith("mlx_cancel", {
+      args: { genId: "llm_mlx_test" },
+    })
+    expect(mock.disposed.has("mlx:chat:llm_mlx_test")).toBe(true)
   })
 })

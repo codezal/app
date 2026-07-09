@@ -11,6 +11,7 @@ import {
   writeTextFile,
 } from "@tauri-apps/plugin-fs"
 import { embedMany, cosine, type EmbeddingConfig } from "./embedding"
+import { normalizeNativeFsPath } from "./fs-path"
 import { IGNORE_DIRS } from "./ignore"
 import { protectedNames } from "./protected"
 
@@ -74,9 +75,12 @@ export type SemanticIndex = {
 
 const INDEX_REL = ".codezal/index.json"
 
+function workspaceRoot(workspace: string): string {
+  return normalizeNativeFsPath(workspace).replace(/[\\/]+$/, "")
+}
+
 function indexPath(workspace: string): string {
-  const ws = workspace.replace(/[\\/]+$/, "")
-  return `${ws}/${INDEX_REL}`
+  return `${workspaceRoot(workspace)}/${INDEX_REL}`
 }
 
 const SECRET_FILE_RE =
@@ -95,7 +99,7 @@ async function collectFiles(
   blocked?: Set<string>,
 ): Promise<string[]> {
   if (!blocked) blocked = protectedNames()
-  const ws = workspace.replace(/[\\/]+$/, "")
+  const ws = workspaceRoot(workspace)
   const abs = rel ? `${ws}/${rel}` : ws
   let entries
   try {
@@ -168,9 +172,10 @@ export async function buildIndex(args: {
 }): Promise<SemanticIndex> {
   const { workspace, cfg, onProgress, signal } = args
   if (!workspace) throw new Error("Workspace bağlı değil — index oluşturulamaz")
+  const root = workspaceRoot(workspace)
 
   onProgress?.({ phase: "collect", done: 0, total: 0 })
-  const files = await collectFiles(workspace)
+  const files = await collectFiles(root)
   if (files.length === 0) throw new Error("İndex'lenecek dosya yok")
 
   const chunks: Array<Omit<IndexChunk, "vec">> = []
@@ -180,7 +185,7 @@ export async function buildIndex(args: {
     read++
     onProgress?.({ phase: "read", done: read, total: files.length, current: rel })
     let content: string
-    const abs = `${workspace.replace(/[\\/]+$/, "")}/${rel}`
+    const abs = `${root}/${rel}`
     try {
       if ((await stat(abs)).size > MAX_READ_BYTES) continue
       content = await readTextFile(abs)
@@ -223,7 +228,7 @@ export async function buildIndex(args: {
   }
 
   onProgress?.({ phase: "write", done: 0, total: 1 })
-  const dir = `${workspace.replace(/[\\/]+$/, "")}/.codezal`
+  const dir = `${root}/.codezal`
   if (!(await exists(dir))) await mkdir(dir, { recursive: true })
   await writeTextFile(indexPath(workspace), JSON.stringify(index))
   onProgress?.({ phase: "write", done: 1, total: 1 })

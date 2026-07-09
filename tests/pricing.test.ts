@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { pricingFor, costUsd, contextCap, compactionModelFor } from "@/lib/pricing"
+import { resolveContextCap } from "@/lib/providers-catalog"
 
 describe("pricingFor", () => {
   it("bilinen model → pricing döner", () => {
@@ -124,6 +125,12 @@ describe("contextCap", () => {
 
   it("bilinmeyen → 200_000", () => {
     expect(contextCap("some-unknown-model")).toBe(200_000)
+  })
+})
+
+describe("resolveContextCap", () => {
+  it("mlx local runtime window'unu kullanır", () => {
+    expect(resolveContextCap(undefined, "mlx", "mlx-community/Qwen3-4B-4bit", 32768)).toBe(32768)
   })
 })
 

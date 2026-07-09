@@ -33,7 +33,7 @@ import { useSuggestionsStore } from "@/store/suggestions"
 import { useSettingsStore } from "@/store/settings"
 import { useVim } from "@/lib/vim/useVim"
 import { isMacOS, fmtKbd } from "@/lib/platform"
-import type { ApprovalMode, MessageImage, MessageFile, MessagePdf, SessionGoal } from "@/store/types"
+import type { ApprovalMode, MessageImage, MessageFile, MessagePdf, SessionGoal, Settings } from "@/store/types"
 import { Dialog } from "./Dialog"
 import { fileToMessageImage, type ImageAttachResult } from "@/lib/image"
 import { fileToMessagePdf } from "@/lib/pdf"
@@ -56,6 +56,12 @@ import {
   type ReasoningEffort,
 } from "@/lib/providers"
 import { modelDetail, modelAcceptsImages, modelAcceptsPdf, resolveContextCap, type ProvidersCatalog } from "@/lib/providers-catalog"
+import {
+  defaultModelForAgentProvider,
+  isCliAgentProvider,
+  listVisibleAgentProviders,
+  modelsForAgentProvider,
+} from "@/lib/agent-providers"
 import { resolveLocalLlm, displayModelName } from "@/lib/local-llm"
 import { useLocalRuntimeStore } from "@/store/local-runtime"
 import { toast } from "@/store/toast"
@@ -1378,10 +1384,12 @@ export function Composer({
             modelId={model ?? settings.defaultModel}
             catalog={settings.providerCatalog?.data as ProvidersCatalog | undefined}
             onPickProvider={(id, sessionOnly) => {
-              const defaultModel = defaultModelFor(
-                id,
-                settings.providerCatalog?.data as ProvidersCatalog | undefined,
-              )
+              const defaultModel = isCliAgentProvider(id)
+                ? defaultModelForAgentProvider(id, settings)
+                : defaultModelFor(
+                    id,
+                    settings.providerCatalog?.data as ProvidersCatalog | undefined,
+                  )
               if (hasActive) applyMeta({ provider: id, model: defaultModel, reasoningEffort: undefined })
               else void updateSettings({ defaultProvider: id, defaultModel })
               if (hasActive && !effIsDraft && workspacePath && !sessionOnly) {
@@ -2140,6 +2148,15 @@ function WorkspacePicker({
   )
 }
 
+function modelsForPickerProvider(
+  providerId: ProviderId,
+  catalog: ProvidersCatalog | undefined,
+  settings: Settings,
+): string[] {
+  if (isCliAgentProvider(providerId)) return modelsForAgentProvider(providerId, settings)
+  return modelsFor(providerId, catalog, settings.modelStatus)
+}
+
 function ModelPicker({
   providerId,
   modelId,
@@ -2190,37 +2207,44 @@ function ModelPicker({
     void probeEnvVars(unique).then(setEnvHits)
   }, [open, adapters])
   const connected = useMemo(
-    () =>
-      adapters
+    () => {
+      const apiProviders = adapters
         .filter((p) => isConnectedSync(p, settings, envHits))
         .sort((a, b) => {
           if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
           return a.label.localeCompare(b.label)
-        }),
+        })
+      return [...apiProviders, ...listVisibleAgentProviders(settings)]
+    },
     [adapters, settings, envHits],
   )
 
   // Use the tab provider for the model list. If the user clicked a tab
   // without committing, this lets them search within it.
   const models = useMemo(
-    () => modelsFor(activeTab, catalog, settings.modelStatus),
-    [activeTab, catalog, settings.modelStatus],
+    () => modelsForPickerProvider(activeTab, catalog, settings),
+    [activeTab, catalog, settings],
   )
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!needle) return models
     return models.filter((m) => {
       if (m.toLowerCase().includes(needle)) return true
-      const name = modelDetail(catalog, activeTab, m)?.name
+      const name = isCliAgentProvider(activeTab) ? undefined : modelDetail(catalog, activeTab, m)?.name
       return Boolean(name && name.toLowerCase().includes(needle))
     })
   }, [models, q, catalog, activeTab])
 
   const [hovered, setHovered] = useState(false)
-  const detail = modelDetail(catalog, providerId, modelId)
+  const nativeProvider = isCliAgentProvider(providerId)
+  const detail = nativeProvider ? undefined : modelDetail(catalog, providerId, modelId)
   const activeDisplay = detail?.name || displayModelName(modelId)
-  const ctxCap = resolveContextCap(catalog, providerId, modelId, resolveLocalLlm(settings, modelId).contextWindow)
-  const ctxLabel = ctxCap >= 1_000_000
+  const ctxCap = nativeProvider
+    ? 0
+    : resolveContextCap(catalog, providerId, modelId, resolveLocalLlm(settings, modelId).contextWindow)
+  const ctxLabel = nativeProvider
+    ? "native CLI"
+    : ctxCap >= 1_000_000
     ? `${ctxCap / 1_000_000}M`
     : ctxCap >= 1_000
       ? `${Math.round(ctxCap / 1_000)}K`
@@ -2231,11 +2255,11 @@ function ModelPicker({
       {hovered && !open && (
         <div className="absolute bottom-[34px] right-0 z-50 w-56 rounded-lg border border-codezal-strong bg-codezal-panel p-2.5 shadow-lg text-sm text-codezal-dim pointer-events-none">
           <div className="mb-1.5 font-medium text-codezal-text">{detail?.name ?? displayModelName(modelId)}</div>
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between">
-              <span className="text-codezal-mute">Context</span>
-              <span>{ctxLabel} tokens</span>
-            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between">
+                <span className="text-codezal-mute">Context</span>
+              <span>{nativeProvider ? ctxLabel : `${ctxLabel} tokens`}</span>
+              </div>
             {detail?.cost?.input != null && (
               <div className="flex justify-between">
                 <span className="text-codezal-mute">Input / 1M</span>
@@ -2327,7 +2351,7 @@ function ModelPicker({
                     </div>
                   )}
                   {filtered.map((m) => {
-                    const name = modelDetail(catalog, activeTab, m)?.name?.trim()
+                    const name = isCliAgentProvider(activeTab) ? undefined : modelDetail(catalog, activeTab, m)?.name?.trim()
                     const display = name || displayModelName(m)
                     const isActive = m === modelId && activeTab === providerId
                     return (

@@ -57,6 +57,13 @@ mod imp {
         size: u64,
     }
 
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct MlxStatus {
+        available: bool,
+        reason: Option<String>,
+    }
+
     enum HelperMessage {
         Stdout(String),
         Stderr(String),
@@ -551,9 +558,10 @@ mod imp {
                     continue;
                 };
                 if let Some(id) = value.get("id").and_then(|v| v.as_str()) {
+                    let repo_dir = mlx_hf_repo_dir(id);
                     out.push(MlxModelInfo {
                         id: id.to_string(),
-                        size: 0,
+                        size: repo_dir.as_ref().map_or(0, |path| dir_size(path)),
                     });
                 }
             }
@@ -563,12 +571,24 @@ mod imp {
     }
 
     pub fn delete_mlx_model_impl(args: MlxDeleteArgs) -> Result<(), String> {
-        let path = mlx_models_dir().join(marker_name(&args.model));
-        match fs::remove_file(&path) {
+        let marker_path = mlx_models_dir().join(marker_name(&args.model));
+        match fs::remove_file(&marker_path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(format!("delete MLX marker: {e}")),
+        }?;
+
+        let Some(repo_dir) = mlx_hf_repo_dir(&args.model) else {
+            return Ok(());
+        };
+        remove_dir_if_exists(&repo_dir).map_err(|e| format!("delete MLX cache: {e}"))?;
+
+        if let Some(metadata_dir) = mlx_hf_metadata_dir(&args.model) {
+            remove_dir_if_exists(&metadata_dir)
+                .map_err(|e| format!("delete MLX cache metadata: {e}"))?;
         }
+
+        Ok(())
     }
 
     fn mark_mlx_model(model: &str) -> Result<(), String> {
@@ -586,6 +606,99 @@ mod imp {
             .join(".cache")
             .join("codezal")
             .join("mlx-models")
+    }
+
+    fn mlx_hf_cache_dir() -> PathBuf {
+        if let Ok(path) = std::env::var("HF_HUB_CACHE") {
+            if !path.is_empty() {
+                return expand_home(path);
+            }
+        }
+        if let Ok(path) = std::env::var("HF_HOME") {
+            if !path.is_empty() {
+                return expand_home(path).join("hub");
+            }
+        }
+
+        let home = std::env::var("HOME").unwrap_or_default();
+        if std::env::var("APP_SANDBOX_CONTAINER_ID").is_ok() {
+            return PathBuf::from(home)
+                .join("Library")
+                .join("Caches")
+                .join("huggingface")
+                .join("hub");
+        }
+
+        PathBuf::from(home)
+            .join(".cache")
+            .join("huggingface")
+            .join("hub")
+    }
+
+    fn expand_home(path: String) -> PathBuf {
+        if path == "~" {
+            return PathBuf::from(std::env::var("HOME").unwrap_or_default());
+        }
+        if let Some(rest) = path.strip_prefix("~/") {
+            return PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest);
+        }
+        PathBuf::from(path)
+    }
+
+    fn mlx_hf_repo_dir(model: &str) -> Option<PathBuf> {
+        repo_cache_name(model).map(|name| mlx_hf_cache_dir().join(name))
+    }
+
+    fn mlx_hf_metadata_dir(model: &str) -> Option<PathBuf> {
+        repo_cache_name(model).map(|name| mlx_hf_cache_dir().join(".metadata").join(name))
+    }
+
+    fn repo_cache_name(model: &str) -> Option<String> {
+        let (namespace, name) = model.split_once('/')?;
+        if namespace.is_empty() || name.is_empty() || name.contains('/') {
+            return None;
+        }
+        if !is_safe_repo_part(namespace) || !is_safe_repo_part(name) {
+            return None;
+        }
+        Some(format!("models--{namespace}--{name}"))
+    }
+
+    fn is_safe_repo_part(value: &str) -> bool {
+        value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+    }
+
+    fn remove_dir_if_exists(path: &PathBuf) -> std::io::Result<()> {
+        match fs::remove_dir_all(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn dir_size(path: &PathBuf) -> u64 {
+        let Ok(meta) = fs::symlink_metadata(path) else {
+            return 0;
+        };
+        if meta.is_file() {
+            return meta.len();
+        }
+        if !meta.is_dir() {
+            return 0;
+        }
+        let Ok(rd) = fs::read_dir(path) else {
+            return 0;
+        };
+        rd.flatten().map(|entry| dir_size(&entry.path())).sum()
+    }
+
+    pub fn mlx_status_impl() -> MlxStatus {
+        MlxStatus {
+            available: true,
+            reason: None,
+        }
     }
 
     fn marker_name(model: &str) -> String {
@@ -646,6 +759,22 @@ pub async fn mlx_download(app: AppHandle, args: serde_json::Value) -> Result<(),
         let _ = app;
         let _ = args;
         Err("MLX downloads are available only on macOS builds with the llm-mlx feature".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn mlx_status() -> Result<serde_json::Value, String> {
+    #[cfg(all(target_os = "macos", feature = "llm-mlx"))]
+    {
+        serde_json::to_value(imp::mlx_status_impl()).map_err(|e| e.to_string())
+    }
+
+    #[cfg(not(all(target_os = "macos", feature = "llm-mlx")))]
+    {
+        Ok(serde_json::json!({
+            "available": false,
+            "reason": "MLX is available only on macOS builds with the llm-mlx feature"
+        }))
     }
 }
 

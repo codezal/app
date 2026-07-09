@@ -15,6 +15,7 @@ import type { LocalLlmSettings } from "@/store/types"
 
 type ModelInfo = { name: string; size: number }
 type MlxModelInfo = { id: string; size: number }
+type MlxStatus = { available: boolean; reason?: string }
 
 const DEFAULT_PROFILE: LocalLlmSettings = {
   contextWindow: 32768,
@@ -388,6 +389,7 @@ function ProfileControls({
 export function LocalModelsPage(): React.ReactElement {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [mlxModels, setMlxModels] = useState<MlxModelInfo[]>([])
+  const [mlxStatus, setMlxStatus] = useState<MlxStatus | null>(null)
   const [osPlatform] = useState(() => platform())
   const [url, setUrl] = useState("")
   const [status, setStatus] = useState("")
@@ -429,7 +431,16 @@ export function LocalModelsPage(): React.ReactElement {
     } catch (e) {
       setStatus(`liste hatası: ${String(e)}`)
     }
+    const nextMlxStatus = await invoke<MlxStatus>("mlx_status").catch((e: unknown) => ({
+      available: false,
+      reason: String(e),
+    }))
+    setMlxStatus(nextMlxStatus)
     try {
+      if (nextMlxStatus?.available === false) {
+        setMlxModels([])
+        return
+      }
       const list = await invoke<MlxModelInfo[]>("mlx_list_models")
       setMlxModels(Array.isArray(list) ? list : [])
     } catch {
@@ -472,6 +483,10 @@ export function LocalModelsPage(): React.ReactElement {
   }
 
   function startMlxDownload(model: string, label: string) {
+    if (mlxStatus?.available !== true) {
+      setStatus(mlxStatus?.reason ?? "MLX durumu kontrol ediliyor")
+      return
+    }
     setGgufList(null)
     setHits(null)
     useLocalRuntimeStore.getState().startMlxDownload(model, label)
@@ -612,9 +627,10 @@ export function LocalModelsPage(): React.ReactElement {
   }
 
   async function onDeleteMlx(id: string) {
-    if (!(await confirm(`${id} kaldırılsın mı?`))) return
+    if (!(await confirm(`${id} ve yerel MLX cache dosyaları silinsin mi?`))) return
     try {
       await invoke("mlx_delete_model", { args: { model: id } })
+      setStatus(`silindi: ${id}`)
       void refresh()
     } catch (e) {
       setStatus(`silme hatası: ${String(e)}`)
@@ -626,6 +642,8 @@ export function LocalModelsPage(): React.ReactElement {
     download && download.total > 0 ? Math.floor((download.done / download.total) * 100) : 0
   const isMac = osPlatform === "macos"
   const showGguf = !isMac
+  const mlxAvailable = mlxStatus?.available === true
+  const mlxUnavailable = isMac && mlxStatus?.available === false
 
   return (
     <div className="flex flex-col gap-6 text-md text-codezal-text">
@@ -634,10 +652,17 @@ export function LocalModelsPage(): React.ReactElement {
       <section className="flex flex-col gap-2">
         <h3 className="text-md font-semibold text-codezal-dim">Model indir</h3>
         {isMac ? (
-          <p className="text-md text-codezal-mute">
-            Apple Silicon üzerinde yerel modeller MLX olarak indirilir. MLX modelleri Apple
-            cache'ine iner; Codezal kurulu bilgisini aşağıdaki listeden takip eder.
-          </p>
+          <>
+            <p className="text-md text-codezal-mute">
+              Apple Silicon üzerinde yerel modeller MLX olarak indirilir. MLX modelleri Apple
+              cache'ine iner; Codezal kurulu bilgisini aşağıdaki listeden takip eder.
+            </p>
+            {mlxUnavailable && (
+              <p className="text-md text-amber-500">
+                MLX bu derlemede kapalı — {mlxStatus.reason ?? "llm-mlx feature gerekli"}.
+              </p>
+            )}
+          </>
         ) : (
           <>
             <p className="text-md text-codezal-mute">
@@ -793,7 +818,8 @@ export function LocalModelsPage(): React.ReactElement {
                     ) : (
                       <button
                         onClick={() => startMlxDownload(m.id, m.label)}
-                        disabled={downloading || listing}
+                        disabled={downloading || listing || !mlxAvailable}
+                        title={!mlxAvailable ? (mlxStatus?.reason ?? "MLX hazır değil") : undefined}
                         className="inline-flex shrink-0 items-center gap-1 rounded-md border border-codezal px-2.5 py-1 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
                       >
                         <Download className="size-3.5" />
@@ -864,7 +890,7 @@ export function LocalModelsPage(): React.ReactElement {
                       <span className="truncate text-md text-codezal-mute">{m.id}</span>
                     </span>
                     <span className="shrink-0 text-md text-codezal-mute">
-                      {meta ? `${meta.approxGB} GB` : ""}
+                      {m.size > 0 ? fmtSize(m.size) : meta ? `${meta.approxGB} GB` : ""}
                     </span>
                     <button
                       onClick={() => void onDeleteMlx(m.id)}

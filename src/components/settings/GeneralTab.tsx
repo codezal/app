@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Check } from "@/lib/icons"
 import { listProviderAdapters, modelsFor, defaultModelFor, isConnectedSync, probeEnvVars, type ProviderId } from "@/lib/providers"
 import { modelDetail, type ProvidersCatalog } from "@/lib/providers-catalog"
+import {
+  defaultModelForAgentProvider,
+  isCliAgentProvider,
+  listVisibleAgentProviders,
+  modelsForAgentProvider,
+} from "@/lib/agent-providers"
 import { useSettingsStore } from "@/store/settings"
 import { cn } from "@/lib/utils"
 import { Select } from "@/components/Select"
@@ -307,7 +313,8 @@ function DefaultProviderModelSelector() {
   const update = useSettingsStore((s) => s.update)
   const catalog = settings.providerCatalog?.data as ProvidersCatalog | undefined
 
-  const adapters = useMemo(() => listProviderAdapters(catalog), [catalog])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const adapters = useMemo(() => listProviderAdapters(catalog), [catalog, settings.customProviders])
   // Env fallback counts as connected — probe so env-bound providers appear.
   const [envHits, setEnvHits] = useState<Record<string, boolean>>({})
   useEffect(() => {
@@ -321,12 +328,30 @@ function DefaultProviderModelSelector() {
       alive = false
     }
   }, [adapters, settings.envFallback])
-  const connected = adapters
-    .filter((p) => isConnectedSync(p, settings, envHits))
-    .sort((a, b) => {
-      if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
-      return a.label.localeCompare(b.label)
-    })
+  const connected = [
+    ...adapters
+      .filter((p) => isConnectedSync(p, settings, envHits))
+      .sort((a, b) => {
+        if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
+        return a.label.localeCompare(b.label)
+      }),
+    ...listVisibleAgentProviders(settings),
+  ]
+
+  function modelsForDefault(providerId: ProviderId): string[] {
+    if (isCliAgentProvider(providerId)) return modelsForAgentProvider(providerId, settings)
+    return modelsFor(providerId, catalog, settings.modelStatus)
+  }
+
+  function defaultModelForDefault(providerId: ProviderId): string {
+    if (isCliAgentProvider(providerId)) return defaultModelForAgentProvider(providerId, settings)
+    return defaultModelFor(providerId, catalog)
+  }
+
+  function displayName(providerId: ProviderId, modelId: string): string {
+    if (isCliAgentProvider(providerId)) return modelId
+    return modelDetail(catalog, providerId, modelId)?.name?.trim() || modelId
+  }
 
   if (connected.length === 0) {
     return (
@@ -341,10 +366,10 @@ function DefaultProviderModelSelector() {
   // back to the first connected entry so the dropdowns always have a valid
   // selection.
   const activeProvider = connected.find((p) => p.id === currentId) ?? connected[0]
-  const models = modelsFor(activeProvider.id, catalog, settings.modelStatus)
+  const models = modelsForDefault(activeProvider.id)
   const currentModel = models.includes(settings.defaultModel)
     ? settings.defaultModel
-    : defaultModelFor(activeProvider.id, catalog)
+    : defaultModelForDefault(activeProvider.id)
 
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -353,7 +378,7 @@ function DefaultProviderModelSelector() {
         onChange={(id) =>
           void update({
             defaultProvider: id as ProviderId,
-            defaultModel: defaultModelFor(id as ProviderId, catalog),
+            defaultModel: defaultModelForDefault(id as ProviderId),
           })
         }
         options={connected.map((p) => ({ value: p.id, label: p.label }))}
@@ -363,10 +388,9 @@ function DefaultProviderModelSelector() {
         onChange={(m) => void update({ defaultModel: m })}
         options={models.map((m) => ({
           value: m,
-          label: modelDetail(catalog, activeProvider.id, m)?.name?.trim() || m,
+          label: displayName(activeProvider.id, m),
         }))}
       />
     </div>
   )
 }
-

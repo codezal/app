@@ -12,6 +12,7 @@ import { DEFAULT_TOKEN_SAVERS } from "@/lib/token-savers/types"
 import { DEFAULT_MEMORY } from "@/lib/memory-settings"
 import { DEFAULT_PRIVACY } from "@/lib/privacy"
 import { DEFAULT_INFERENCE_SERVER } from "@/lib/inference-server"
+import { defaultAgentProvidersSettings } from "@/lib/agent-providers"
 import { CURRENT_SCHEMA_VERSION } from "./migrate"
 import type { Settings } from "@/store/types"
 
@@ -65,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   inferenceServer: DEFAULT_INFERENCE_SERVER,
   credentials: {},
   providerConfigs: {},
+  agentProviders: defaultAgentProvidersSettings(),
   customProviders: [],
   envFallback: true,
   modelStatus: {},

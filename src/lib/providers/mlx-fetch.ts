@@ -18,6 +18,7 @@ type MlxChatEvent =
   | { kind: "error"; message: string }
 
 type FetchLike = typeof fetch
+const MLX_STREAM_IDLE_TIMEOUT_MS = 180_000
 
 function urlOf(input: Parameters<FetchLike>[0]): string {
   if (typeof input === "string") return input
@@ -73,16 +74,43 @@ export const mlxFetch: FetchLike = (async (input, init) => {
     start(controller) {
       const signal = init?.signal
       let disposed = false
+      let idleTimer: ReturnType<typeof setTimeout> | undefined
+      const cancelIdleTimer = () => {
+        if (idleTimer) {
+          clearTimeout(idleTimer)
+          idleTimer = undefined
+        }
+      }
       const cleanup = () => {
         if (!disposed) {
           disposed = true
-          signal?.removeEventListener("abort", cancelGeneration)
+          cancelIdleTimer()
+          signal?.removeEventListener("abort", abortGeneration)
           chat.dispose()
         }
       }
+      const fail = (error: Error) => {
+        if (disposed) return
+        cleanup()
+        controller.error(error)
+      }
+      const refreshIdleTimer = () => {
+        if (disposed) return
+        cancelIdleTimer()
+        idleTimer = setTimeout(() => {
+          cancelGeneration()
+          fail(new Error("MLX stream timed out"))
+        }, MLX_STREAM_IDLE_TIMEOUT_MS)
+      }
+      const abortGeneration = () => {
+        cancelGeneration()
+        fail(new Error("MLX stream aborted"))
+      }
       cleanupStream = cleanup
+      refreshIdleTimer()
       controller.enqueue(frame({ role: "assistant" }, null))
       chat.attach((ev) => {
+        refreshIdleTimer()
         if (ev.kind === "oai_delta") {
           let delta: Record<string, unknown>
           try {
@@ -112,8 +140,7 @@ export const mlxFetch: FetchLike = (async (input, init) => {
         } else if (ev.kind === "notice") {
           console.log(`[mlx] ${ev.message}`)
         } else {
-          cleanup()
-          controller.error(new Error(ev.message))
+          fail(new Error(ev.message))
         }
       })
       void invoke("mlx_chat", {
@@ -122,10 +149,10 @@ export const mlxFetch: FetchLike = (async (input, init) => {
           request: bodyStr,
         },
       }).catch((e: unknown) => {
-        cleanup()
-        controller.error(e instanceof Error ? e : new Error(String(e)))
+        fail(e instanceof Error ? e : new Error(String(e)))
       })
-      signal?.addEventListener("abort", cancelGeneration)
+      signal?.addEventListener("abort", abortGeneration)
+      if (signal?.aborted) abortGeneration()
     },
     cancel() {
       cancelGeneration()

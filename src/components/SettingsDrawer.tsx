@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import {
   ArrowLeft,
   BarChart3,
+  Bot,
   Brain,
   Cog,
   Coins,
@@ -44,6 +45,7 @@ import { ModelsPage } from "./settings/ModelsPage"
 import { LocalModelsPage } from "./settings/LocalModelsPage"
 import { PrivacyTab } from "./settings/PrivacyTab"
 import { HistoryTab } from "./settings/HistoryTab"
+import { CliAgentsTab } from "./settings/CliAgentsTab"
 
 type Props = {
   onClose: () => void
@@ -58,6 +60,7 @@ type Tab =
   | "istatistik"
   | "gorunum"
   | "modeller"
+  | "ajanlar"
   | "yerel"
   | "hafiza"
   | "gizlilik"
@@ -95,11 +98,14 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
   const localModelsLabel = localLabelRaw === "settings.tabs.local" ? "Local Models" : localLabelRaw
   const historyLabelRaw = t("settings.tabs.history")
   const historyLabel = historyLabelRaw === "settings.tabs.history" ? "History" : historyLabelRaw
+  const cliAgentsLabelRaw = t("settings.tabs.cliAgents")
+  const cliAgentsLabel = cliAgentsLabelRaw === "settings.tabs.cliAgents" ? "CLI Agents" : cliAgentsLabelRaw
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "genel", label: t("settings.tabs.general"), icon: Cog },
     { id: "istatistik", label: t("settings.tabs.stats"), icon: BarChart3 },
     { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette },
     { id: "modeller", label: t("settings.nav.providers"), icon: KeyRound },
+    { id: "ajanlar", label: cliAgentsLabel, icon: Bot },
     { id: "yerel", label: localModelsLabel, icon: Cpu },
     { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck },
     { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug },
@@ -180,6 +186,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
               </div>
             )}
             {tab === "yerel" && <LocalModelsPage />}
+            {tab === "ajanlar" && <CliAgentsTab />}
             {tab === "gizlilik" && <PrivacyTab />}
             {tab === "onay" && <ApprovalTab />}
             {tab === "gecmis" && <HistoryTab />}

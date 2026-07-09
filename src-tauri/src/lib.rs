@@ -122,6 +122,7 @@ pub fn run() {
             mlx_native::mlx_chat,
             mlx_native::mlx_cancel,
             mlx_native::mlx_download,
+            mlx_native::mlx_status,
             mlx_native::mlx_list_models,
             mlx_native::mlx_delete_model,
             server::inference_server_start,

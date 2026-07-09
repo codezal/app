@@ -26,6 +26,7 @@ export type LocalDownload = {
 type DownloadGroup = { label: string; parts: string[] }
 
 let activeDispose: (() => void) | null = null
+const DOWNLOAD_IDLE_TIMEOUT_MS = 300_000
 
 // total_physical_ram'den hesaplar.
 export type LocalModelInfo = {
@@ -170,33 +171,52 @@ export const useLocalRuntimeStore = create<LocalRuntimeState>((set, get) => ({
       try {
         await new Promise<void>((resolve, reject) => {
           void (async () => {
-            const dl = await bufferedListen<DlEvent>(`mlx:download:${id}`)
-            activeDispose = () => {
-              dl.dispose()
-              activeDispose = null
-            }
-            dl.attach((p) => {
-              if (p.kind === "progress") {
-                set((s) =>
-                  s.download && s.download.id === id
-                    ? { download: { ...s.download, done: p.downloaded, total: p.total } }
-                    : s,
-                )
-              } else if (p.kind === "done") {
-                activeDispose?.()
-                resolve()
-              } else if (p.kind === "cancelled") {
-                activeDispose?.()
-                set((s) => (s.download ? { download: { ...s.download, state: "cancelled" } } : s))
-                resolve()
-              } else if (p.kind === "notice") {
-                return
-              } else {
-                activeDispose?.()
-                reject(new Error(p.message))
-              }
-            })
             try {
+              const dl = await bufferedListen<DlEvent>(`mlx:download:${id}`)
+              let idleTimer: ReturnType<typeof setTimeout> | undefined
+              const clearIdleTimer = () => {
+                if (idleTimer) {
+                  clearTimeout(idleTimer)
+                  idleTimer = undefined
+                }
+              }
+              const refreshIdleTimer = () => {
+                clearIdleTimer()
+                idleTimer = setTimeout(() => {
+                  activeDispose?.()
+                  reject(new Error("MLX download timed out"))
+                }, DOWNLOAD_IDLE_TIMEOUT_MS)
+              }
+              activeDispose = () => {
+                clearIdleTimer()
+                dl.dispose()
+                activeDispose = null
+              }
+              refreshIdleTimer()
+              dl.attach((p) => {
+                refreshIdleTimer()
+                if (p.kind === "progress") {
+                  set((s) =>
+                    s.download && s.download.id === id
+                      ? { download: { ...s.download, done: p.downloaded, total: p.total } }
+                      : s,
+                  )
+                } else if (p.kind === "done") {
+                  activeDispose?.()
+                  resolve()
+                } else if (p.kind === "cancelled") {
+                  activeDispose?.()
+                  set((s) =>
+                    s.download ? { download: { ...s.download, state: "cancelled" } } : s,
+                  )
+                  resolve()
+                } else if (p.kind === "notice") {
+                  return
+                } else {
+                  activeDispose?.()
+                  reject(new Error(p.message))
+                }
+              })
               await invoke("mlx_download", { args: { id, model } })
             } catch (e) {
               activeDispose?.()

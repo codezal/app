@@ -1147,6 +1147,7 @@ export type Messages = {
       shortcuts: string
       providers: string
       models: string
+      cliAgents?: string
       mcp: string
       hooks: string
       orchestra: string
@@ -1243,6 +1244,45 @@ export type Messages = {
       pickerSearchPlaceholder: string
       pickerPopular: string
       pickerOther: string
+    }
+    cliAgents?: {
+      title: string
+      description: string
+      visible: string
+      command: string
+      injectTools: string
+      injectToolsDesc: string
+      models: string
+      modelsDesc: string
+      env: string
+      envDesc: string
+      diagnose: string
+      refresh: string
+      loading: string
+      notChecked: string
+      missing: string
+      error: string
+      available: string
+      availableWithModels: string
+      cachedWithModels: string
+      sdkOk: string
+      sdkFailed: string
+      discoveredModels: string
+      discoveredModelsDesc: string
+      noDiscoveredModels: string
+      updatedAt: string
+      moreModels: string
+      usageTitle: string
+      usageDesc: string
+      usageRefresh: string
+      usageEmpty: string
+      usageTurns: string
+      usageInput: string
+      usageOutput: string
+      usageReasoning: string
+      usageCost: string
+      moveUp: string
+      moveDown: string
     }
     customProvider?: {
       title: string
@@ -1453,6 +1493,8 @@ export type Messages = {
       local?: string
       // Optional — Harness History tab label. Falls back to "History" if missing.
       history?: string
+      // Optional — native CLI agent provider settings tab.
+      cliAgents?: string
     }
     history?: {
       title: string

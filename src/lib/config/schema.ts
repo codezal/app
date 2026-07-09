@@ -95,6 +95,32 @@ const PermissionRuleSchema = z
   })
   .loose()
 
+const CliAgentModelSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().optional(),
+    description: z.string().optional(),
+    source: z.enum(["runtime", "custom", "fallback"]).optional(),
+  })
+  .loose()
+
+const CliAgentProviderSettingsSchema = z
+  .object({
+    enabled: z.boolean().optional().catch(undefined),
+    order: z.number().optional().catch(undefined),
+    command: z.string().optional().catch(undefined),
+    env: z.record(z.string(), z.string()).optional().catch(undefined),
+    injectCodezalTools: z.boolean().optional().catch(undefined),
+    models: z.array(z.string()).optional().catch(undefined),
+    discoveredModels: z.array(CliAgentModelSchema).optional().catch(undefined),
+    modelsFetchedAt: z.number().optional().catch(undefined),
+    lastStatus: z.enum(["available", "missing", "error"]).optional().catch(undefined),
+    lastVersion: z.string().optional().catch(undefined),
+    lastError: z.string().optional().catch(undefined),
+    lastCheckedAt: z.number().optional().catch(undefined),
+  })
+  .loose()
+
 const CustomProviderSchema = z
   .object({
     id: z.string().min(1),
@@ -225,6 +251,10 @@ export function makeSchema(d: Settings) {
         .catch(d.inferenceServer),
       credentials: looseRecord.optional(),
       providerConfigs: looseRecord.optional(),
+      agentProviders: z
+        .record(z.string(), CliAgentProviderSettingsSchema)
+        .optional()
+        .catch(d.agentProviders ?? {}),
       customProviders: z
         .array(CustomProviderSchema.catch({ id: "", name: "", baseURL: "", models: [] }))
         .optional()

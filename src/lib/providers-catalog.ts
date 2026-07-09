@@ -182,12 +182,16 @@ export function resolveContextCap(
   catalog: ProvidersCatalog | undefined,
   provider: ProviderId | undefined,
   model: string,
-  // Local (in-process) models have no catalog entry — their real window is the
-  // user-configured n_ctx (settings.localLlm.contextWindow), passed in here so
-  // the fill gauge + compaction target match the actual window, not a default.
+  // Local runtimes have no catalog entry — their real window is the configured
+  // local context, passed in here so the fill gauge + compaction target match
+  // the actual runtime window, not a cloud-model fallback.
   localContextWindow?: number,
 ): number {
-  if (provider === "local" && typeof localContextWindow === "number" && localContextWindow > 0) {
+  if (
+    (provider === "local" || provider === "mlx") &&
+    typeof localContextWindow === "number" &&
+    localContextWindow > 0
+  ) {
     return localContextWindow
   }
   if (catalog && provider) {

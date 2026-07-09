@@ -1,4 +1,6 @@
 
+import { normalizeNativeFsPath } from "@/lib/fs-path"
+
 export class WorkspaceError extends Error {}
 
 function isAbsolutePath(p: string): boolean {
@@ -26,9 +28,9 @@ function normalize(p: string): string {
 
 export function resolveInWorkspace(workspace: string, rel: string): string {
   if (!workspace) throw new WorkspaceError("Çalışma klasörü bağlı değil")
-  const ws = normalize(workspace)
+  const ws = normalize(normalizeNativeFsPath(workspace))
   if (isAbsolutePath(rel)) {
-    const norm = normalize(rel)
+    const norm = normalize(normalizeNativeFsPath(rel))
     if (norm === ws || norm.startsWith(ws + "/")) return norm
     throw new WorkspaceError(`Path workspace dışında: ${rel}`)
   }

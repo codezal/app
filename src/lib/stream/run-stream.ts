@@ -71,6 +71,8 @@ import { t as tStatic } from "@/lib/i18n"
 import { createId } from "@/lib/id"
 import { hasInbox, takeInbox, framePeerMessage, listPeers } from "@/lib/session-inbox"
 import { errorMessage } from "@/lib/errors"
+import { isCliAgentProvider } from "@/lib/agent-providers"
+import { runNativeAgentStream } from "@/lib/agent-providers/native-stream"
 
 const MAX_API_RETRIES = 3
 
@@ -251,6 +253,19 @@ export function makeRunStream(deps: RunStreamDeps) {
     const protectBudget = Math.min(RECENT_TOOL_PROTECT_TOKENS, Math.floor(effCtxWindow * 0.5))
 
     try {
+      if (isCliAgentProvider(provider)) {
+        await runNativeAgentStream({
+          sid,
+          asstMsgId,
+          history,
+          signal: ac.signal,
+          settings,
+          session: cur,
+          provider,
+          modelId,
+        })
+        streamSucceeded = true
+      } else {
       // Effective settings = global merged with this workspace's project config
       // override (mcpServers/hooks concat). Auth keys stay global, so the model
       // build still reads the global `settings`.
@@ -731,7 +746,11 @@ export function makeRunStream(deps: RunStreamDeps) {
 
       await useSessionsStore.getState().persistSession(sid)
       streamSucceeded = true
+      }
     } catch (e) {
+      if (isCliAgentProvider(provider)) {
+        if (!ac.signal.aborted) deps.setError(errorMessage(e))
+      } else {
       cancelRaf()
       thinkSplitter?.flush()
       flushProtocolText()
@@ -789,6 +808,7 @@ export function makeRunStream(deps: RunStreamDeps) {
               : base,
           )
         }
+      }
       }
     } finally {
       if (stallWatchdog) clearInterval(stallWatchdog)
