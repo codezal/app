@@ -2,7 +2,7 @@
 # In dev mode the dock label comes from the cargo binary name, so keep it
 # capitalized. Production bundles use tauri.conf.json > productName.
 name = "Codezal"
-version = "0.4.7"
+version = "0.4.8"
 description = "Codezal - multi-LLM desktop chat"
 authors = ["Erhan Erbas"]
 license = "Apache-2.0"
