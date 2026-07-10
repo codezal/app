@@ -27,4 +27,10 @@ describe("isWithinWorkspace", () => {
   it("dışarı → false", () => expect(isWithinWorkspace("/ws", "/etc")).toBe(false))
   it("prefix tuzağı → false", () => expect(isWithinWorkspace("/ws", "/ws-other")).toBe(false))
   it("trailing slash kök → true", () => expect(isWithinWorkspace("/ws/", "/ws/src")).toBe(true))
+  it("windows native ayırıcıları normalize eder", () => {
+    expect(isWithinWorkspace("C:\\Users\\Me\\repo", "c:\\users\\me\\repo\\src", true)).toBe(true)
+  })
+  it("Git Bash MSYS cwd yolunu native workspace ile eşleştirir", () => {
+    expect(isWithinWorkspace("C:\\Users\\Me\\repo", "/c/Users/Me/repo/src", true)).toBe(true)
+  })
 })

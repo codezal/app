@@ -1,3 +1,6 @@
+import { normalizeNativeFsPath } from "@/lib/fs-path"
+import { isWindows } from "@/lib/platform"
+
 export const PWD_SENTINEL = "__CODEZAL_PWD__"
 
 export function extractPwd(
@@ -12,7 +15,19 @@ export function extractPwd(
   return { cleaned, cwd: cwd || null }
 }
 
-export function isWithinWorkspace(workspace: string, cwd: string): boolean {
-  const root = workspace.replace(/[/\\]+$/, "")
-  return cwd === root || cwd.startsWith(root + "/")
+function comparablePath(path: string, windows: boolean): string {
+  const normalized = normalizeNativeFsPath(path, windows)
+    .replace(/\\/g, "/")
+    .replace(/\/+$/, "")
+  return windows ? normalized.toLowerCase() : normalized
+}
+
+export function isWithinWorkspace(
+  workspace: string,
+  cwd: string,
+  windows = isWindows(),
+): boolean {
+  const root = comparablePath(workspace, windows)
+  const current = comparablePath(cwd, windows)
+  return current === root || current.startsWith(root + "/")
 }

@@ -186,6 +186,33 @@ jobs:
       - name: Install deps
         run: npm install
 
+      - name: Bundle PortableGit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $gitExe = (Get-Command git.exe -ErrorAction Stop).Source
+          $gitRoot = Split-Path (Split-Path $gitExe -Parent) -Parent
+          $bundleRoot = Join-Path $PWD "src-tauri/resources/git"
+          Get-ChildItem $bundleRoot -Force | Remove-Item -Recurse -Force
+          foreach ($entry in @("cmd", "bin", "usr", "mingw64", "etc")) {
+            $source = Join-Path $gitRoot $entry
+            if (Test-Path $source) {
+              Copy-Item $source -Destination $bundleRoot -Recurse -Force
+            }
+          }
+          foreach ($license in @("LICENSE.txt", "COPYING")) {
+            $source = Join-Path $gitRoot $license
+            if (Test-Path $source) {
+              Copy-Item $source -Destination $bundleRoot -Force
+            }
+          }
+          if (-not (Test-Path (Join-Path $bundleRoot "usr/bin/bash.exe"))) {
+            throw "PortableGit bundle is missing usr/bin/bash.exe"
+          }
+          if (-not (Test-Path (Join-Path $bundleRoot "cmd/git.exe"))) {
+            throw "PortableGit bundle is missing cmd/git.exe"
+          }
+
       - name: Build NSIS installer + updater artifacts
         env:
           # Tauri creates the updater signature next to the NSIS setup.exe when set.

@@ -1,7 +1,6 @@
 import {
   readFile as readBinaryFile,
   mkdir,
-  exists,
   stat,
 } from "@tauri-apps/plugin-fs"
 import { invoke } from "@tauri-apps/api/core"
@@ -11,6 +10,7 @@ import {
   readFileSafe as readBinarySafe,
   writeTextFileSafe as writeTextSafe,
   readDirSafe,
+  existsSafe,
 } from "../fs-safe"
 import { resolveInWorkspace } from "./paths"
 import { sliceCharsSafe } from "@/lib/text"
@@ -26,15 +26,6 @@ async function readBase64Safe(abs: string): Promise<string> {
   } catch (e) {
     if (!isScopeError(e)) throw e
     return await invoke<string>("fs_read_file_base64", { path: abs })
-  }
-}
-
-async function existsSafe(abs: string): Promise<boolean> {
-  try {
-    return await exists(abs)
-  } catch (e) {
-    if (!isScopeError(e)) throw e
-    return await invoke<boolean>("fs_exists", { path: abs })
   }
 }
 

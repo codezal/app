@@ -58,6 +58,16 @@ describe("resolveInWorkspace", () => {
     expect(resolveInWorkspace("C:/proj", "C:\\proj\\src\\f.ts")).toBe("C:/proj/src/f.ts")
   })
 
+  it("windows workspace karşılaştırması harf duyarsızdır", () => {
+    expect(
+      resolveInWorkspace(
+        "C:\\Users\\Me\\repo",
+        "c:\\users\\me\\repo\\src\\f.ts",
+        true,
+      ),
+    ).toBe("c:/users/me/repo/src/f.ts")
+  })
+
   it("windows sürücü absolute, workspace dışı → fırlatır", () => {
     expect(() => resolveInWorkspace("C:/proj", "C:\\Windows\\System32\\evil.txt")).toThrow(
       WorkspaceError,

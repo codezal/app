@@ -145,7 +145,7 @@ import { buildMcpTools, listPluginMcps, listConnectedMcpResources, readMcpResour
 import { listPluginHooks } from "../hooks"
 import { createId } from "@/lib/id"
 import type { Message, Settings } from "@/store/types"
-import { resolveInWorkspace, WorkspaceError } from "./paths"
+import { isAbsolutePath, resolveInWorkspace, WorkspaceError } from "./paths"
 import { withLock } from "../lock"
 import {
   lspHover,
@@ -473,7 +473,7 @@ async function resolvePathOrAsk(workspace: string, rel: string, toolName: string
     return resolveInWorkspace(workspace, rel)
   } catch (e) {
     if (!(e instanceof WorkspaceError)) throw e
-    if (!rel.startsWith("/")) throw e
+    if (!isAbsolutePath(rel)) throw e
     const decision = await useApprovalsStore.getState().request("external_file_access", {
       tool: toolName,
       path: rel,

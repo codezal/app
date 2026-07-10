@@ -8,13 +8,19 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   mkdir: vi.fn(),
 }))
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}))
+
 import { readTextFile, writeTextFile, exists, remove } from "@tauri-apps/plugin-fs"
+import { invoke } from "@tauri-apps/api/core"
 import { applyPatch, formatApplyResult, parsePatchForUI } from "@/lib/tools/patch"
 
 const mockRead = vi.mocked(readTextFile)
 const mockWrite = vi.mocked(writeTextFile)
 const mockExists = vi.mocked(exists)
 const mockRemove = vi.mocked(remove)
+const mockInvoke = vi.mocked(invoke)
 
 const WS = "/workspace"
 
@@ -70,6 +76,34 @@ describe("formatApplyResult", () => {
 // ─── applyPatch — Update File ─────────────────────────────────────────────────
 
 describe("applyPatch — Update File", () => {
+  it("Tauri scope reddederse güvenli Rust fallback ile düzenler", async () => {
+    mockExists.mockRejectedValue(new Error("path not allowed by scope"))
+    mockRead.mockRejectedValue(new Error("path not allowed by scope"))
+    mockWrite.mockRejectedValue(new Error("path not allowed by scope"))
+    mockInvoke.mockImplementation(async (command) => {
+      if (command === "fs_exists") return true
+      if (command === "fs_read_text_file") return "before\n"
+      if (command === "fs_write_text_file") return undefined
+      throw new Error(`unexpected invoke: ${command}`)
+    })
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/foo.ts",
+      "@@",
+      "-before",
+      "+after",
+      "*** End Patch",
+    ].join("\n")
+
+    const result = await applyPatch(WS, patch)
+
+    expect(result.filesChanged).toEqual(["src/foo.ts"])
+    expect(mockInvoke).toHaveBeenCalledWith("fs_write_text_file", {
+      path: "/workspace/src/foo.ts",
+      contents: "after\n",
+    })
+  })
+
   it("tek hunk satır değiştirir", async () => {
     mockRead.mockResolvedValue("line1\nold line\nline3\n")
     const patch = [

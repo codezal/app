@@ -38,6 +38,7 @@ tiny_http = "0.12"
 tauri = { version = "2.11.3", features = ["protocol-asset", "tray-icon", "image-png"] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = { version = "2", features = ["watch"] }
+tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-shell = "2.3.5"

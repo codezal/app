@@ -16,7 +16,8 @@
 //  ...
 // *** End Patch
 //
-import { readTextFile, writeTextFile, exists, remove, mkdir } from "@tauri-apps/plugin-fs"
+import { remove, mkdir } from "@tauri-apps/plugin-fs"
+import { existsSafe, readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"
 import { resolveInWorkspace } from "./paths"
 import { trimContext, type DiffLine } from "@/lib/diff"
 import {
@@ -258,7 +259,7 @@ export async function applyPatch(workspace: string, patch: string): Promise<Appl
   const overlay = new Map<string, string | null>()
   const readState = async (abs: string): Promise<string | null> => {
     if (overlay.has(abs)) return overlay.get(abs)!
-    if (await exists(abs)) return readTextFile(abs)
+    if (await existsSafe(abs)) return readTextFileSafe(abs)
     return null
   }
 
@@ -296,14 +297,14 @@ export async function applyPatch(workspace: string, patch: string): Promise<Appl
 
   for (const [abs, content] of overlay) {
     if (content === null) {
-      if (await exists(abs)) await remove(abs)
+      if (await existsSafe(abs)) await remove(abs)
     } else {
       const lastSep = Math.max(abs.lastIndexOf("/"), abs.lastIndexOf("\\"))
       if (lastSep > 0) {
         const parent = abs.slice(0, lastSep)
-        if (!(await exists(parent))) await mkdir(parent, { recursive: true })
+        if (!(await existsSafe(parent))) await mkdir(parent, { recursive: true })
       }
-      await writeTextFile(abs, content)
+      await writeTextFileSafe(abs, content)
     }
   }
 

@@ -1,11 +1,21 @@
 //
-import { readDir, readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
+import { exists, readDir, readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
 import { invoke } from "@tauri-apps/api/core"
 import { normalizeNativeFsPath } from "./fs-path"
 
 export function isScopeError(e: unknown): boolean {
   const msg = String((e as { message?: string } | undefined)?.message ?? e)
   return /forbidden|not allowed|scope/i.test(msg)
+}
+
+export async function existsSafe(abs: string): Promise<boolean> {
+  const path = normalizeNativeFsPath(abs)
+  try {
+    return await exists(path)
+  } catch (e) {
+    if (!isScopeError(e)) throw e
+    return await invoke<boolean>("fs_exists", { path })
+  }
 }
 
 export async function readTextFileSafe(abs: string): Promise<string> {

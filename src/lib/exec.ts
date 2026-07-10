@@ -115,7 +115,11 @@ export type RunShellOpts = {
 export async function shellInvocation(): Promise<{ program: string; flag: string }> {
   if (await isWindows()) {
     const bash = await resolveProgram("bash")
-    if (!bash) return { program: "cmd", flag: "/c" }
+    if (!bash) {
+      throw new Error(
+        "Bash is unavailable on Windows. Install Git for Windows or use a Codezal build with bundled PortableGit.",
+      )
+    }
   }
   return { program: "bash", flag: "-lc" }
 }

@@ -1,9 +1,10 @@
 
 import { normalizeNativeFsPath } from "@/lib/fs-path"
+import { isWindows } from "@/lib/platform"
 
 export class WorkspaceError extends Error {}
 
-function isAbsolutePath(p: string): boolean {
+export function isAbsolutePath(p: string): boolean {
   return p.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p)
 }
 
@@ -26,16 +27,29 @@ function normalize(p: string): string {
   return lead + out.join("/")
 }
 
-export function resolveInWorkspace(workspace: string, rel: string): string {
+function comparable(path: string, windows: boolean): string {
+  return windows ? path.toLowerCase() : path
+}
+
+export function resolveInWorkspace(
+  workspace: string,
+  rel: string,
+  windows = isWindows(),
+): string {
   if (!workspace) throw new WorkspaceError("Çalışma klasörü bağlı değil")
-  const ws = normalize(normalizeNativeFsPath(workspace))
+  const ws = normalize(normalizeNativeFsPath(workspace, windows))
+  const wsComparable = comparable(ws, windows)
   if (isAbsolutePath(rel)) {
-    const norm = normalize(normalizeNativeFsPath(rel))
-    if (norm === ws || norm.startsWith(ws + "/")) return norm
+    const norm = normalize(normalizeNativeFsPath(rel, windows))
+    const normComparable = comparable(norm, windows)
+    if (normComparable === wsComparable || normComparable.startsWith(wsComparable + "/")) {
+      return norm
+    }
     throw new WorkspaceError(`Path workspace dışında: ${rel}`)
   }
   const joined = normalize(ws + "/" + rel)
-  if (joined !== ws && !joined.startsWith(ws + "/")) {
+  const joinedComparable = comparable(joined, windows)
+  if (joinedComparable !== wsComparable && !joinedComparable.startsWith(wsComparable + "/")) {
     throw new WorkspaceError(`Path workspace dışına çıkıyor: ${rel}`)
   }
   return joined
