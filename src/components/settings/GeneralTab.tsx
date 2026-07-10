@@ -145,6 +145,8 @@ export function GeneralTab() {
           description={t("settings.drawer.spendCapDesc")}
         >
           <NumberField
+            label={t("settings.drawer.spendCapLabel")}
+            name="session-spend-cap"
             value={settings.sessionSpendCapUsd ?? 0}
             min={0}
             max={10000}
@@ -170,6 +172,8 @@ export function GeneralTab() {
           <>
             <Row label={t("settings.drawer.triggerPctLabel")}>
               <NumberField
+                label={t("settings.drawer.triggerPctLabel")}
+                name="auto-compact-trigger"
                 value={settings.autoCompact.triggerPct}
                 min={20}
                 max={95}
@@ -181,6 +185,8 @@ export function GeneralTab() {
             </Row>
             <Row label={t("settings.drawer.targetPctLabel")}>
               <NumberField
+                label={t("settings.drawer.targetPctLabel")}
+                name="auto-compact-target"
                 value={settings.autoCompact.targetPct}
                 min={10}
                 max={80}
@@ -192,6 +198,8 @@ export function GeneralTab() {
             </Row>
             <Row label={t("settings.drawer.keepLastLabel")}>
               <NumberField
+                label={t("settings.drawer.keepLastLabel")}
+                name="auto-compact-keep-last"
                 value={settings.autoCompact.keepLast}
                 min={2}
                 max={50}

@@ -2111,7 +2111,7 @@ export default function App() {
         />
       </div>
 
-      <div className={cn("relative", !editorSplit && activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-6")}>
+      <div className={cn("relative", !editorSplit && activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
         {error && (
           <div className="absolute inset-x-0 bottom-full z-20">
             <div className="mx-auto w-full max-w-[1024px] px-8">

@@ -46,7 +46,7 @@ const PROSE = cn(
   "prose-td:px-3 prose-td:py-2 prose-td:border-b prose-td:border-codezal/40 prose-td:align-top",
   "[&_tbody_tr:last-child_td]:border-b-0",
   "prose-code:before:hidden prose-code:after:hidden",
-  "prose-code:bg-transparent prose-code:p-0 prose-code:font-sans prose-code:font-normal prose-code:text-inherit",
+  "prose-code:rounded prose-code:bg-codezal-panel-2 prose-code:px-1 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.92em] prose-code:font-normal prose-code:text-codezal-text",
   // <pre> CodeBlock'a delege — kendi stili var
   "prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-3",
   // Blockquote

@@ -403,7 +403,7 @@ export function MessageList({
     >
       <div
         ref={contentRef}
-        className={cn("mx-auto w-full max-w-[1024px] pt-5", inCard ? "px-4" : "px-8")}
+        className={cn("mx-auto w-full max-w-[920px] pt-5", inCard ? "px-4" : "px-8")}
         onMouseUp={onContentMouseUp}
         onMouseDown={() => setAskSel(null)}
         onContextMenu={onContentContextMenu}
@@ -986,7 +986,7 @@ function TurnEditSummary({
   const hidden = !showAll && files.length > TURN_COLLAPSE_AT ? files.length - TURN_COLLAPSE_AT : 0
   const shown = hidden > 0 ? files.slice(0, TURN_COLLAPSE_AT) : files
   return (
-    <div className="mt-2 overflow-hidden rounded-xl border border-codezal-panel bg-codezal-panel text-md">
+    <div className="mt-3 overflow-hidden rounded-xl border border-codezal-panel bg-codezal-panel text-md shadow-sm">
       <div className="flex items-center gap-2 px-3 py-2">
         <FileText className="h-4 w-4 shrink-0 text-codezal-mute" />
         <span className="font-medium text-codezal-text">
@@ -1044,7 +1044,7 @@ function TurnEditRow({ file, onReview }: { file: TurnEditFile; onReview?: (path:
       disabled={!onReview}
       className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-codezal-chip disabled:cursor-default disabled:hover:bg-transparent"
     >
-      <span className="min-w-0 flex-1 truncate text-md text-codezal-text" title={file.path}>
+      <span className="min-w-0 flex-1 truncate font-mono text-sm text-codezal-text" title={file.path}>
         {file.path}
       </span>
       <span className="flex shrink-0 items-center gap-1.5 font-mono text-sm">
@@ -1369,11 +1369,11 @@ function ToolGroup({
   }
 
   return (
-    <div className="text-md">
+    <div className="my-1 border-l-2 border-codezal-hair pl-2 text-md">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-center gap-2 rounded-lg py-0.5 pr-2 text-left hover:bg-codezal-chip/40"
+        className="group flex w-full items-center gap-2 rounded-r-lg px-2 py-1 text-left hover:bg-codezal-chip/40"
       >
         {isContext ? (
           <span className="flex min-w-0 items-baseline gap-1.5 truncate">
@@ -1515,7 +1515,7 @@ function ToolRow({
   // Collapsed = quiet row (chip hover); open = detail indented below — no box,
   // border or panel, so expanding never snaps into a table.
   return (
-    <div className="text-md">
+    <div className={cn("text-md", !grouped && "my-1 border-l-2 border-codezal-hair pl-2")}>
       <button
         type="button"
         onClick={() => {
@@ -1523,7 +1523,7 @@ function ToolRow({
           else if (isWorkflow) window.dispatchEvent(new CustomEvent("codezal:open-workflows"))
           else if (!noExpand) setOpen((v) => !v)
         }}
-        className="group flex w-full items-center gap-2 rounded-lg py-1.5 text-left hover:bg-codezal-chip/40"
+        className="group flex w-full items-center gap-2 rounded-r-lg px-2 py-1.5 text-left hover:bg-codezal-chip/40"
       >
         {createElement(toolIcon(call.toolName), { className: cn("h-3.5 w-3.5 shrink-0", labelColor) })}
         <span className={cn("shrink-0", labelColor)}>{displayLabel}</span>

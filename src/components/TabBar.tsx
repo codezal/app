@@ -464,6 +464,7 @@ export function TabBar({
           type="button"
           onClick={onToggleSplit}
           title={t("tabBar.splitView")}
+          aria-label={t("tabBar.splitView")}
           className={cn(
             "relative z-10 flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-sm",
             splitActive
@@ -480,6 +481,7 @@ export function TabBar({
           type="button"
           onClick={onToggleSideChat}
           title={t("sideChat.toggle")}
+          aria-label={t("sideChat.toggle")}
           className={cn(
             "relative z-10 flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-sm",
             sideChatActive
@@ -560,6 +562,7 @@ function PanelMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         title={mode ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) }) : t("tabBar.rightPanelOpen")}
+        aria-label={mode ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) }) : t("tabBar.rightPanelOpen")}
         className={cn(
           "flex h-7 items-center gap-1 rounded-md border px-1.5 text-sm",
           mode

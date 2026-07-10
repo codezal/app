@@ -996,7 +996,7 @@ export function Composer({
     <footer className={cn("relative z-10 pb-2", inCard ? "bg-codezal-sidebar" : "bg-codezal-bg")}>
       <div
         ref={slashWrapRef}
-        className={cn("cz-meta relative mx-auto w-full max-w-[1024px]", inCard ? "px-4" : "px-8")}
+        className={cn("cz-meta relative mx-auto w-full max-w-[920px]", inCard ? "px-4" : "px-8")}
       >
         <SlashMenu
           open={slashOpen}
@@ -1457,7 +1457,7 @@ export function Composer({
               "absolute bottom-2 right-2 z-10 flex h-[26px] w-[30px] items-center justify-center rounded-lg transition-colors",
               (!text.trim() && images.length === 0 && fileRefs.length === 0 && pdfs.length === 0) || disabled || compacting
                 ? "border border-codezal bg-codezal-panel-2 text-codezal-mute"
-                : "border border-codezal-strong bg-codezal-panel-2 text-codezal-text shadow-sm hover:bg-codezal-chip",
+                : "border border-transparent bg-codezal-accent text-accent-foreground shadow-sm hover:opacity-90",
             )}
           >
             <Send className="h-4 w-4" aria-hidden />
@@ -2292,6 +2292,7 @@ function ModelPicker({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        title={activeDisplay}
         onClick={() => (open ? closePopover() : setOpen(true))}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -2314,6 +2315,9 @@ function ModelPicker({
                 <Search className="h-4 w-4 shrink-0 text-codezal-mute" aria-hidden />
                 <input
                   autoFocus
+                  name="model-search"
+                  autoComplete="off"
+                  aria-label={t("composer.searchModel")}
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={t("composer.searchModel")}

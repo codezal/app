@@ -105,6 +105,8 @@ export function LocalServerTab() {
         </Row>
         <Row label={t("settings.localServer.portLabel")} description={t("settings.localServer.portDesc")}>
           <NumberField
+            label={t("settings.localServer.portLabel")}
+            name="local-server-port"
             value={cfg.port}
             min={1}
             max={65535}

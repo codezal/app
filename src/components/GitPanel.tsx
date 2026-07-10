@@ -329,6 +329,7 @@ export function GitPanel({ workspacePath, onClose }: Props) {
               onClick={() => setMenuOpen((v) => !v)}
               disabled={busy}
               title={t("common.more")}
+              aria-label={t("common.more")}
               className="rounded p-1 text-codezal-mute hover:text-codezal-text disabled:opacity-50"
             >
               <MoreVertical className="h-4 w-4" />
@@ -410,6 +411,7 @@ export function GitPanel({ workspacePath, onClose }: Props) {
           onClick={() => void refresh()}
           disabled={loading}
           title={t("gitPanel.refresh")}
+          aria-label={t("gitPanel.refresh")}
           className="rounded p-1 text-codezal-mute hover:text-codezal-text disabled:opacity-50"
         >
           <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -419,6 +421,7 @@ export function GitPanel({ workspacePath, onClose }: Props) {
             type="button"
             onClick={onClose}
             title={tStatic("contextPanel.panelClose")}
+            aria-label={tStatic("contextPanel.panelClose")}
             className="rounded p-1 text-codezal-mute hover:text-codezal-text"
           >
             <X className="h-4 w-4" />
@@ -467,7 +470,7 @@ export function GitPanel({ workspacePath, onClose }: Props) {
       </div>
 
       {error && (
-        <div className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-sm text-destructive">
+        <div role="alert" className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -476,7 +479,13 @@ export function GitPanel({ workspacePath, onClose }: Props) {
 
       {isWorktreeRepo && (hasChanges || amend) && (
         <div className="space-y-1.5">
+          <label htmlFor="git-commit-message" className="text-sm font-medium text-codezal-text">
+            {t("gitPanel.commitMessage")}
+          </label>
           <textarea
+            id="git-commit-message"
+            name="commit-message"
+            autoComplete="off"
             ref={commitRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -486,7 +495,7 @@ export function GitPanel({ workspacePath, onClose }: Props) {
                 void doCommit()
               }
             }}
-            placeholder={aiBusy ? t("gitPanel.aiGenerating") : t("gitPanel.commitMessage")}
+            placeholder={aiBusy ? t("gitPanel.aiGenerating") : `${t("gitPanel.commitMessage")}…`}
             rows={2}
             className="w-full resize-none overflow-hidden rounded-md border border-codezal bg-codezal-input px-2.5 py-2 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none"
           />
@@ -509,13 +518,16 @@ export function GitPanel({ workspacePath, onClose }: Props) {
               onClick={() => void onAiCommit()}
               disabled={aiBusy || committing}
               title={aiBusy ? t("gitPanel.aiGenerating") : t("gitPanel.aiCommit")}
-              className="flex shrink-0 items-center justify-center rounded-md border border-codezal px-3 py-1.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/55 disabled:opacity-40"
+              className="flex min-w-0 max-w-[42%] shrink-0 items-center justify-center gap-1.5 rounded-md border border-codezal px-2.5 py-1.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/55 disabled:opacity-40"
             >
               {aiBusy ? (
                 <RefreshCcw className="h-4 w-4 animate-spin" />
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
+              <span className="min-w-0 truncate">
+                {aiBusy ? t("gitPanel.aiGenerating") : t("gitPanel.aiCommit")}
+              </span>
             </button>
             <button
               type="button"
@@ -916,17 +928,29 @@ function FileRow({
   const base = slash >= 0 ? entry.path.slice(slash + 1) : entry.path
   const dir = slash >= 0 ? entry.path.slice(0, slash) : ""
   const letter = l.kind === "untracked" ? "U" : l.code.trim() || "•"
+  const statusTitle =
+    l.kind === "add"
+      ? tStatic("gitPanel.fileAdded")
+      : l.kind === "del"
+        ? tStatic("gitPanel.fileDeleted")
+        : l.kind === "ren"
+          ? tStatic("gitPanel.fileRenamed")
+          : l.kind === "untracked"
+            ? tStatic("gitPanel.untrackedFiles")
+            : l.kind === "conflict"
+              ? l.code.trim()
+              : tStatic("gitPanel.fileModified")
   return (
     <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-codezal-panel-2">
       <button
         type="button"
         onClick={onClick}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        className="flex min-w-0 flex-1 flex-col items-start gap-0 text-left"
         title={entry.path}
       >
-        <span className="min-w-0 truncate text-codezal-text">{base}</span>
+        <span className="w-full truncate text-codezal-text">{base}</span>
         {dir && (
-          <span className="ml-auto max-w-[55%] shrink-0 truncate pl-2 text-sm text-codezal-mute">
+          <span className="w-full truncate font-mono text-[11px] leading-4 text-codezal-mute">
             {dir}
           </span>
         )}
@@ -948,7 +972,11 @@ function FileRow({
           </IconAction>
         )}
       </div>
-      <span className={cn("w-4 shrink-0 text-center font-mono text-sm font-semibold", color)}>
+      <span
+        className={cn("w-4 shrink-0 text-center font-mono text-sm font-semibold", color)}
+        title={statusTitle}
+        aria-label={statusTitle}
+      >
         {letter}
       </span>
     </div>

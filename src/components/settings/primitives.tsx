@@ -16,7 +16,7 @@ export function Section({
       {description && (
         <p className="mt-1 text-md leading-relaxed text-codezal-mute">{description}</p>
       )}
-      <div className="mt-3 rounded-lg border border-codezal bg-codezal-panel px-4 py-2 shadow-sm">
+      <div className="mt-3 rounded-xl border border-codezal-hair bg-codezal-panel/70 px-5 py-1">
         {children}
       </div>
     </section>
@@ -67,10 +67,10 @@ export function Row({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-codezal-hair py-3 last:border-b-0">
+    <div className="flex items-start justify-between gap-6 border-b border-codezal-hair py-3.5 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="text-md font-medium text-codezal-text">{label}</div>
-        {description && <div className="mt-0.5 text-md leading-relaxed text-codezal-mute">{description}</div>}
+        {description && <div className="mt-1 max-w-2xl text-md leading-6 text-codezal-mute">{description}</div>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -98,7 +98,7 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors hover:ring-2 hover:ring-codezal-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/45",
         checked
           ? "bg-codezal-accent"
           : "border border-zinc-300 bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-700",
@@ -119,24 +119,31 @@ export function NumberField({
   min,
   max,
   fallback,
+  label,
+  name,
   onChange,
 }: {
   value: number
   min: number
   max: number
   fallback: number
+  label: string
+  name: string
   onChange: (v: number) => void
 }) {
   return (
     <input
       type="number"
+      name={name}
+      aria-label={label}
+      autoComplete="off"
       min={min}
       max={max}
       value={value}
       onChange={(e) =>
         onChange(Math.max(min, Math.min(max, Number(e.target.value) || fallback)))
       }
-      className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-md tabular-nums text-codezal-text outline-none focus:border-codezal-strong"
+      className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-md tabular-nums text-codezal-text outline-none [appearance:textfield] focus:border-codezal-strong focus-visible:ring-2 focus-visible:ring-codezal-accent/40 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
     />
   )
 }

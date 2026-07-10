@@ -146,8 +146,9 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
       aria-label={t("a11y.contextLandmark")}
       style={{ width }}
       className={cn(
-        "relative z-20 m-4 flex shrink-0 flex-col overflow-hidden rounded-2xl border border-codezal-panel bg-codezal-bg",
-        isFlush ? "self-stretch" : "self-start max-h-[calc(100%-2rem)]",
+        "relative z-20 m-4 flex max-h-[calc(100%-2rem)] shrink-0 self-stretch flex-col overflow-hidden rounded-2xl border border-codezal-panel bg-codezal-bg",
+        "max-[1350px]:fixed max-[1350px]:bottom-4 max-[1350px]:right-4 max-[1350px]:top-[60px] max-[1350px]:m-0 max-[1350px]:max-h-none max-[1350px]:max-w-[calc(100vw-2rem)] max-[1350px]:shadow-2xl",
+        isFlush && "self-stretch",
       )}
     >
       <div
@@ -194,6 +195,7 @@ function PanelHeader({ mode, onClose }: { mode: PanelMode; onClose: () => void }
         type="button"
         onClick={onClose}
         title={tStaticCtx("contextPanel.panelClose")}
+        aria-label={tStaticCtx("contextPanel.panelClose")}
         className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
       >
         <X className="h-4 w-4" />
@@ -265,9 +267,26 @@ function FilesSection({ workspacePath }: { workspacePath?: string }) {
         <EmptyState icon={FolderOpen} title={t("contextPanel.notConnectedTreeMsg")} />
       ) : (
         <>
+          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-lg bg-codezal-sidebar px-2.5 py-2">
+            <FolderOpen className="h-4 w-4 shrink-0 text-codezal-accent" aria-hidden />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-codezal-text">
+                {t("contextPanel.workspaceFolder")}
+              </div>
+              <div className="truncate font-mono text-[11px] text-codezal-mute" title={workspacePath}>
+                {workspacePath}
+              </div>
+            </div>
+          </div>
           <div className="relative mb-2 shrink-0">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-codezal-mute" />
+            <label htmlFor="context-files-filter" className="sr-only">
+              {t("contextPanel.filterFiles")}
+            </label>
             <input
+              id="context-files-filter"
+              name="context-files-filter"
+              autoComplete="off"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -278,13 +297,14 @@ function FilesSection({ workspacePath }: { workspacePath?: string }) {
               }}
               placeholder={t("contextPanel.filterFiles")}
               spellCheck={false}
-              className="w-full rounded-md border border-codezal bg-codezal-input py-1 pl-7 pr-7 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none"
+              className="w-full rounded-md border border-codezal bg-codezal-input py-1.5 pl-7 pr-7 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 title={tStaticCtx("common.cancel")}
+                aria-label={tStaticCtx("common.cancel")}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-codezal-mute hover:text-codezal-text"
               >
                 <X className="h-3.5 w-3.5" />
@@ -710,9 +730,14 @@ function TreeLevel({
     return <div className="px-2 py-1 text-sm text-codezal-mute">{tStaticCtx("contextPanel.treeEmpty")}</div>
   }
 
+  const orderedEntries = [
+    ...entries.filter((entry) => !entry.name.startsWith(".")),
+    ...entries.filter((entry) => entry.name.startsWith(".")),
+  ]
+
   return (
     <ul className="flex flex-col">
-      {entries.map((e) => (
+      {orderedEntries.map((e) => (
         <TreeNode key={e.path} entry={e} depth={depth} />
       ))}
     </ul>
@@ -746,7 +771,7 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
           onContextMenu={(e) => menuCtx?.open(e, { path: entry.path, name: entry.name, isDir: false })}
           style={pad}
           className={cn(
-            "flex w-full items-center gap-1 truncate rounded-md px-2 py-[3px] text-left transition-colors",
+            "group flex w-full items-center gap-1 truncate rounded-md px-2 py-[3px] text-left transition-colors focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
             isActive
               ? "bg-codezal-accent/15 text-codezal-text"
               : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
@@ -754,7 +779,9 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
           )}
         >
           <span className="h-2.5 w-2.5 shrink-0" aria-hidden />
-          <FileTypeIcon name={entry.name} />
+          <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100" aria-hidden>
+            <FileTypeIcon name={entry.name} />
+          </span>
           <span className="truncate">{entry.name}</span>
         </button>
       </li>
@@ -773,7 +800,7 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
         onContextMenu={(e) => menuCtx?.open(e, { path: entry.path, name: entry.name, isDir: true })}
         style={pad}
         className={cn(
-          "flex w-full items-center gap-1 truncate rounded-md px-2 py-[3px] text-left text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
+          "group flex w-full items-center gap-1 truncate rounded-md px-2 py-[3px] text-left text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
           isCtxActive && "ring-1 ring-inset ring-codezal-accent/60",
         )}
       >
@@ -783,7 +810,9 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
             open && "rotate-90",
           )}
         />
-        <FolderTypeIcon name={entry.name} open={open} />
+        <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100" aria-hidden>
+          <FolderTypeIcon name={entry.name} open={open} />
+        </span>
         <span className="truncate">{entry.name}</span>
       </button>
       {open && <TreeLevel path={entry.path} depth={depth + 1} />}

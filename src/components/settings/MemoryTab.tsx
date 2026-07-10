@@ -88,6 +88,8 @@ export function MemoryTab() {
         </Row>
         <Row label={t("settings.memoryStore.budgetLabel")} description={t("settings.memoryStore.budgetDesc")}>
           <NumberField
+            label={t("settings.memoryStore.budgetLabel")}
+            name="memory-token-budget"
             value={settings.memory?.memoryStoreBudgetTokens ?? 800}
             min={100}
             max={4000}

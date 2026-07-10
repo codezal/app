@@ -81,6 +81,7 @@ export type SettingsTab = Tab
 export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Props) {
   const t = useT()
   const [tab, setTab] = useState<Tab>(initialTab ?? "genel")
+  const [navQuery, setNavQuery] = useState("")
   const trafficLightInset = reserveTrafficLights && isMacOS()
 
   useEffect(() => {
@@ -100,29 +101,33 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
   const historyLabel = historyLabelRaw === "settings.tabs.history" ? "History" : historyLabelRaw
   const cliAgentsLabelRaw = t("settings.tabs.cliAgents")
   const cliAgentsLabel = cliAgentsLabelRaw === "settings.tabs.cliAgents" ? "CLI Agents" : cliAgentsLabelRaw
-  const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: "genel", label: t("settings.tabs.general"), icon: Cog },
-    { id: "istatistik", label: t("settings.tabs.stats"), icon: BarChart3 },
-    { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette },
-    { id: "modeller", label: t("settings.nav.providers"), icon: KeyRound },
-    { id: "ajanlar", label: cliAgentsLabel, icon: Bot },
-    { id: "yerel", label: localModelsLabel, icon: Cpu },
-    { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck },
-    { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug },
-    { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook },
-    { id: "web", label: t("settings.web.title"), icon: Globe },
-    { id: "gorsel", label: t("settings.tabs.imageGen"), icon: ImageIcon },
-    { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles },
-    { id: "gecmis", label: historyLabel, icon: Search },
-    { id: "tokens", label: tokensLabel, icon: Coins },
-    { id: "skills", label: t("settings.tabs.skills"), icon: ScrollText },
-    { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle },
-    { id: "hafiza", label: t("settings.memory.title"), icon: Brain },
-    { id: "gizlilik", label: t("settings.privacy.tab"), icon: Shield },
-    { id: "hakkinda", label: t("settings.tabs.about"), icon: Info },
+  const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }>; section: number }[] = [
+    { id: "genel", label: t("settings.tabs.general"), icon: Cog, section: 0 },
+    { id: "istatistik", label: t("settings.tabs.stats"), icon: BarChart3, section: 0 },
+    { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette, section: 0 },
+    { id: "modeller", label: t("settings.nav.providers"), icon: KeyRound, section: 1 },
+    { id: "ajanlar", label: cliAgentsLabel, icon: Bot, section: 1 },
+    { id: "yerel", label: localModelsLabel, icon: Cpu, section: 1 },
+    { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck, section: 1 },
+    { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug, section: 2 },
+    { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook, section: 2 },
+    { id: "web", label: t("settings.web.title"), icon: Globe, section: 2 },
+    { id: "gorsel", label: t("settings.tabs.imageGen"), icon: ImageIcon, section: 2 },
+    { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles, section: 2 },
+    { id: "gecmis", label: historyLabel, icon: Search, section: 3 },
+    { id: "tokens", label: tokensLabel, icon: Coins, section: 3 },
+    { id: "skills", label: t("settings.tabs.skills"), icon: ScrollText, section: 3 },
+    { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle, section: 3 },
+    { id: "hafiza", label: t("settings.memory.title"), icon: Brain, section: 3 },
+    { id: "gizlilik", label: t("settings.privacy.tab"), icon: Shield, section: 3 },
+    { id: "hakkinda", label: t("settings.tabs.about"), icon: Info, section: 3 },
   ]
 
   const activeLabel = tabs.find((tt) => tt.id === tab)?.label ?? ""
+  const normalizedNavQuery = navQuery.trim().toLocaleLowerCase()
+  const visibleTabs = normalizedNavQuery
+    ? tabs.filter((item) => item.label.toLocaleLowerCase().includes(normalizedNavQuery))
+    : tabs
 
   return (
     <div
@@ -146,35 +151,60 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
           <ArrowLeft className="h-4 w-4" />
           <span>{t("settings.drawer.backBtn")}</span>
         </button>
-        {tabs.map((tt) => {
+        <div className="relative mb-2">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-codezal-mute" aria-hidden />
+          <label htmlFor="settings-nav-search" className="sr-only">
+            {t("common.search")}
+          </label>
+          <input
+            id="settings-nav-search"
+            name="settings-search"
+            autoComplete="off"
+            value={navQuery}
+            onChange={(event) => setNavQuery(event.target.value)}
+            placeholder={`${t("common.search")}…`}
+            className="w-full rounded-md border border-codezal bg-codezal-input py-1.5 pl-8 pr-2 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+          />
+        </div>
+        {visibleTabs.map((tt, index) => {
           const Icon = tt.icon
+          const startsSection = index > 0 && visibleTabs[index - 1].section !== tt.section
+          const active = tab === tt.id
           return (
-            <button
-              key={tt.id}
-              type="button"
-              onClick={() => setTab(tt.id)}
-              className={cn(
-                "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-md",
-                tab === tt.id
-                  ? "bg-codezal-chip font-medium text-codezal-text"
-                  : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {tt.label}
-            </button>
+            <div key={tt.id} className={cn(startsSection && "mt-2 border-t border-codezal-hair pt-2")}>
+              <button
+                type="button"
+                onClick={() => setTab(tt.id)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "mb-0.5 flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-1.5 text-left text-md transition-colors",
+                  active
+                    ? "border-codezal-hair bg-codezal-panel font-medium text-codezal-text shadow-sm"
+                    : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
+                )}
+              >
+                <Icon className={cn("h-4 w-4", active && "text-codezal-accent")} />
+                {tt.label}
+              </button>
+            </div>
           )
         })}
+        {visibleTabs.length === 0 && (
+          <div className="px-2.5 py-3 text-sm text-codezal-mute">{t("common.noResults")}</div>
+        )}
       </nav>
 
       {/* Right content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center gap-3 border-b border-codezal-hair bg-codezal-bg px-6 py-4">
-          <h2 className="text-md font-semibold tracking-tight text-codezal-text">{t("settings.drawer.headerPrefix", { tab: activeLabel })}</h2>
+        <header className="shrink-0 border-b border-codezal-hair bg-codezal-bg px-8 py-4">
+          <div className="text-sm font-semibold uppercase tracking-[0.12em] text-codezal-mute">
+            {t("settings.title")}
+          </div>
+          <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-codezal-text">{activeLabel}</h1>
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-6 py-6">
+          <div className="mx-auto max-w-4xl px-8 py-8">
             {tab === "genel" && <GeneralTab />}
             {tab === "istatistik" && <StatsTab />}
             {tab === "hafiza" && <MemoryTab />}
