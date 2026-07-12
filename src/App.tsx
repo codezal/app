@@ -17,6 +17,7 @@ import { OutputViewer } from "@/components/OutputViewer"
 import { PRConversationViewer } from "@/components/PRConversationViewer"
 import { isDiffUri } from "@/lib/diff-uri"
 import { isTurnDiffUri, makeTurnDiffUri } from "@/lib/turn-diff-uri"
+import { aggregateTurnEdits } from "@/lib/turn-edits"
 import { isOutputUri } from "@/lib/output-doc"
 import { isPrUri } from "@/lib/pr-uri"
 import { renderTemplate } from "@/lib/commands"
@@ -113,6 +114,7 @@ import { inlinesThinkTags } from "@/lib/providers/provider-quirks"
 import { createThinkSplitter, type ThinkSplitter } from "@/lib/stream/think-split"
 import { toast, useToastStore } from "@/store/toast"
 import { useSessionsStore } from "@/store/sessions"
+import { useWriteDiffs } from "@/store/write-diffs"
 import { useSddStore } from "@/store/sdd"
 import { usePreviewStore } from "@/store/preview"
 import { convertFileSrc, invoke } from "@tauri-apps/api/core"
@@ -2176,7 +2178,26 @@ export default function App() {
   const tabBarEl = (
     <TabBar
       panelMode={panelMode}
-      onSetPanelMode={setPanelMode}
+      onSetPanelMode={(nextMode) => {
+        const filesRequested = nextMode === "files" || (nextMode === null && panelMode === "files")
+        if (!filesRequested) {
+          setPanelMode(nextMode)
+          return
+        }
+
+        const messages = useSessionsStore.getState().active?.messages ?? []
+        const writeOld = useWriteDiffs.getState().byCallId
+        const latestEditedMessage = [...messages]
+          .reverse()
+          .find((message) => aggregateTurnEdits(message.parts, writeOld).files.length > 0)
+
+        if (latestEditedMessage) {
+          setPanelMode(null)
+          openFile(makeTurnDiffUri(latestEditedMessage.id), { preview: true })
+        } else {
+          setPanelMode("git")
+        }
+      }}
       todoAvailable={todoAvailable}
       sddAvailable={sddAvailable}
       sidebarHidden={sidebarCollapsed}

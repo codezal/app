@@ -13,6 +13,7 @@ import { File, Undo2, X } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { splitHunks } from "@/lib/hunk-revert"
 import type { DiffLine } from "@/lib/diff"
+import { TurnReviewActions } from "./TurnReviewActions"
 
 export function TurnDiffViewer({ uri }: { uri: string }) {
   const t = useT()
@@ -22,6 +23,8 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
   const message = useSessionsStore((s) =>
     messageId ? (s.active?.messages.find((m) => m.id === messageId) ?? null) : null,
   )
+  const workspacePath = useSessionsStore((s) => s.active?.workspacePath)
+  const sessionTitle = useSessionsStore((s) => s.active?.title ?? "")
   const writeOld = useWriteDiffs((s) => s.byCallId)
   const closeFile = useSessionsStore((s) => s.closeFile)
   const revertToBeforeMessage = useSessionsStore((s) => s.revertToBeforeMessage)
@@ -75,6 +78,7 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
           {shownRemoved > 0 && <span className="text-codezal-diff-del">-{shownRemoved}</span>}
         </span>
         <div className="flex-1" />
+        <TurnReviewActions workspacePath={workspacePath} suggestedTitle={sessionTitle} />
         {canRevert && (
           <button
             type="button"
