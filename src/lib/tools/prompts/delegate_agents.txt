@@ -1,0 +1,1 @@
+Delegate one or more independent subtasks to enabled Agent Supervisor pool entries. Choose each poolEntryId from the available Agent Pool in the system prompt. Use explicit user assignments exactly; otherwise select the best role and engine for each task. Dispatch independent tasks together, then synthesize every result yourself. Child agents cannot delegate further.

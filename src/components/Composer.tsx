@@ -4,6 +4,7 @@ import { useMenu } from "@/lib/useMenu"
 import {
   AlertCircle,
   Brain,
+  Music,
   Check,
   ChevronDown,
   ChevronRight,
@@ -15,7 +16,6 @@ import {
   ClockClockwise,
   HandIcon,
   MessageSquare,
-  Music,
   Paperclip,
   Pause,
   Pencil,
@@ -209,7 +209,6 @@ export function Composer({
   placeholder,
   sessionId,
   onSlashAction,
-  onOpenOrchestra,
   onRemember,
   queued,
   onQueue,
@@ -264,6 +263,7 @@ export function Composer({
   const sess = (s: ReturnType<typeof useSessionsStore.getState>) =>
     sessionId ? s.sessions[sessionId] : s.active
   const mode = useSessionsStore((s) => sess(s)?.mode ?? "build")
+  const delegationMode = useSessionsStore((s) => sess(s)?.delegationMode ?? "inherit")
   const goal = useSessionsStore((s) => sess(s)?.goal)
   const activeId = useSessionsStore((s) => s.activeId)
   const goalSid = sessionId ?? activeId
@@ -1348,7 +1348,6 @@ export function Composer({
             onPickFolder={() => void pickFolderAttachment()}
             agentMode={mode}
             onAgentModeChange={applyMode}
-            onOpenOrchestra={onOpenOrchestra}
             onOpenGoal={() => setGoalModal({ open: true, mode: goal ? "edit" : "new" })}
           />
 
@@ -1487,6 +1486,19 @@ export function Composer({
           mode={approvalMode}
           onChange={(m) => void updateSettings({ approvalMode: m })}
         />
+        {settings.supervisor.enabled && (
+          <button
+            type="button"
+            onClick={() =>
+              applyMeta({ delegationMode: delegationMode === "solo" ? "adaptive" : "solo" })
+            }
+            className="rounded-md border border-codezal px-2 py-1 text-sm text-codezal-dim hover:bg-codezal-panel-2"
+          >
+            {delegationMode === "solo"
+              ? t("settings.cliAgents.delegationSolo")
+              : t("settings.cliAgents.delegationAdaptive")}
+          </button>
+        )}
         {(mode === "plan" || mode === "orchestra") && (
           <ModePill agentMode={mode} onExit={() => applyMode("build")} />
         )}
@@ -1831,20 +1843,17 @@ function AttachMenu({
   onPickFolder,
   agentMode,
   onAgentModeChange,
-  onOpenOrchestra,
   onOpenGoal,
 }: {
   onPickFile: () => void
   onPickFolder: () => void
   agentMode: "build" | "plan" | "orchestra"
   onAgentModeChange: (m: "build" | "plan" | "orchestra") => void
-  onOpenOrchestra?: () => void
   onOpenGoal: () => void
 }) {
   const t = useT()
   const { open, setOpen, wrapRef, triggerProps, menuProps } = useMenu()
   const planActive = agentMode === "plan"
-  const orchestraActive = agentMode === "orchestra"
 
   return (
     <div ref={wrapRef} className="relative">
@@ -1904,29 +1913,6 @@ function AttachMenu({
             <Brain className={cn("h-4 w-4 shrink-0", planActive && "text-codezal-accent")} />
             <span className="flex-1">{t("composer.planMode")}</span>
             {planActive && <Check className="h-4 w-4 shrink-0 text-codezal-accent" />}
-          </button>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={orchestraActive}
-            onClick={() => {
-              setOpen(false)
-              if (orchestraActive) onAgentModeChange("build")
-              else onOpenOrchestra?.()
-            }}
-            title={t("composer.orchestraMenuHint")}
-            className={cn(
-              "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm",
-              orchestraActive
-                ? "bg-codezal-panel-2/60 text-codezal-accent"
-                : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
-            )}
-          >
-            <Music className={cn("h-4 w-4 shrink-0", orchestraActive && "text-codezal-accent")} />
-            <span className="flex-1">
-              {orchestraActive ? t("composer.orchestraModeClose") : t("composer.modeOrchestra")}
-            </span>
-            {orchestraActive && <Check className="h-4 w-4 shrink-0 text-codezal-accent" />}
           </button>
           <button
             type="button"

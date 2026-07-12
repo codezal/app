@@ -51,6 +51,7 @@ export const startAcpWorker: RunnerStart = async ({
   configWorkspace,
   emit,
   signal,
+  ownerSessionId,
 }) => {
   const startedAt = Date.now()
 
@@ -142,7 +143,13 @@ export const startAcpWorker: RunnerStart = async ({
             emit({ type: "waiting-approval", toolName })
             const decision = await useApprovalsStore
               .getState()
-              .request(toolName, p?.toolCall?.rawInput ?? {}, { workerId, workerLabel })
+              .request(toolName, p?.toolCall?.rawInput ?? {}, {
+                workerId,
+                workerLabel,
+                sessionId: ownerSessionId,
+                runId: workerId,
+                agentId: config.presetAgent ?? config.kind,
+              })
             const optionId = pickPermissionOption(p?.options ?? [], decision)
             if (optionId) return { outcome: { outcome: "selected", optionId } }
             return { outcome: { outcome: "cancelled" } }

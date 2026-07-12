@@ -13,6 +13,7 @@ import { DEFAULT_MEMORY } from "@/lib/memory-settings"
 import { DEFAULT_PRIVACY } from "@/lib/privacy"
 import { DEFAULT_INFERENCE_SERVER } from "@/lib/inference-server"
 import { defaultAgentProvidersSettings } from "@/lib/agent-providers"
+import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
 import { CURRENT_SCHEMA_VERSION } from "./migrate"
 import type { Settings } from "@/store/types"
 
@@ -67,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   credentials: {},
   providerConfigs: {},
   agentProviders: defaultAgentProvidersSettings(),
+  supervisor: DEFAULT_SUPERVISOR_SETTINGS,
   customProviders: [],
   envFallback: true,
   modelStatus: {},

@@ -87,4 +87,20 @@ describe("request — YOLO bypass + kritik escalation", () => {
     expect(useApprovalsStore.getState().queue.length).toBe(1)
     expect(resolved).toBe("PENDING")
   })
+
+  it("background agent approval keeps run, agent, and session ownership", () => {
+    void useApprovalsStore.getState().request("bash", bash("git status"), {
+      workerId: "permission-1",
+      workerLabel: "Reviewer",
+      runId: "run-1",
+      agentId: "reviewer",
+      sessionId: "session-2",
+    })
+    expect(useApprovalsStore.getState().queue[0]).toMatchObject({
+      workerLabel: "Reviewer",
+      runId: "run-1",
+      agentId: "reviewer",
+      sessionId: "session-2",
+    })
+  })
 })

@@ -377,6 +377,7 @@ export function makeRunStream(deps: RunStreamDeps) {
               peers: listPeers(useSessionsStore.getState().index, sid),
               ownHandle: cur.handle,
               recentText,
+              delegationMode: cur.delegationMode,
             })
       // Model capabilities (reasoning support, output limit) from the catalog.
       const catalogData = settings.providerCatalog?.data as ProvidersCatalog | undefined

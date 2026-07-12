@@ -19,6 +19,8 @@ export type ApprovalRequest = {
   tool: string
   input: unknown
   sessionId?: string
+  runId?: string
+  agentId?: string
   workerLabel?: string
   // Pre-write security scan findings (write_file/edit_file). Present when the
   // scan surfaced leaked credentials or risky patterns in the proposed content;
@@ -35,7 +37,13 @@ type ApprovalsState = {
   request: (
     tool: string,
     input: unknown,
-    opts?: { workerId?: string; workerLabel?: string; sessionId?: string },
+    opts?: {
+      workerId?: string
+      workerLabel?: string
+      sessionId?: string
+      runId?: string
+      agentId?: string
+    },
   ) => Promise<ApprovalDecision>
   decide: (id: string, reply: ApprovalReply) => void
   addBypassWorker: (workerId: string) => void
@@ -110,6 +118,8 @@ export const useApprovalsStore = create<ApprovalsState>((set, get) => ({
             tool,
             input,
             sessionId: opts?.sessionId,
+            runId: opts?.runId,
+            agentId: opts?.agentId,
             workerLabel: opts?.workerLabel,
             findings: findings.length ? findings : undefined,
             resolve,

@@ -53,6 +53,7 @@ const NATIVE_MCP_TOOL_NAMES = new Set([
   "load_skill",
   "remember",
   "save_method",
+  "delegate_agents",
 ])
 
 function fallbackSchema(): JSONSchema7 {

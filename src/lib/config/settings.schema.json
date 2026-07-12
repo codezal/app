@@ -747,6 +747,179 @@
         "additionalProperties": {}
       }
     },
+    "supervisor": {
+      "default": {
+        "enabled": false,
+        "routing": "hybrid",
+        "autoDelegate": true,
+        "maxParallelRuns": 3,
+        "maxChildRunsPerTurn": 5,
+        "maxDepth": 1,
+        "maxWallClockMs": 1800000,
+        "isolation": "auto",
+        "mergePolicy": "safe-auto",
+        "pool": []
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "routing": {
+          "default": "hybrid",
+          "type": "string",
+          "const": "hybrid"
+        },
+        "autoDelegate": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxParallelRuns": {
+          "default": 3,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "maxChildRunsPerTurn": {
+          "default": 5,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "maxDepth": {
+          "default": 1,
+          "type": "number",
+          "const": 1
+        },
+        "maxWallClockMs": {
+          "default": 1800000,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "isolation": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "none",
+            "worktree"
+          ]
+        },
+        "mergePolicy": {
+          "default": "safe-auto",
+          "type": "string",
+          "enum": [
+            "safe-auto",
+            "manual"
+          ]
+        },
+        "pool": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "agentName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "label": {
+                "type": "string"
+              },
+              "engine": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "sdk"
+                      },
+                      "providerId": {
+                        "type": "string"
+                      },
+                      "modelId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "providerId",
+                      "modelId"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "native-cli"
+                      },
+                      "providerId": {
+                        "type": "string",
+                        "enum": [
+                          "codex-cli",
+                          "claude-cli"
+                        ]
+                      },
+                      "modelId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "providerId",
+                      "modelId"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "acp"
+                      },
+                      "providerId": {
+                        "type": "string"
+                      },
+                      "modelId": {
+                        "type": "string"
+                      },
+                      "command": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "providerId"
+                    ],
+                    "additionalProperties": {}
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "agentName",
+              "enabled",
+              "engine"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      }
+    },
     "customProviders": {
       "default": [],
       "type": "array",

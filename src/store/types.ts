@@ -10,6 +10,7 @@ import type { PrivacySettings } from "@/lib/privacy"
 import type { InferenceServerSettings } from "@/lib/inference-server"
 import type { PermissionRule } from "@/lib/permission/types"
 import type { AgentProvidersSettings, NativeAgentHandle } from "@/lib/agent-providers/types"
+import type { SupervisorSettings } from "@/lib/agents/runtime"
 
 export type Role = "user" | "assistant" | "system" | "tool"
 
@@ -119,6 +120,7 @@ export type LocalLlmSettings = {
 }
 
 export type AgentMode = "build" | "plan" | "orchestra"
+export type DelegationMode = "inherit" | "solo" | "adaptive"
 
 export type SddStage = "requirement" | "design" | "prototype" | "plan" | "build" | "verify"
 
@@ -176,6 +178,7 @@ export type Session = {
   previewFile?: string | null
   usage?: SessionUsage
   mode?: AgentMode
+  delegationMode?: DelegationMode
   orchestra?: OrchestraConfig
   goal?: SessionGoal
   todos?: TodoItem[]
@@ -335,6 +338,7 @@ export type Settings = {
   // Native CLI agent providers (Codex/Claude). These are separate from API
   // providers because auth, session handles, and streaming come from the CLIs.
   agentProviders?: AgentProvidersSettings
+  supervisor: SupervisorSettings
   customProviders?: CustomProvider[]
   // Fallback to shell env vars when apiKeys is empty. When false, auth chain
   // skips the env step. UI surfaces an "Env" badge when an env var is present.

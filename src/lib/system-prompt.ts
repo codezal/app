@@ -23,6 +23,8 @@ import { useI18nStore, languageName } from "./i18n"
 import { useSettingsStore } from "@/store/settings"
 import { sddAssistantPreamble } from "./sdd-prompts"
 import type { SddStage } from "@/store/types"
+import type { SupervisorSettings } from "@/lib/agents/runtime"
+import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
 
 const BASE_SYSTEM = `You are Codezal — an interactive coding assistant running on the user's machine.
 When the user gives you a task, use the available tools to make real changes — don't just describe a solution in text. Answer simple questions directly.
@@ -129,6 +131,7 @@ export type SystemPromptInput = {
   peers?: Array<{ id: string; title: string; handle: string }>
   ownHandle?: string
   recentText?: string
+  delegationMode?: "inherit" | "solo" | "adaptive"
 }
 
 type MemoryPromptMode = "full" | "lean"
@@ -269,6 +272,22 @@ function buildOrchestraCatalog(cfg: OrchestraConfig): string {
   return lines.join("\n")
 }
 
+function buildSupervisorCatalog(supervisor: SupervisorSettings): string {
+  const entries = supervisor.pool.filter((entry) => entry.enabled)
+  if (!supervisor.enabled || entries.length === 0) return ""
+  const lines = [
+    "## AVAILABLE AGENT POOL",
+    "You may delegate independent subtasks with delegate_agents. Choose only pool entry ids listed here.",
+    "Explicit user assignments override automatic routing. Synthesize all child results yourself.",
+    "",
+  ]
+  for (const entry of entries) {
+    const model = entry.engine.modelId ? `/${entry.engine.modelId}` : ""
+    lines.push(`- **${entry.id}**: ${entry.agentName} · ${entry.engine.providerId}${model}`)
+  }
+  return lines.join("\n")
+}
+
 function buildPeerCatalog(
   peers: Array<{ title: string; handle: string }>,
   ownHandle?: string,
@@ -345,6 +364,7 @@ export async function buildSystemPrompt({
   peers,
   ownHandle,
   recentText,
+  delegationMode,
 }: SystemPromptInput): Promise<string> {
   const parts: string[] = [BASE_SYSTEM]
 
@@ -410,6 +430,14 @@ export async function buildSystemPrompt({
   if (mode === "orchestra" && orchestra) {
     parts.push("\n" + buildOrchestraCatalog(orchestra))
   }
+
+  const supervisorCatalog =
+    delegationMode === "solo"
+      ? ""
+      : buildSupervisorCatalog(
+          useSettingsStore.getState().settings.supervisor ?? DEFAULT_SUPERVISOR_SETTINGS,
+        )
+  if (mode !== "plan" && supervisorCatalog) parts.push("\n" + supervisorCatalog)
 
   if (peers && peers.length > 0) {
     parts.push("\n" + buildPeerCatalog(peers, ownHandle))

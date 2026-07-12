@@ -121,6 +121,62 @@ const CliAgentProviderSettingsSchema = z
   })
   .loose()
 
+const AgentEngineSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sdk"), providerId: z.string(), modelId: z.string() }).loose(),
+  z
+    .object({
+      kind: z.literal("native-cli"),
+      providerId: z.enum(["codex-cli", "claude-cli"]),
+      modelId: z.string(),
+    })
+    .loose(),
+  z
+    .object({
+      kind: z.literal("acp"),
+      providerId: z.string(),
+      modelId: z.string().optional(),
+      command: z.string().optional(),
+    })
+    .loose(),
+])
+
+function boundedInt(defaultValue: number, min: number, max: number) {
+  return z
+    .number()
+    .int()
+    .transform((value) => Math.max(min, Math.min(max, value)))
+    .catch(defaultValue)
+}
+
+function supervisorSchema(d: Settings["supervisor"]) {
+  return z
+    .object({
+      enabled: z.boolean().catch(d.enabled),
+      routing: z.literal("hybrid").catch(d.routing),
+      autoDelegate: z.boolean().catch(d.autoDelegate),
+      maxParallelRuns: boundedInt(d.maxParallelRuns, 1, 5),
+      maxChildRunsPerTurn: boundedInt(d.maxChildRunsPerTurn, 1, 5),
+      maxDepth: z.literal(1).catch(1),
+      maxWallClockMs: boundedInt(d.maxWallClockMs, 1_000, 30 * 60 * 1000),
+      isolation: z.enum(["auto", "none", "worktree"]).catch(d.isolation),
+      mergePolicy: z.enum(["safe-auto", "manual"]).catch(d.mergePolicy),
+      pool: z
+        .array(
+          z
+            .object({
+              id: z.string().min(1),
+              agentName: z.string().min(1),
+              enabled: z.boolean(),
+              label: z.string().optional(),
+              engine: AgentEngineSchema,
+            })
+            .loose(),
+        )
+        .catch(d.pool),
+    })
+    .catch(d)
+}
+
 const CustomProviderSchema = z
   .object({
     id: z.string().min(1),
@@ -255,6 +311,7 @@ export function makeSchema(d: Settings) {
         .record(z.string(), CliAgentProviderSettingsSchema)
         .optional()
         .catch(d.agentProviders ?? {}),
+      supervisor: supervisorSchema(d.supervisor),
       customProviders: z
         .array(CustomProviderSchema.catch({ id: "", name: "", baseURL: "", models: [] }))
         .optional()

@@ -159,6 +159,9 @@ export async function runNativeAgentStream(args: RunNativeAgentStreamArgs): Prom
           .request(event.request.name, event.request.input ?? {}, {
             workerId: event.request.id,
             workerLabel: event.request.title,
+            sessionId: sid,
+            runId: event.turnId,
+            agentId: provider,
           })
           .then((decision) => runtime.resolvePermission(event.request.id, decision))
           .catch(() => runtime.resolvePermission(event.request.id, "deny"))

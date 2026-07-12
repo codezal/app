@@ -19,6 +19,7 @@ import { rowTokens, type SessionUsageRow } from "@/lib/stats"
 import { useSettingsStore } from "@/store/settings"
 import { cn } from "@/lib/utils"
 import { Row, Section, Toggle } from "./primitives"
+import { SupervisorSettingsSection } from "./SupervisorSettingsSection"
 
 function envToText(env?: Record<string, string>): string {
   return Object.entries(env ?? {})
@@ -274,6 +275,7 @@ export function CliAgentsTab() {
 
   return (
     <div className="space-y-6">
+      <SupervisorSettingsSection />
       <Section title={t("settings.cliAgents.title")} description={t("settings.cliAgents.description")}>
         {orderedProviders.map((provider, index) => {
           const stored = agentProviderSettings(settings, provider.id)

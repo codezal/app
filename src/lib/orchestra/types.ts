@@ -26,6 +26,7 @@ export type OrchestraConfig = {
   parentModel: string
   workers: WorkerConfig[]
   logBufferLines?: number
+  maxParallel?: number
 }
 
 export type WorkerDispatchResult = {
@@ -110,4 +111,5 @@ export type RunnerStart = (input: {
   configWorkspace?: string
   emit: (event: WorkerEvent) => void
   signal: AbortSignal
+  ownerSessionId: string
 }) => Promise<{ done: Promise<WorkerDispatchResult> }>

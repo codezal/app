@@ -1283,6 +1283,21 @@ export type Messages = {
       usageCost: string
       moveUp: string
       moveDown: string
+      supervisorTitle?: string
+      supervisorDesc?: string
+      supervisorEnabled?: string
+      supervisorPool?: string
+      supervisorPoolEmpty?: string
+      supervisorAdd?: string
+      supervisorRemove?: string
+      supervisorAgent?: string
+      supervisorEngine?: string
+      supervisorProvider?: string
+      supervisorModel?: string
+      supervisorParallel?: string
+      supervisorChildren?: string
+      delegationAdaptive?: string
+      delegationSolo?: string
     }
     customProvider?: {
       title: string

@@ -105,6 +105,7 @@ type MetaPatch = Partial<
     | "reasoningEffort"
     | "nativeAgent"
     | "permission"
+    | "delegationMode"
   >
 >
 

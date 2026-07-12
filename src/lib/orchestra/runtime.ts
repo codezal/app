@@ -3,6 +3,7 @@ import { useSessionsStore } from "@/store/sessions"
 import { useJobsStore } from "@/store/jobs"
 import { startSdkWorker } from "./runners/sdk"
 import { startAcpWorker } from "./runners/acp"
+import { startNativeCliWorker } from "./runners/native-cli"
 import type {
   AgentCardPart,
   AgentCardToolCall,
@@ -23,6 +24,7 @@ import {
 import { createId } from "@/lib/id"
 import { errorMessage } from "@/lib/errors"
 import { codenameFor } from "./codenames"
+import { Semaphore } from "@/lib/async/semaphore"
 
 //   opencode-cli → "opencode acp" (native)
 //   kimi-cli     → "kimi acp" (native)
@@ -30,8 +32,8 @@ import { codenameFor } from "./codenames"
 //   codex-cli    → "@zed-industries/codex-acp" adapter (ChatGPT login / API key)
 const RUNNERS: Record<WorkerKind, RunnerStart> = {
   sdk: startSdkWorker,
-  "claude-cli": startAcpWorker,
-  "codex-cli": startAcpWorker,
+  "claude-cli": startNativeCliWorker,
+  "codex-cli": startNativeCliWorker,
   "opencode-cli": startAcpWorker,
   "kimi-cli": startAcpWorker,
   "gemini-cli": startAcpWorker,
@@ -123,6 +125,7 @@ export async function dispatchWorkers(
   dispatchControllers.set(sessionId, ac)
 
   const runs: Promise<WorkerDispatchResult>[] = []
+  const semaphore = new Semaphore(Math.max(1, Math.min(dispatches.length, cfg.maxParallel ?? dispatches.length)))
 
   for (const d of dispatches) {
     const w = cfg.workers.find((x) => x.idx === d.workerIdx)
@@ -166,7 +169,9 @@ export async function dispatchWorkers(
     }
 
     runs.push(
-      runOneWorker(w, d.task, workerId, taskNum, runner, emit, ac.signal, workspacePath),
+      semaphore.run(() =>
+        runOneWorker(w, d.task, workerId, taskNum, runner, emit, ac.signal, workspacePath, sessionId),
+      ),
     )
   }
 
@@ -188,6 +193,7 @@ async function runOneWorker(
   emit: (ev: WorkerEvent) => void,
   signal: AbortSignal,
   configWorkspace: string | undefined,
+  ownerSessionId: string,
 ): Promise<WorkerDispatchResult> {
   let iso: WorkerIsolation | null = null
   const startedAt = Date.now()
@@ -202,6 +208,7 @@ async function runOneWorker(
       configWorkspace: iso.configWorkspace,
       emit,
       signal,
+      ownerSessionId,
     })
     const result = await done
     return await finalizeIsolation(iso, result, task)

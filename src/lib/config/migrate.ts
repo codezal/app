@@ -11,7 +11,7 @@
 
 import { DEFAULT_APPEARANCE } from "@/lib/theme"
 
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v)

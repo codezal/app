@@ -32,6 +32,7 @@ import CREATE_PR_DESC from "./prompts/create_pr.txt?raw"
 import INDEX_DOCS_DESC from "./prompts/index_docs.txt?raw"
 import SKILL_DESC from "./prompts/skill.txt?raw"
 import SPAWN_AGENT_DESC from "./prompts/spawn_agent.txt?raw"
+import DELEGATE_AGENTS_DESC from "./prompts/delegate_agents.txt?raw"
 import RUN_WORKFLOW_DESC from "./prompts/run_workflow.txt?raw"
 import WORKFLOW_STATUS_DESC from "./prompts/workflow_status.txt?raw"
 import REMEMBER_DESC from "./prompts/remember.txt?raw"
@@ -515,6 +516,7 @@ export type ToolName =
   | "bash_status"
   | "load_skill"
   | "spawn_agent"
+  | "delegate_agents"
   | "dispatch_workers"
   | "merge_workers"
   | "run_workflow"
@@ -952,6 +954,17 @@ export async function buildAllTools(
     } catch {
       delete merged.spawn_agent
     }
+  }
+  const supervisor =
+    useSettingsStore.getState().settings.supervisor ??
+    (await import("@/lib/agents/runtime/supervisor")).DEFAULT_SUPERVISOR_SETTINGS
+  const delegationMode = useSessionsStore.getState().sessions[ownerSessionId]?.delegationMode
+  if (
+    delegationMode === "solo" ||
+    !supervisor.enabled ||
+    !supervisor.pool.some((entry) => entry.enabled)
+  ) {
+    delete merged.delegate_agents
   }
   if (getEffectiveSettings(configWorkspace).memory?.autonomousRemember === false) {
     delete merged.remember
@@ -2071,6 +2084,46 @@ export function buildTools(
       },
     }),
 
+    delegate_agents: tool({
+      description: DELEGATE_AGENTS_DESC,
+      inputSchema: z.object({
+        dispatches: z
+          .array(
+            z.object({
+              poolEntryId: z.string().min(1).describe("Enabled pool entry id from the Agent Pool"),
+              task: z.string().min(1).describe("Clear, self-contained subtask"),
+            }),
+          )
+          .min(1)
+          .max(5),
+      }),
+      execute: async ({ dispatches }, ctx) => {
+        await gateFor("delegate_agents", { dispatches })
+        const session = useSessionsStore.getState().sessions[ownerSessionId]
+        if (!session) throw new Error("Session not found")
+        const parentMessage = [...session.messages]
+          .reverse()
+          .find((message) => message.role === "assistant" && message.pending)
+        if (!parentMessage) throw new Error("Pending assistant message not found")
+        const { dispatchSupervisorAgents } = await import("@/lib/agents/runtime")
+        const results = await dispatchSupervisorAgents({
+          session,
+          parentMessageId: parentMessage.id,
+          settings: useSettingsStore.getState().settings.supervisor,
+          dispatches,
+          signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
+        })
+        return JSON.stringify(
+          results.map((result) => ({
+            ...result,
+            output: truncateForContext(result.output, WORKER_OUTPUT_MAX),
+          })),
+          null,
+          2,
+        )
+      },
+    }),
+
     merge_workers: tool({
       description:
         "ORCHESTRA MODE: conflict-aware merge of isolated worker branches (codezal/wk-*) into the current branch. " +
@@ -2145,6 +2198,29 @@ export function buildTools(
           }
         }
 
+        const supervisorSettings = useSettingsStore.getState().settings.supervisor
+        const { findSupervisorPoolEntry, dispatchSupervisorAgents } = await import(
+          "@/lib/agents/runtime"
+        )
+        const poolEntry = findSupervisorPoolEntry(supervisorSettings, name)
+        if (poolEntry && poolEntry.engine.kind !== "sdk") {
+          const parent = useSessionsStore.getState().sessions[ownerSessionId]
+          const pendingMessage = parent
+            ? [...parent.messages].reverse().find((message) => message.role === "assistant" && message.pending)
+            : undefined
+          if (!parent || !pendingMessage) return "Pending assistant message not found"
+          const [result] = await dispatchSupervisorAgents({
+            session: parent,
+            parentMessageId: pendingMessage.id,
+            settings: supervisorSettings,
+            dispatches: [{ poolEntryId: poolEntry.id, task }],
+            signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
+          })
+          void fireSubagentStop(result.status)
+          if (result.status !== "done") return `Agent error: ${result.errorMessage ?? result.status}`
+          return `# ${agent.name} summary\n${truncateForContext(result.output, SPAWN_OUTPUT_MAX)}`
+        }
+
         // Provider/model fallback from the parent session.
         const parent = useSessionsStore.getState().sessions[ownerSessionId]
         const provider = (agent.provider ?? parent?.provider) as ProviderId | undefined
@@ -2161,7 +2237,7 @@ export function buildTools(
 
         const fullSet = buildTools(workspace, ownerSessionId)
         const subTools: ToolSet = {}
-        const SUBAGENT_STRIP = new Set(["spawn_agent", "dispatch_workers", "merge_workers"])
+        const SUBAGENT_STRIP = new Set(["spawn_agent", "delegate_agents", "dispatch_workers", "merge_workers"])
         if (agent.tools && agent.tools.length > 0) {
           for (const t of agent.tools) {
             if (!SUBAGENT_STRIP.has(t) && fullSet[t]) subTools[t] = fullSet[t]

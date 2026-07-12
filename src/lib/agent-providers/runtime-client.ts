@@ -126,6 +126,10 @@ export class AgentRuntimeClient {
     await this.request("turn/interrupt", { sessionId })
   }
 
+  async closeSession(sessionId: string): Promise<void> {
+    await this.request("session/close", { sessionId })
+  }
+
   async resolvePermission(requestId: string, decision: "allow" | "deny"): Promise<void> {
     await this.request("permission/resolve", { requestId, decision })
   }

@@ -19,6 +19,7 @@ Discipline:
 
 const FORBIDDEN_AGENT_TOOLS = new Set([
   "spawn_agent",
+  "delegate_agents",
   "dispatch_workers",
   "run_workflow",
   "workflow_status",
