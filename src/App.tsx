@@ -257,21 +257,39 @@ export default function App() {
   })
   const chatWidthRef = useRef(chatWidth)
   chatWidthRef.current = chatWidth
+  const [turnDiffChatWidth, setTurnDiffChatWidth] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem("codezal.turnDiffChatWidth"))
+      return v >= 360 && v <= 900 ? v : 600
+    } catch {
+      return 600
+    }
+  })
+  const turnDiffChatWidthRef = useRef(turnDiffChatWidth)
+  turnDiffChatWidthRef.current = turnDiffChatWidth
   const [chatResizing, setChatResizing] = useState(false)
-  const onChatResizeStart = (e: React.MouseEvent) => {
+  const onChatResizeStart = (e: React.MouseEvent, target: "editor" | "turnDiff") => {
     e.preventDefault()
     const startX = e.clientX
-    const startW = chatWidthRef.current
+    const isTurnDiff = target === "turnDiff"
+    const startW = isTurnDiff ? turnDiffChatWidthRef.current : chatWidthRef.current
+    const minW = isTurnDiff ? 360 : 280
+    const maxW = isTurnDiff ? 900 : 760
     setChatResizing(true)
     const onMove = (ev: MouseEvent) => {
-      setChatWidth(Math.min(760, Math.max(280, startW + (ev.clientX - startX))))
+      const next = Math.min(maxW, Math.max(minW, startW + (ev.clientX - startX)))
+      if (isTurnDiff) setTurnDiffChatWidth(next)
+      else setChatWidth(next)
     }
     const onUp = () => {
       setChatResizing(false)
       window.removeEventListener("mousemove", onMove)
       window.removeEventListener("mouseup", onUp)
       try {
-        localStorage.setItem("codezal.editorChatWidth", String(chatWidthRef.current))
+        localStorage.setItem(
+          isTurnDiff ? "codezal.turnDiffChatWidth" : "codezal.editorChatWidth",
+          String(isTurnDiff ? turnDiffChatWidthRef.current : chatWidthRef.current),
+        )
       } catch {
         // Intentionally ignored.
       }
@@ -2252,11 +2270,12 @@ export default function App() {
                       width: editorSplit
                         ? chatWidth
                         : turnDiffOpen
-                          ? "clamp(360px, 38%, 600px)"
+                          ? turnDiffChatWidth
                           : "100%",
                     }}
                     className={cn(
-                      "relative flex min-w-0 shrink-0 flex-col transition-[width] duration-200 ease-out",
+                      "relative flex min-w-0 shrink-0 flex-col",
+                      !chatResizing && "transition-[width] duration-200 ease-out",
                       editorSplit &&
                         "ml-2 mb-2 mt-2 overflow-hidden rounded-xl border border-codezal bg-codezal-sidebar shadow-panel",
                     )}
@@ -2273,11 +2292,13 @@ export default function App() {
                     {sideChat}
                   </aside>
 
-                  {editorSplit && (
+                  {(editorSplit || turnDiffOpen) && (
                     <div
                       role="separator"
                       aria-orientation="vertical"
-                      onMouseDown={onChatResizeStart}
+                      onMouseDown={(event) =>
+                        onChatResizeStart(event, turnDiffOpen ? "turnDiff" : "editor")
+                      }
                       className="group relative z-10 w-2 shrink-0 cursor-col-resize"
                     >
                       <div
