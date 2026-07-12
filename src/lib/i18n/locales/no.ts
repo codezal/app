@@ -79,8 +79,8 @@ const no: Messages = {
     localCtxTooSmall: "Denne lokale modellen ble festet til en {effective}-token-kontekst for å passe til minnet, og agentverktøyene passer ikke. Velg en mindre modell (f.eks. Qwen3-8B) eller slå av agentmodus for den.",
   },
   sidebar: {
-    newSession: "Ny økt",
-    routines: "Autopilot",
+    newSession: "Ny agent",
+    routines: "Automatiseringer",
     customize: "Tilpass",
     chats: "Chatter",
     projects: "Prosjekter",

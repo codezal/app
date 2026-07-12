@@ -80,8 +80,8 @@ const de: Messages = {
     localCtxTooSmall: "Dieses lokale Modell wurde an einen {effective}-Token-Kontext geklemmt, um in den Speicher zu passen, und die Agent-Tools passen nicht. Wählen Sie ein kleineres Modell (z. B. Qwen3-8B) oder schalten Sie den Agentenmodus dafür aus.",
   },
   sidebar: {
-    newSession: "Neue Sitzung",
-    routines: "Routinen",
+    newSession: "Neuer Agent",
+    routines: "Automatisierungen",
     customize: "Anpassen",
     newProject: "Neues Projekt",
     noSessions: "Noch keine Sitzungen",

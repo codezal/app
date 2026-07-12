@@ -79,8 +79,8 @@ const pt_BR: Messages = {
     localCtxTooSmall: "Este modelo local foi preso a um contexto de token {effective} para caber na memória, e as ferramentas do agente não cabem. Escolha um modelo menor (por exemplo, Qwen3-8B) ou desative o modo de agente para ele.",
   },
   sidebar: {
-    newSession: "Nova sessão",
-    routines: "Piloto automático",
+    newSession: "Novo agente",
+    routines: "Automações",
     customize: "Personalizar",
     chats: "Bate-papos",
     projects: "Projetos",

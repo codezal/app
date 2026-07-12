@@ -80,8 +80,8 @@ const fr: Messages = {
     localCtxTooSmall: "Ce modèle local a été limité à un contexte de jeton {effective} pour s'adapter à la mémoire, et les outils d'agent ne s'adaptent pas. Choisissez un modèle plus petit (par exemple Qwen3-8B) ou désactivez le mode agent pour celui-ci.",
   },
   sidebar: {
-    newSession: "Nouvelle session",
-    routines: "Routines",
+    newSession: "Nouvel agent",
+    routines: "Automatisations",
     customize: "Personnaliser",
     chats: "Conversations",
     newProject: "Nouveau projet",

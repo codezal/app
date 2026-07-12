@@ -2180,7 +2180,7 @@ export default function App() {
   )
 
   return (
-    <div className="cz-app-shell flex h-screen overflow-hidden bg-codezal-sidebar text-codezal-text">
+    <div className="cz-app-shell flex h-full overflow-hidden bg-codezal-sidebar text-codezal-text">
       <a
         href="#ana-icerik"
         className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[200] focus:rounded-md focus:bg-codezal-accent focus:px-3 focus:py-2 focus:text-accent-foreground"
@@ -2192,7 +2192,20 @@ export default function App() {
       {settingsLoaded && !settings.onboardingCompleted && <Onboarding />}
       {!sidebarCollapsed && !showSettings && (
         <Sidebar
-          onOpenSettings={() => setShowSettings((v) => !v)}
+          onOpenSettings={() => {
+            setSettingsTab(undefined)
+            setShowRoutines(false)
+            setShowSettings((v) => !v)
+          }}
+          onOpenCustomize={() => {
+            setSettingsTab("ajanlar")
+            setShowRoutines(false)
+            setShowSettings(true)
+          }}
+          onOpenRoutines={() => {
+            setShowSettings(false)
+            setShowRoutines(true)
+          }}
           onOpenSession={() => {
             setShowSettings(false)
             setShowRoutines(false)
@@ -2203,7 +2216,7 @@ export default function App() {
         />
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-l-2xl border-l border-codezal-panel bg-codezal-bg">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-codezal-hair bg-codezal-bg">
         {showSettings ? (
           <SettingsPage
             onClose={() => {

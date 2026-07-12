@@ -13,7 +13,6 @@ import {
   FolderPlus,
   GitBranch,
   MessageSquare,
-  MessageSquarePlus,
   MoreVertical,
   Palette,
   PanelLeftClose,
@@ -48,9 +47,8 @@ import { NewWorktreeDialog } from "./NewWorktreeDialog"
 
 type Props = {
   onOpenSettings: () => void
+  onOpenCustomize?: () => void
   onOpenSession?: () => void
-  // Routines entry removed from the sidebar for now; prop kept optional so the
-  // App caller still compiles and the row can be reintroduced later.
   onOpenRoutines?: () => void
   // Collapse the sidebar — toggle button next to traffic lights triggers this.
   onCollapse?: () => void
@@ -67,8 +65,8 @@ const COLLAPSE_KEY = "codezal.collapsedProjects"
 
 function SectionLabel({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-2 pb-1.5 pt-4">
-      <span className="shrink-0 text-sm font-normal uppercase tracking-[0.12em] text-codezal-mute">
+    <div className="flex items-center gap-2 px-2 pb-1 pt-3.5">
+      <span className="shrink-0 text-xs font-medium text-codezal-mute">
         {children}
       </span>
       <div className="h-px flex-1 bg-codezal-hair" />
@@ -78,7 +76,7 @@ function SectionLabel({ children, actions }: { children: React.ReactNode; action
 }
 
 
-export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProject, onOpenRoutines, onCollapse }: Props) {
+export function Sidebar({ onOpenSettings, onOpenCustomize, onOpenSession, onOpenSearch, onNewProject, onOpenRoutines, onCollapse }: Props) {
   const {
     index,
     projects: knownProjects,
@@ -155,6 +153,18 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
     draggingRef.current = true
     document.body.style.cursor = "col-resize"
     document.body.style.userSelect = "none"
+  }
+
+  function resizeBy(delta: number) {
+    setWidth((current) => {
+      const next = Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, current + delta))
+      try {
+        localStorage.setItem(SIDEBAR_W_KEY, String(next))
+      } catch {
+        // localStorage unavailable; ignore
+      }
+      return next
+    })
   }
 
   const filtered = index.filter((m) => !m.routineId)
@@ -514,9 +524,25 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
     >
       {/* Resize handle — drag right edge to expand. 4px wide hit area, hover highlight. */}
       <div
+        role="separator"
+        aria-label={t("sidebar.resizeTitle")}
+        aria-orientation="vertical"
+        aria-valuemin={SIDEBAR_MIN_W}
+        aria-valuemax={SIDEBAR_MAX_W}
+        aria-valuenow={width}
+        tabIndex={0}
         onMouseDown={startDrag}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault()
+            resizeBy(-8)
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault()
+            resizeBy(8)
+          }
+        }}
         title={t("sidebar.resizeTitle")}
-        className="absolute right-0 top-0 z-40 h-full w-1 cursor-col-resize hover:bg-codezal-accent/40"
+        className="absolute right-0 top-0 z-40 h-full w-1 cursor-col-resize hover:bg-codezal-accent/30 focus-visible:bg-codezal-accent/30"
       />
       <div className="relative h-[48px] w-full">
         {/* Draggable background area that starts after the buttons to avoid blocking click events */}
@@ -532,6 +558,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             type="button"
             onClick={onCollapse}
             title={t("sidebar.collapseSidebar")}
+            aria-label={t("sidebar.collapseSidebar")}
             className={cn(
               "absolute top-[11px] z-20 flex h-[22px] w-[22px] items-center justify-center rounded text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text",
               isMacOS() ? "left-[89px]" : "left-[13px]",
@@ -546,23 +573,12 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         <button
           type="button"
           onClick={onNew}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-base font-normal text-codezal-text transition-colors hover:bg-codezal-chip-soft hover:text-codezal-text"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-codezal-text transition-colors hover:bg-codezal-chip-soft"
         >
-          <MessageSquarePlus className="h-4 w-4 shrink-0 text-codezal-mute" />
-          <span className="truncate">{t("sidebar.newChat")}</span>
-          <span className="ml-auto shrink-0 rounded border border-codezal-strong px-1.5 py-0.5 text-sm text-codezal-mute">
+          <Send className="h-4 w-4 shrink-0 text-codezal-mute" aria-hidden />
+          <span className="truncate">{t("sidebar.newSession")}</span>
+          <span className="ml-auto shrink-0 text-xs font-normal text-codezal-mute">
             {fmtKbd("⌘N")}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={onNewProject}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-base font-normal text-codezal-text transition-colors hover:bg-codezal-chip-soft hover:text-codezal-text"
-        >
-          <FolderPlus className="h-4 w-4 shrink-0 text-codezal-mute" />
-          <span className="truncate">{t("sidebar.newProject")}</span>
-          <span className="ml-auto shrink-0 rounded border border-codezal-strong px-1.5 py-0.5 text-sm text-codezal-mute">
-            {fmtKbd("⌘⇧N")}
           </span>
         </button>
         {onOpenRoutines && (
@@ -570,12 +586,20 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             type="button"
             onClick={onOpenRoutines}
             title={t("routinesOverlay.subtitle")}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-base font-normal text-codezal-text transition-colors hover:bg-codezal-chip-soft hover:text-codezal-text"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-codezal-text transition-colors hover:bg-codezal-chip-soft"
           >
-            <ClockClockwise className="h-4 w-4 shrink-0 text-codezal-accent" />
+            <ClockClockwise className="h-4 w-4 shrink-0 text-codezal-mute" aria-hidden />
             <span className="truncate">{t("sidebar.routines")}</span>
           </button>
         )}
+        <button
+          type="button"
+          onClick={onOpenCustomize ?? onOpenSettings}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-codezal-text transition-colors hover:bg-codezal-chip-soft"
+        >
+          <Palette className="h-4 w-4 shrink-0 text-codezal-mute" aria-hidden />
+          <span className="truncate">{t("sidebar.customize")}</span>
+        </button>
       </div>
 
       {liveSelected.length > 0 && (
@@ -631,6 +655,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
                         type="button"
                         onClick={onOpenSearch}
                         title={t("common.search")}
+                        aria-label={t("common.search")}
                         className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
                       >
                         <Search className="h-3.5 w-3.5" />
@@ -640,6 +665,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
                       type="button"
                       onClick={onNewProject}
                       title={t("sidebar.newProject")}
+                      aria-label={t("sidebar.newProject")}
                       className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -681,7 +707,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         <button
           type="button"
           onClick={onOpenSettings}
-          className="flex flex-1 items-center gap-2.5 rounded-md px-2.5 py-2 text-base text-codezal-text transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
+          className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-codezal-text transition-colors hover:bg-codezal-panel-2"
         >
           <Settings className="h-4 w-4 text-codezal-mute" />
           <span>{t("sidebar.settings")}</span>
@@ -926,7 +952,7 @@ function ProjectGroup({
                 style={color ? { color } : undefined}
               />
             )}
-            <span className="min-w-0 truncate text-base font-normal text-codezal-text">
+            <span className="min-w-0 truncate text-sm font-medium text-codezal-text">
               {name}
             </span>
             {/* Chevron sits right after the name and only appears on hover (like
@@ -952,7 +978,8 @@ function ProjectGroup({
               <button
                 type="button"
                 onClick={onNewInWorkspace}
-                title={isLoose ? "Yeni sohbet" : "Bu projede yeni sohbet"}
+                title={t("sidebar.newChat")}
+                aria-label={t("sidebar.newChat")}
                 className="flex h-6 w-6 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
               >
                 <Plus className="h-4 w-4" />
@@ -965,6 +992,7 @@ function ProjectGroup({
                 type="button"
                 onClick={toggleMenu}
                 title={t("sidebar.projectOptions")}
+                aria-label={t("sidebar.projectOptions")}
                 className="flex h-6 w-6 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
               >
                 <MoreVertical className="h-4 w-4" />
@@ -1366,7 +1394,7 @@ function SessionItem({
         }
         onContextMenu={onContextMenu}
         className={cn(
-          "group relative flex items-center rounded-lg py-1 pl-8 pr-1.5 text-base transition-colors",
+          "group relative flex items-center rounded-md py-1 pl-7 pr-1 text-sm transition-colors",
           selected
             ? "bg-codezal-chip text-codezal-text"
             : active
@@ -1377,7 +1405,7 @@ function SessionItem({
         {(waiting || streaming || meta.unread) && (
           <span
             className={cn(
-              "pointer-events-none absolute left-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full",
+              "pointer-events-none absolute left-2.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full",
               waiting
                 ? "animate-pulse bg-amber-400"
                 : streaming
@@ -1481,7 +1509,7 @@ function SessionItem({
           </button>
         )}
         {!renaming && !editExtra && (
-          <span className="ml-1 shrink-0 text-sm tabular-nums text-codezal-mute transition-opacity group-hover:opacity-0">
+          <span className="ml-1 shrink-0 text-xs tabular-nums text-codezal-mute transition-opacity group-hover:opacity-0">
             {formatRowTime(meta.updatedAt, locale)}
           </span>
         )}
@@ -1491,6 +1519,7 @@ function SessionItem({
             type="button"
             onClick={toggleMenu}
             title={t("sidebar.sessionOptions")}
+            aria-label={t("sidebar.sessionOptions")}
             className={cn(
               "flex h-6 w-6 items-center justify-center rounded text-codezal-mute transition hover:bg-codezal-panel-2 hover:text-codezal-text",
               menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",

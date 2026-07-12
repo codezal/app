@@ -79,8 +79,8 @@ const ja: Messages = {
     localCtxTooSmall: "このローカル モデルはメモリに適合するように {effective} トークン コンテキストに固定されており、エージェント ツールは適合しません。より小さいモデル (Qwen3-8B など) を選択するか、そのモデルのエージェント モードをオフにします。",
   },
   sidebar: {
-    newSession: "新しいセッション",
-    routines: "ルーティン",
+    newSession: "新しいエージェント",
+    routines: "自動化",
     customize: "カスタマイズ",
     chats: "チャット",
     projects: "プロジェクト",

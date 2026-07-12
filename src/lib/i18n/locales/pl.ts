@@ -79,8 +79,8 @@ const pl: Messages = {
     localCtxTooSmall: "Ten model lokalny został przymocowany do kontekstu tokena {effective}, aby zmieścił się w pamięci, a narzędzia agenta nie pasują. Wybierz mniejszy model (np. Qwen3-8B) lub wyłącz dla niego tryb agenta.",
   },
   sidebar: {
-    newSession: "Nowa sesja",
-    routines: "Autopilot",
+    newSession: "Nowy agent",
+    routines: "Automatyzacje",
     customize: "Dostosuj",
     chats: "Czaty",
     projects: "Projekty",

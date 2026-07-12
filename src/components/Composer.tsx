@@ -996,7 +996,7 @@ export function Composer({
     <footer className={cn("relative z-10 pb-2", inCard ? "bg-codezal-sidebar" : "bg-codezal-bg")}>
       <div
         ref={slashWrapRef}
-        className={cn("cz-meta relative mx-auto w-full max-w-[920px]", inCard ? "px-4" : "px-8")}
+        className={cn("cz-meta relative mx-auto w-full max-w-[860px]", inCard ? "px-3" : "px-6")}
       >
         <SlashMenu
           open={slashOpen}
@@ -1058,7 +1058,7 @@ export function Composer({
         )}
       <div
         ref={dropZoneRef}
-        className="relative rounded-2xl border border-codezal-strong bg-codezal-input shadow-[0_4px_24px_-6px_rgba(0,0,0,0.14)]"
+        className="shadow-composer relative rounded-xl border border-codezal bg-codezal-input transition-[border-color,box-shadow] focus-within:border-codezal-accent/40 focus-within:ring-2 focus-within:ring-codezal-accent/10"
         // Finder drop → Tauri native event (composer-drop); ContextPanel drag →
         onDragOver={(e) => {
           if ((e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault()
@@ -1199,11 +1199,11 @@ export function Composer({
             ))}
           </div>
         )}
-        <div className="relative min-h-[56px] px-4 pb-2 pt-3.5">
+        <div className="relative min-h-[44px] px-3 pb-1.5 pt-2.5">
           <div
             ref={mirrorRef}
             aria-hidden
-            className="pointer-events-none absolute inset-0 select-none overflow-hidden whitespace-pre-wrap break-words px-4 pb-2 pt-3.5 text-md leading-[1.5] text-codezal-text"
+            className="pointer-events-none absolute inset-0 select-none overflow-hidden whitespace-pre-wrap break-words px-3 pb-1.5 pt-2.5 text-md leading-[1.5] text-codezal-text"
           >
             {highlightSegments(text, validNames).map((s, i) =>
               s.cmd ? (
@@ -1342,7 +1342,7 @@ export function Composer({
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2 pr-12 pt-1.5">
+        <div className="flex flex-wrap items-center gap-1 px-1.5 pb-1.5 pr-11 pt-0.5">
           <AttachMenu
             onPickFile={() => fileInputRef.current?.click()}
             onPickFolder={() => void pickFolderAttachment()}
@@ -1417,7 +1417,7 @@ export function Composer({
             onClick={onAbort}
             title={t("composer.stop")}
             aria-label={t("composer.stop")}
-            className="group/stop absolute bottom-2 right-2 flex h-[26px] w-[30px] items-center justify-center rounded-lg bg-codezal-accent/10 text-codezal-accent hover:bg-destructive/15 hover:text-destructive"
+            className="group/stop absolute bottom-1.5 right-1.5 flex h-[26px] w-[30px] items-center justify-center rounded-lg bg-codezal-accent/10 text-codezal-accent hover:bg-destructive/15 hover:text-destructive"
           >
             <svg
               aria-hidden
@@ -1453,7 +1453,7 @@ export function Composer({
             title={t("composer.sendHint")}
             aria-label={t("composer.send")}
             className={cn(
-              "absolute bottom-2 right-2 z-10 flex h-[26px] w-[30px] items-center justify-center rounded-lg transition-colors",
+              "absolute bottom-1.5 right-1.5 z-10 flex h-[26px] w-[30px] items-center justify-center rounded-lg transition-colors",
               (!text.trim() && images.length === 0 && fileRefs.length === 0 && pdfs.length === 0) || disabled || compacting
                 ? "border border-codezal bg-codezal-panel-2 text-codezal-mute"
                 : "border border-transparent bg-codezal-accent text-accent-foreground shadow-sm hover:opacity-90",
@@ -1464,7 +1464,7 @@ export function Composer({
         )}
       </div>
 
-      <div className="mt-2 flex items-center gap-2 px-1 text-sm text-codezal-mute">
+      <div className="mt-1.5 flex items-center gap-2 px-1 text-xs text-codezal-mute">
         {msgCount === 0 && (
           <WorkspacePicker
             current={hasActive ? workspacePath : settings.defaultWorkspacePath}

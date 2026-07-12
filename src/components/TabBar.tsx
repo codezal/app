@@ -37,9 +37,9 @@ import { FileTypeIcon } from "@/lib/file-icons"
 export type { PanelMode } from "@/lib/panel-modes"
 
 const editorTabBase =
-  "group relative flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-lg border border-transparent px-2.5 text-base leading-none transition-colors"
+  "group relative flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2.5 text-sm leading-none transition-colors"
 const editorTabActive =
-  "border-codezal-hair bg-codezal-panel text-codezal-text shadow-sm"
+  "bg-codezal-panel-2 text-codezal-text"
 const editorTabInactive =
   "text-codezal-dim hover:bg-[rgb(var(--codezal-line-rgb)_/_0.04)] hover:text-[hsl(var(--codezal-text))]"
 const tabRailButton =
@@ -116,6 +116,7 @@ export function TabBar({
   const previewFile = active?.previewFile ?? null
   const isChat = !activeFile
   const editorSplit = openFiles.length > 0
+  const chatLabel = active && active.messages.length === 0 ? t("sidebar.newSession") : active?.title
 
   const stripRef = useRef<HTMLDivElement>(null)
   const [canLeft, setCanLeft] = useState(false)
@@ -162,7 +163,7 @@ export function TabBar({
 
   const tabItems: TabSwitchItem[] = active
     ? [
-        ...(editorSplit ? [] : [{ path: null, label: active.title, active: isChat }]),
+        ...(editorSplit ? [] : [{ path: null, label: chatLabel ?? active.title, active: isChat }]),
         ...openFiles.map((p) => {
           const d = parseDiffUri(p)
           const o = d ? null : parseOutputUri(p)
@@ -219,6 +220,7 @@ export function TabBar({
             type="button"
             onClick={onExpandSidebar}
             title={t("tabBar.showSidebar")}
+            aria-label={t("tabBar.showSidebar")}
             className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
           >
             <PanelLeftOpen className="h-4 w-4" />
@@ -228,6 +230,7 @@ export function TabBar({
               type="button"
               onClick={onOpenSettings}
               title={t("sidebar.settings")}
+              aria-label={t("sidebar.settings")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
             >
               <Settings className="h-4 w-4" />
@@ -238,6 +241,7 @@ export function TabBar({
               type="button"
               onClick={onOpenSearch}
               title={t("common.search")}
+              aria-label={t("common.search")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
             >
               <Search className="h-4 w-4" />
@@ -247,7 +251,8 @@ export function TabBar({
             <button
               type="button"
               onClick={onNewSession}
-              title={t("sidebar.newChat")}
+              title={t("sidebar.newSession")}
+              aria-label={t("sidebar.newSession")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
             >
               <MessageSquarePlus className="h-4 w-4" />
@@ -259,6 +264,7 @@ export function TabBar({
               onClick={onNavBack}
               disabled={!canNavBack}
               title={t("tabBar.navBack")}
+              aria-label={t("tabBar.navBack")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-codezal-dim", tlIcon)}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -270,6 +276,7 @@ export function TabBar({
               onClick={onNavForward}
               disabled={!canNavForward}
               title={t("tabBar.navForward")}
+              aria-label={t("tabBar.navForward")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-codezal-dim", tlIcon)}
             >
               <ChevronRight className="h-4 w-4" />
@@ -288,16 +295,12 @@ export function TabBar({
             data-tab-active={isChat ? "true" : "false"}
             className={cn(
               editorTabBase,
-              "min-w-[104px] max-w-[160px]",
+              "min-w-[96px] max-w-[220px]",
               isChat ? editorTabActive : editorTabInactive,
             )}
-            title={active.title}
+            title={chatLabel}
           >
-            <CodezalBrandGlyph
-              size={16}
-              className="text-codezal-accent"
-            />
-            <span className="font-medium">Sohbet</span>
+            <span className="truncate font-medium">{chatLabel}</span>
           </button>
         )}
 
@@ -424,6 +427,7 @@ export function TabBar({
                       : "opacity-0 group-hover:opacity-70",
                   )}
                   title={dirty ? t("fileViewer.unsavedTitle") : t("tabBar.closeTabHint")}
+                  aria-label={dirty ? t("fileViewer.unsavedTitle") : t("tabBar.closeTabHint")}
                 >
                   {dirty ? (
                     <>

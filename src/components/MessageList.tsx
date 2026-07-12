@@ -40,9 +40,6 @@ import { CodeView } from "./CodeView"
 import { StoredImage } from "./StoredImage"
 import { ImageLightbox } from "./ImageLightbox"
 import { TodoList } from "./TodoList"
-import { formatCount } from "@/lib/format"
-import { CodezalBrandGlyph } from "./icons"
-import { NewChatActivity } from "./NewChatActivity"
 import type { Message, MessageImage, MessageFile, MessagePdf, Part } from "@/store/types"
 import { useSessionsStore } from "@/store/sessions"
 import { useQuestionsStore } from "@/store/questions"
@@ -121,10 +118,6 @@ export function MessageList({
   const messages = useMemo(
     () => (allMessages.some((m) => m.meta) ? allMessages.filter((m) => !m.meta) : allMessages),
     [allMessages],
-  )
-  const tokenEstimateMemo = useMemo(
-    () => messages.reduce((n, m) => n + Math.ceil((m.content?.length ?? 0) / 4), 0),
-    [messages],
   )
   const hasOlder = useSessionsStore((s) => {
     const id = sessionId ?? s.activeId
@@ -338,9 +331,7 @@ export function MessageList({
     }
   }, [hasMessages, active?.id])
 
-  if (messages.length === 0) return loading ? <ChatSkeleton /> : <Welcome sessionId={sessionId} />
-
-  const tokenEstimate = tokenEstimateMemo
+  if (messages.length === 0) return loading ? <ChatSkeleton /> : <Welcome />
 
   const hiddenCount = Math.max(0, messages.length - renderLimit)
   const shown = hiddenCount > 0 ? messages.slice(hiddenCount) : messages
@@ -403,23 +394,12 @@ export function MessageList({
     >
       <div
         ref={contentRef}
-        className={cn("mx-auto w-full max-w-[920px] pt-5", inCard ? "px-4" : "px-8")}
+        className={cn("mx-auto w-full max-w-[860px] pt-4", inCard ? "px-3" : "px-6")}
         onMouseUp={onContentMouseUp}
         onMouseDown={() => setAskSel(null)}
         onContextMenu={onContentContextMenu}
       >
-        {/* Breadcrumb head */}
-        <div className="flex items-center gap-2 border-b border-codezal-hair pb-3">
-          <span className="text-base font-medium text-codezal-text">
-            {active?.title ?? t("messageList.sessionFallback")}
-          </span>
-          <div className="flex-1" />
-          <span className="text-sm text-codezal-mute">
-            {t("messageList.messageCount", { count: messages.length, tokens: formatCount(tokenEstimate) })}
-          </span>
-        </div>
-
-        <div className="flex flex-col gap-1 py-6">
+        <div className="flex flex-col gap-1 py-5">
           {(hiddenCount > 0 || hasOlder) && (
             <button
               onClick={loadEarlier}
@@ -2592,7 +2572,7 @@ function StreamingHint({ message }: { message: Message }) {
 function ChatSkeleton() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-8 py-6">
-      <div className="mx-auto w-full max-w-[820px] space-y-7">
+      <div className="mx-auto w-full max-w-[860px] space-y-7">
         <div className="flex justify-end">
           <div className="h-9 w-2/5 animate-pulse rounded-2xl bg-codezal-panel-2" />
         </div>
@@ -2614,30 +2594,12 @@ function ChatSkeleton() {
   )
 }
 
-function Welcome({ sessionId }: { sessionId?: string }) {
+function Welcome() {
   const t = useT()
-  const ws = useSessionsStore((s) =>
-    sessionId ? s.sessions[sessionId]?.workspacePath : s.active?.workspacePath,
-  )
-  const eyebrow = ws ? basename(ws) : "CODEZAL"
 
   return (
-    <div className="flex flex-1 items-center justify-center px-6">
-      <div className="flex w-full max-w-[680px] flex-col items-center text-center">
-        <div className="mb-3.5 flex items-center gap-2 text-codezal-text">
-          <CodezalBrandGlyph size={22} />
-          <span className="text-sm font-bold uppercase tracking-[0.22em] text-codezal-mute">
-            {eyebrow}
-          </span>
-        </div>
-        <h1 className="m-0 text-[30px] font-bold tracking-tight text-codezal-text">
-          {t("messageList.welcomeHero")}
-        </h1>
-        <p className="mt-2.5 text-[15px] font-normal leading-[1.6] text-codezal-mute">
-          {t("messageList.welcomeSubtitle")}
-        </p>
-        <NewChatActivity />
-      </div>
+    <div className="flex flex-1">
+      <h1 className="sr-only">{t("sidebar.newSession")}</h1>
     </div>
   )
 }

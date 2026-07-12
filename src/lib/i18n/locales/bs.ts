@@ -79,8 +79,8 @@ const bs: Messages = {
     localCtxTooSmall: "Ovaj lokalni model je pričvršćen za kontekst {effective}-tokena kako bi se uklopio u memoriju, a alati agenta se ne uklapaju. Odaberite manji model (npr. Qwen3-8B) ili isključite režim agenta za njega.",
   },
   sidebar: {
-    newSession: "Nova sesija",
-    routines: "Autopilot",
+    newSession: "Novi agent",
+    routines: "Automatizacije",
     customize: "Prilagodi",
     chats: "Ćaskanje",
     projects: "Projekti",

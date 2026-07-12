@@ -80,8 +80,8 @@ const tr: Messages = {
     spendCapReached: "Oturum harcama sınırına ulaşıldı (${cap}). Ayarlar → Genel bölümünden yükseltin veya yeni bir oturum başlatın.",
   },
   sidebar: {
-    newSession: "Yeni oturum",
-    routines: "Otopilot",
+    newSession: "Yeni Agent",
+    routines: "Otomasyonlar",
     customize: "Özelleştir",
     chats: "Sohbetler",
     projects: "Projeler",

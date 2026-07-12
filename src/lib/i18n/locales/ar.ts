@@ -79,8 +79,8 @@ const ar: Messages = {
     localCtxTooSmall: "تم تثبيت هذا النموذج المحلي على سياق {effective}-token ليناسب الذاكرة، وأدوات الوكيل غير مناسبة. اختر طرازًا أصغر (على سبيل المثال Qwen3-8B) أو قم بإيقاف تشغيل وضع الوكيل له.",
   },
   sidebar: {
-    newSession: "جلسة جديدة",
-    routines: "الروتينات",
+    newSession: "وكيل جديد",
+    routines: "عمليات تلقائية",
     customize: "تخصيص",
     chats: "المحادثات",
     projects: "المشاريع",

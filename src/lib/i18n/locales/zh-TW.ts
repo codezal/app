@@ -79,8 +79,8 @@ const zh_TW: Messages = {
     localCtxTooSmall: "此本地模型被限制在 {effective} 令牌上下文中以適應內存，但代理工具不適合。選擇較小的型號 (e.g.Qwen3-8B) 或為其關閉代理模式。",
   },
   sidebar: {
-    newSession: "新對話",
-    routines: "例行任務",
+    newSession: "新增代理",
+    routines: "自動化",
     customize: "自訂",
     chats: "對話",
     projects: "專案",

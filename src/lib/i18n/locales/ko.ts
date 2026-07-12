@@ -79,8 +79,8 @@ const ko: Messages = {
     localCtxTooSmall: "이 로컬 모델은 메모리에 맞게 {effective} 토큰 컨텍스트에 고정되어 있으며 에이전트 도구는 맞지 않습니다. 더 작은 모델(e.g. Qwen3-8B)을 선택하거나 에이전트 모드를 끄세요.",
   },
   sidebar: {
-    newSession: "새 세션",
-    routines: "루틴",
+    newSession: "새 에이전트",
+    routines: "자동화",
     customize: "커스터마이즈",
     chats: "대화",
     projects: "프로젝트",

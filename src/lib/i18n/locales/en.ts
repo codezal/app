@@ -90,8 +90,8 @@ const en: Messages = {
 
   // ---- Sidebar ----
   sidebar: {
-    newSession: "New session",
-    routines: "Autopilot",
+    newSession: "New Agent",
+    routines: "Automations",
     customize: "Customize",
     chats: "Chats",
     projects: "Projects",
