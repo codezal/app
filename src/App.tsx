@@ -2051,8 +2051,9 @@ export default function App() {
   const filesPanelEmpty = panelMode === "files" && activeEmpty && !activeWorkspace
   const contextPanelOpen = !showSettings && !showRoutines && panelMode !== null && !filesPanelEmpty
 
-  const editorSplit = openFilesCount > 0
   const editorFile = activeFile ?? firstOpenFile
+  const turnDiffOpen = !!editorFile && isTurnDiffUri(editorFile)
+  const editorSplit = openFilesCount > 0 && !turnDiffOpen
   const sidebarCollapsed = sidebarHidden || (editorSplit && !editorSidebarOpen)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -2284,10 +2285,18 @@ export default function App() {
                     </div>
                   )}
 
-                  <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+                  {editorSplit && (
+                    <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+                      {editorContent}
+                    </section>
+                  )}
+                </div>
+
+                {turnDiffOpen && (
+                  <section className="animate-turn-diff-in absolute inset-y-0 right-0 z-30 flex w-[min(52vw,1100px)] min-w-[640px] max-w-full flex-col overflow-hidden border-l border-codezal bg-codezal-bg shadow-2xl max-[900px]:w-full max-[900px]:min-w-0">
                     {editorContent}
                   </section>
-                </div>
+                )}
 
                 {chatResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
               </main>

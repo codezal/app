@@ -452,3 +452,21 @@
   animation: drop-ind-in 140ms ease-out;
   transform-origin: left center;
 }
+
+@keyframes turn-diff-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-turn-diff-in {
+  animation: turn-diff-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-turn-diff-in {
+    animation: none;
+  }
+}
