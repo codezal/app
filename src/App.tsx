@@ -17,7 +17,6 @@ import { OutputViewer } from "@/components/OutputViewer"
 import { PRConversationViewer } from "@/components/PRConversationViewer"
 import { isDiffUri } from "@/lib/diff-uri"
 import { isTurnDiffUri, makeTurnDiffUri } from "@/lib/turn-diff-uri"
-import { aggregateTurnEdits } from "@/lib/turn-edits"
 import { isOutputUri } from "@/lib/output-doc"
 import { isPrUri } from "@/lib/pr-uri"
 import { renderTemplate } from "@/lib/commands"
@@ -114,7 +113,6 @@ import { inlinesThinkTags } from "@/lib/providers/provider-quirks"
 import { createThinkSplitter, type ThinkSplitter } from "@/lib/stream/think-split"
 import { toast, useToastStore } from "@/store/toast"
 import { useSessionsStore } from "@/store/sessions"
-import { useWriteDiffs } from "@/store/write-diffs"
 import { useSddStore } from "@/store/sdd"
 import { usePreviewStore } from "@/store/preview"
 import { convertFileSrc, invoke } from "@tauri-apps/api/core"
@@ -2073,8 +2071,11 @@ export default function App() {
 
   const editorFile = activeFile ?? firstOpenFile
   const turnDiffOpen = !!editorFile && isTurnDiffUri(editorFile)
+  const filesWorkspaceOpen = panelMode === "files"
   const editorSplit = openFilesCount > 0 && !turnDiffOpen
-  const sidebarCollapsed = sidebarHidden || (editorSplit && !editorSidebarOpen)
+  const editorPaneOpen = (editorSplit || filesWorkspaceOpen) && !turnDiffOpen
+  const chatInCard = editorSplit && !filesWorkspaceOpen
+  const sidebarCollapsed = sidebarHidden || (editorSplit && !filesWorkspaceOpen && !editorSidebarOpen)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!editorSplit && editorSidebarOpen) setEditorSidebarOpen(false)
@@ -2116,7 +2117,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1 flex-col">
         <MessageList
           streaming={activeStreaming}
-          inCard={editorSplit}
+          inCard={chatInCard}
           onScrolledChange={setChatScrolled}
           searchOpen={showChatSearch}
           onCloseSearch={() => setShowChatSearch(false)}
@@ -2132,7 +2133,7 @@ export default function App() {
         />
       </div>
 
-      <div className={cn("relative", !editorSplit && activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
+      <div className={cn("relative", !chatInCard && activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
         {error && (
           <div className="absolute inset-x-0 bottom-full z-20">
             <div className="mx-auto w-full max-w-[1024px] px-8">
@@ -2155,7 +2156,7 @@ export default function App() {
         <Composer
           streaming={activeStreaming}
           compacting={activeCompacting}
-          inCard={editorSplit}
+          inCard={chatInCard}
           onSend={onSend}
           onAbort={onAbort}
           onSlashAction={(a, args) => void onSlashAction(a, args)}
@@ -2178,28 +2179,10 @@ export default function App() {
   const tabBarEl = (
     <TabBar
       panelMode={panelMode}
-      onSetPanelMode={(nextMode) => {
-        const filesRequested = nextMode === "files" || (nextMode === null && panelMode === "files")
-        if (!filesRequested) {
-          setPanelMode(nextMode)
-          return
-        }
-
-        const messages = useSessionsStore.getState().active?.messages ?? []
-        const writeOld = useWriteDiffs.getState().byCallId
-        const latestEditedMessage = [...messages]
-          .reverse()
-          .find((message) => aggregateTurnEdits(message.parts, writeOld).files.length > 0)
-
-        if (latestEditedMessage) {
-          setPanelMode(null)
-          openFile(makeTurnDiffUri(latestEditedMessage.id), { preview: true })
-        } else {
-          setPanelMode("git")
-        }
-      }}
+      onSetPanelMode={setPanelMode}
       todoAvailable={todoAvailable}
       sddAvailable={sddAvailable}
+      filesWorkspaceChatWidth={filesWorkspaceOpen ? chatWidth : undefined}
       sidebarHidden={sidebarCollapsed}
       scrolled={!activeEmpty && chatScrolled}
       onExpandSidebar={() => (editorSplit ? setEditorSidebarOpen(true) : setSidebarHidden(false))}
@@ -2288,7 +2271,7 @@ export default function App() {
                 <div className="flex min-h-0 flex-1">
                   <aside
                     style={{
-                      width: editorSplit
+                      width: editorPaneOpen
                         ? chatWidth
                         : turnDiffOpen
                           ? turnDiffChatWidth
@@ -2297,11 +2280,11 @@ export default function App() {
                     className={cn(
                       "relative flex min-w-0 shrink-0 flex-col",
                       !chatResizing && "transition-[width] duration-200 ease-out",
-                      editorSplit &&
+                      chatInCard &&
                         "ml-2 mb-2 mt-2 overflow-hidden rounded-xl border border-codezal bg-codezal-sidebar shadow-panel",
                     )}
                   >
-                    {editorSplit && (
+                    {chatInCard && (
                       <div className="flex h-11 shrink-0 items-center gap-2.5 px-3.5">
                         <MessageSquare className="h-4 w-4 shrink-0 text-codezal-accent" />
                         <span className="flex-1 truncate text-md font-semibold text-codezal-text">
@@ -2313,7 +2296,7 @@ export default function App() {
                     {sideChat}
                   </aside>
 
-                  {(editorSplit || turnDiffOpen) && (
+                  {(editorPaneOpen || turnDiffOpen) && (
                     <div
                       role="separator"
                       aria-orientation="vertical"
@@ -2333,14 +2316,24 @@ export default function App() {
                     </div>
                   )}
 
-                  {(editorSplit || turnDiffOpen) && (
+                  {(editorPaneOpen || turnDiffOpen) && (
                     <section
                       className={cn(
                         "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-codezal-bg",
                         turnDiffOpen && "animate-turn-diff-in border-l border-codezal",
                       )}
                     >
-                      {editorContent}
+                      {editorContent ?? (
+                        <div className="flex min-h-0 flex-1 flex-col bg-codezal-code">
+                          <div className="flex h-9 shrink-0 items-center border-b border-codezal-hair px-3 text-sm text-codezal-dim">
+                            {tStatic("common.untitled")}-1
+                          </div>
+                          <div className="flex min-h-0 flex-1 pt-2 font-mono text-sm">
+                            <div className="w-12 shrink-0 select-none pr-3 text-right text-codezal-mute/60">1</div>
+                            <div className="h-[1.65rem] flex-1 bg-codezal-panel/20" />
+                          </div>
+                        </div>
+                      )}
                     </section>
                   )}
                 </div>

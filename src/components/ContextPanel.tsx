@@ -99,6 +99,7 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
   const isTerminal = mode === "terminal"
   const isPreview = mode === "preview"
   const isSdd = mode === "sdd"
+  const isFiles = mode === "files"
   const isFlush = isTerminal || isPreview || isSdd
 
   const storageKey = isTerminal ? PANEL_W_KEY_TERMINAL : isPreview || isSdd ? PANEL_W_KEY_PREVIEW : PANEL_W_KEY
@@ -146,9 +147,10 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
       aria-label={t("a11y.contextLandmark")}
       style={{ width }}
       className={cn(
-        "relative z-20 m-4 flex max-h-[calc(100%-2rem)] shrink-0 self-stretch flex-col overflow-hidden rounded-2xl border border-codezal-panel bg-codezal-bg",
-        "max-[1350px]:fixed max-[1350px]:bottom-4 max-[1350px]:right-4 max-[1350px]:top-[60px] max-[1350px]:m-0 max-[1350px]:max-h-none max-[1350px]:max-w-[calc(100vw-2rem)] max-[1350px]:shadow-2xl",
-        isFlush && "self-stretch",
+        "relative z-20 flex shrink-0 self-stretch flex-col overflow-hidden",
+        isFiles
+          ? "border-l border-codezal-hair bg-codezal-sidebar"
+          : "m-4 max-h-[calc(100%-2rem)] rounded-2xl border border-codezal-panel bg-codezal-bg max-[1350px]:fixed max-[1350px]:bottom-4 max-[1350px]:right-4 max-[1350px]:top-[60px] max-[1350px]:m-0 max-[1350px]:max-h-none max-[1350px]:max-w-[calc(100vw-2rem)] max-[1350px]:shadow-2xl",
       )}
     >
       <div
@@ -158,7 +160,7 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
       >
         <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-codezal-hair transition-colors group-hover:bg-codezal-accent" />
       </div>
-      {!isFlush && <PanelHeader mode={mode} onClose={onClose} />}
+      {!isFlush && !isFiles && <PanelHeader mode={mode} onClose={onClose} />}
       <div
         className={cn(
           "flex-1 min-h-0",

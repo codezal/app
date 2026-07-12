@@ -52,6 +52,8 @@ type Props = {
   todoAvailable?: boolean
   // Shows "SDD" in the top panel menu only while the active session is linked to a draft.
   sddAvailable?: boolean
+  // Width of the unchanged chat column while the Files workspace is docked.
+  filesWorkspaceChatWidth?: number
   // True when the sidebar is collapsed. In that state TabBar takes over the
   // top-left titlebar region (reserves space for traffic lights + expand button).
   sidebarHidden?: boolean
@@ -80,6 +82,7 @@ export function TabBar({
   onSetPanelMode,
   todoAvailable,
   sddAvailable,
+  filesWorkspaceChatWidth,
   sidebarHidden,
   scrolled,
   onExpandSidebar,
@@ -115,7 +118,8 @@ export function TabBar({
   const activeFile = active?.activeFile ?? null
   const previewFile = active?.previewFile ?? null
   const isChat = !activeFile
-  const editorSplit = openFiles.length > 0
+  const filesWorkspaceOpen = filesWorkspaceChatWidth !== undefined
+  const editorSplit = openFiles.length > 0 || filesWorkspaceOpen
   const chatLabel = active && active.messages.length === 0 ? t("sidebar.newSession") : active?.title
 
   const stripRef = useRef<HTMLDivElement>(null)
@@ -163,7 +167,9 @@ export function TabBar({
 
   const tabItems: TabSwitchItem[] = active
     ? [
-        ...(editorSplit ? [] : [{ path: null, label: chatLabel ?? active.title, active: isChat }]),
+        ...(!editorSplit || filesWorkspaceOpen
+          ? [{ path: null, label: chatLabel ?? active.title, active: isChat }]
+          : []),
         ...openFiles.map((p) => {
           const d = parseDiffUri(p)
           const o = d ? null : parseOutputUri(p)
@@ -287,7 +293,7 @@ export function TabBar({
       <div className="relative z-10 flex h-full min-w-0 flex-1 items-center gap-1">
         {/* Chat tab stays pinned outside the scrollable file strip.
             Hidden in editor mode — chat lives in the left panel there. */}
-        {active && !editorSplit && (
+        {active && (!editorSplit || filesWorkspaceOpen) && (
           <button
             type="button"
             onClick={() => setActiveFile(null)}
@@ -296,8 +302,14 @@ export function TabBar({
             className={cn(
               editorTabBase,
               "min-w-[96px] max-w-[220px]",
+              filesWorkspaceOpen && "max-w-none shrink-0 justify-start",
               isChat ? editorTabActive : editorTabInactive,
             )}
+            style={
+              filesWorkspaceOpen
+                ? { width: Math.max(160, filesWorkspaceChatWidth - 16) }
+                : undefined
+            }
             title={chatLabel}
           >
             <span className="truncate font-medium">{chatLabel}</span>
@@ -325,6 +337,12 @@ export function TabBar({
           onContextMenu={onStripContextMenu}
           className="flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
+          {filesWorkspaceOpen && openFiles.length === 0 && (
+            <div className={cn(editorTabBase, editorTabActive, "max-w-[220px]")}>
+              <FileTypeIcon name="Untitled-1.txt" />
+              <span className="truncate">{t("common.untitled")}-1</span>
+            </div>
+          )}
           {/* File tabs */}
           {openFiles.map((path) => {
             const isActive = activeFile === path
