@@ -2248,9 +2248,15 @@ export default function App() {
               >
                 <div className="flex min-h-0 flex-1">
                   <aside
-                    style={{ width: editorSplit ? chatWidth : "100%" }}
+                    style={{
+                      width: editorSplit
+                        ? chatWidth
+                        : turnDiffOpen
+                          ? "clamp(360px, 38%, 600px)"
+                          : "100%",
+                    }}
                     className={cn(
-                      "relative flex min-w-0 shrink-0 flex-col",
+                      "relative flex min-w-0 shrink-0 flex-col transition-[width] duration-200 ease-out",
                       editorSplit &&
                         "ml-2 mb-2 mt-2 overflow-hidden rounded-xl border border-codezal bg-codezal-sidebar shadow-panel",
                     )}
@@ -2285,18 +2291,17 @@ export default function App() {
                     </div>
                   )}
 
-                  {editorSplit && (
-                    <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+                  {(editorSplit || turnDiffOpen) && (
+                    <section
+                      className={cn(
+                        "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-codezal-bg",
+                        turnDiffOpen && "animate-turn-diff-in border-l border-codezal",
+                      )}
+                    >
                       {editorContent}
                     </section>
                   )}
                 </div>
-
-                {turnDiffOpen && (
-                  <section className="animate-turn-diff-in absolute inset-y-0 right-0 z-30 flex w-[min(52vw,1100px)] min-w-[640px] max-w-full flex-col overflow-hidden border-l border-codezal bg-codezal-bg shadow-2xl max-[900px]:w-full max-[900px]:min-w-0">
-                    {editorContent}
-                  </section>
-                )}
 
                 {chatResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
               </main>
