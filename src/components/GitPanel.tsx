@@ -63,11 +63,16 @@ const COMMIT_MAX_PX = 200
 type Props = {
   workspacePath?: string
   onClose?: () => void
+  surface?: "full" | "changes" | "review"
 }
 
-export function GitPanel({ workspacePath, onClose }: Props) {
+type GitView = "worktree" | "branch" | "pr"
+
+export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   const t = useT()
-  const [view, setView] = useState<"worktree" | "branch" | "pr">("worktree")
+  const [localView, setView] = useState<GitView>("worktree")
+  const view: GitView =
+    surface === "review" ? "pr" : surface === "changes" && localView === "pr" ? "worktree" : localView
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [branch, setBranch] = useState<GitBranchDiff | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -429,6 +434,7 @@ export function GitPanel({ workspacePath, onClose }: Props) {
         )}
         </div>
       )}
+        {surface !== "review" && (
         <div className="flex gap-0.5 rounded-lg bg-codezal-chip-soft p-0.5 text-sm">
           <button
             type="button"
@@ -454,19 +460,22 @@ export function GitPanel({ workspacePath, onClose }: Props) {
           >
             {t("gitPanel.viewBranch")}
           </button>
-          <button
-            type="button"
-            onClick={() => setView("pr")}
-            className={cn(
-              "flex-1 rounded-md px-2 py-1 font-medium transition-colors",
-              view === "pr"
-                ? "bg-codezal-panel text-codezal-text shadow-sm"
-                : "text-codezal-mute hover:text-codezal-text",
-            )}
-          >
-            {t("tabBar.modePr")}
-          </button>
+          {surface === "full" && (
+            <button
+              type="button"
+              onClick={() => setView("pr")}
+              className={cn(
+                "flex-1 rounded-md px-2 py-1 font-medium transition-colors",
+                view === "pr"
+                  ? "bg-codezal-panel text-codezal-text shadow-sm"
+                  : "text-codezal-mute hover:text-codezal-text",
+              )}
+            >
+              {t("tabBar.modePr")}
+            </button>
+          )}
         </div>
+        )}
       </div>
 
       {error && (

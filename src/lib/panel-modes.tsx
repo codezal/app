@@ -15,6 +15,7 @@ import { t as tStatic } from "@/lib/i18n"
 export type PanelMode =
   | "files"
   | "git"
+  | "review"
   | "agents"
   | "skills"
   | "memory"
@@ -29,6 +30,7 @@ export function modeLabel(m: PanelMode): string {
   switch (m) {
     case "files": return tStatic("tabBar.modeFiles")
     case "git": return tStatic("tabBar.modeGit")
+    case "review": return tStatic("prPanel.aiReview")
     case "agents": return tStatic("tabBar.modeAgents")
     case "skills": return tStatic("tabBar.modeSkills")
     case "memory": return tStatic("tabBar.modeMemory")
@@ -44,6 +46,7 @@ export function modeLabel(m: PanelMode): string {
 export const MODE_ICON: Record<PanelMode, React.ComponentType<{ className?: string }>> = {
   files: FolderIcon,
   git: GitBranch,
+  review: GitBranch,
   agents: Bot,
   skills: Sparkles,
   memory: Notebook,

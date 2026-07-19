@@ -21,6 +21,7 @@ import {
   Globe,
   ImageIcon,
   ListChecks,
+  Loader2,
   MessageSquarePlus,
   Network,
   Pencil,
@@ -85,6 +86,7 @@ type Props = {
   // Send selected text to a full split chat with normal tool access.
   onAskSplitChat?: (question: string) => void
   onContinue?: () => void
+  onQuickPrompt?: (prompt: string) => void
   inCard?: boolean
   onScrolledChange?: (scrolled: boolean) => void
 }
@@ -104,6 +106,7 @@ export function MessageList({
   onAskSideChat,
   onAskSplitChat,
   onContinue,
+  onQuickPrompt,
   inCard = false,
 }: Props) {
   const t = useT()
@@ -394,12 +397,12 @@ export function MessageList({
     >
       <div
         ref={contentRef}
-        className={cn("mx-auto w-full max-w-[860px] pt-4", inCard ? "px-3" : "px-6")}
+        className={cn("mx-auto w-full max-w-[800px] pt-2", inCard ? "px-3" : "px-6")}
         onMouseUp={onContentMouseUp}
         onMouseDown={() => setAskSel(null)}
         onContextMenu={onContentContextMenu}
       >
-        <div className="flex flex-col gap-1 py-5">
+        <div className="flex flex-col gap-1 py-3">
           {(hiddenCount > 0 || hasOlder) && (
             <button
               onClick={loadEarlier}
@@ -412,7 +415,8 @@ export function MessageList({
             </button>
           )}
           {shown.map((m, i) => {
-            const prevUserId = findPrevUserId(shown, i)
+            const prevUser = findPrevUser(shown, i)
+            const prevUserId = prevUser?.id ?? null
             return (
               <Bubble
                 key={m.id}
@@ -445,6 +449,10 @@ export function MessageList({
                     ? onContinue
                     : undefined
                 }
+                securityActions={
+                  m.role === "assistant" && /^\/security(?:\s|$)/i.test(prevUser?.content.trim() ?? "")
+                }
+                onQuickPrompt={onQuickPrompt}
               />
             )
           })}
@@ -601,6 +609,7 @@ function ChatSearchBar({
       <input
         ref={inputRef}
         value={query}
+        aria-label={t("chatSearch.placeholder")}
         onChange={(e) => onQuery(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -623,6 +632,7 @@ function ChatSearchBar({
         onClick={onPrev}
         disabled={count === 0}
         title={t("chatSearch.prev")}
+        aria-label={t("chatSearch.prev")}
         className="flex h-6 w-6 items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text disabled:opacity-40"
       >
         <ChevronRight className="h-4 w-4 -rotate-90" />
@@ -632,6 +642,7 @@ function ChatSearchBar({
         onClick={onNext}
         disabled={count === 0}
         title={t("chatSearch.next")}
+        aria-label={t("chatSearch.next")}
         className="flex h-6 w-6 items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text disabled:opacity-40"
       >
         <ChevronRight className="h-4 w-4 rotate-90" />
@@ -640,6 +651,7 @@ function ChatSearchBar({
         type="button"
         onClick={onClose}
         title={t("common.close")}
+        aria-label={t("common.close")}
         className="flex h-6 w-6 items-center justify-center rounded text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
       >
         <X className="h-4 w-4" />
@@ -660,6 +672,8 @@ type BubbleProps = {
   onReview?: (path?: string) => void
   onOpenAgentPanel?: () => void
   onContinue?: () => void
+  securityActions?: boolean
+  onQuickPrompt?: (prompt: string) => void
 }
 
 const Bubble = memo(BubbleImpl, (prev, next) => {
@@ -672,7 +686,9 @@ const Bubble = memo(BubbleImpl, (prev, next) => {
     !!prev.onBranch === !!next.onBranch &&
     !!prev.onRevert === !!next.onRevert &&
     !!prev.onReview === !!next.onReview &&
-    !!prev.onContinue === !!next.onContinue
+    !!prev.onContinue === !!next.onContinue &&
+    prev.securityActions === next.securityActions &&
+    !!prev.onQuickPrompt === !!next.onQuickPrompt
   )
 })
 
@@ -688,6 +704,8 @@ function BubbleImpl({
   onReview,
   onOpenAgentPanel,
   onContinue,
+  securityActions,
+  onQuickPrompt,
 }: BubbleProps) {
   const t = useT()
   const isUser = m.role === "user"
@@ -863,6 +881,10 @@ function BubbleImpl({
           </div>
         )}
 
+        {!isUser && !streaming && !m.pending && securityActions && (
+          <SecurityFollowupActions onPrompt={onQuickPrompt} />
+        )}
+
         {!isUser && !streaming && !m.pending && m.localStats && (
           <div className="mt-1.5 flex items-center gap-2 text-xs text-codezal-mute">
             <span>⚡ {m.localStats.tokPerSec.toFixed(1)} tok/s</span>
@@ -938,6 +960,7 @@ function ActionBtn({
       type="button"
       onClick={onClick}
       title={title}
+      aria-label={title}
       className={cn(
         "flex h-5 w-5 items-center justify-center rounded border border-transparent text-codezal-mute hover:border-codezal hover:text-codezal-text",
         danger && "hover:border-destructive/40 hover:text-destructive",
@@ -945,6 +968,38 @@ function ActionBtn({
     >
       {children}
     </button>
+  )
+}
+
+function SecurityFollowupActions({ onPrompt }: { onPrompt?: (prompt: string) => void }) {
+  const t = useT()
+  const insert = (prompt: string) => {
+    if (onPrompt) onPrompt(prompt)
+    else insertToFocusedComposer(prompt)
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-codezal-hair pt-3">
+      <span className="mr-1 text-sm font-medium text-codezal-dim">
+        {t("messageList.securityNextStep")}
+      </span>
+      <button
+        type="button"
+        onClick={() => insert(t("messageList.securityReviewPrompt"))}
+        className="flex h-8 items-center gap-1.5 rounded-lg border border-codezal-strong bg-codezal-panel px-3 text-sm font-medium text-codezal-text transition-colors hover:bg-codezal-panel-2 focus-visible:ring-2 focus-visible:ring-codezal-accent/45"
+      >
+        <Eye className="h-3.5 w-3.5 text-codezal-dim" aria-hidden />
+        {t("messageList.securityReviewAction")}
+      </button>
+      <button
+        type="button"
+        onClick={() => insert(t("messageList.securityFixPrompt"))}
+        className="flex h-8 items-center gap-1.5 rounded-lg bg-codezal-text px-3 text-sm font-medium text-codezal-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-codezal-accent/45"
+      >
+        <Wrench className="h-3.5 w-3.5" aria-hidden />
+        {t("messageList.securityFixAction")}
+      </button>
+    </div>
   )
 }
 
@@ -1057,7 +1112,7 @@ function UserContent({
   return (
     <div className="flex w-full flex-col items-end gap-1.5">
       {images && images.length > 0 && (
-        <div className="flex max-w-[80%] flex-wrap justify-end gap-2">
+        <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
           {images.map((im, i) => (
             <StoredImage
               key={im.id}
@@ -1077,7 +1132,7 @@ function UserContent({
         />
       )}
       {files && files.length > 0 && (
-        <div className="flex max-w-[80%] flex-wrap justify-end gap-2">
+        <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
           {files.map((f) => (
             <div
               key={f.id}
@@ -1095,7 +1150,7 @@ function UserContent({
         </div>
       )}
       {pdfs && pdfs.length > 0 && (
-        <div className="flex max-w-[80%] flex-wrap justify-end gap-2">
+        <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
           {pdfs.map((p) => (
             <div
               key={p.id}
@@ -1114,7 +1169,7 @@ function UserContent({
         </div>
       )}
       {content.trim() && (
-        <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-br-md border border-codezal-strong bg-codezal-panel shadow-sm">
+        <div className="max-w-[72%] overflow-hidden rounded-2xl rounded-br-md border border-codezal-strong bg-[hsl(var(--codezal-panel-2)_/_0.7)] shadow-sm">
           <div className="whitespace-pre-wrap px-3.5 py-2 text-md leading-[1.7] text-codezal-text">
             {displayContent}
           </div>
@@ -1134,9 +1189,9 @@ function UserContent({
   )
 }
 
-function findPrevUserId(messages: Message[], i: number): string | null {
+function findPrevUser(messages: Message[], i: number): Message | null {
   for (let k = i - 1; k >= 0; k--) {
-    if (messages[k].role === "user") return messages[k].id
+    if (messages[k].role === "user") return messages[k]
   }
   return null
 }
@@ -1227,23 +1282,9 @@ function PartsRender({
     } else if (p.type === "tool-call") {
       if (isHiddenToolRow(p.toolName)) return
       const last = blocks[blocks.length - 1]
-      const isCtx = CONTEXT_TOOLS.has(p.toolName)
-      const isCode = CODE_TOOLS.has(p.toolName)
       if (last && last.kind === "tools") {
-        const lastIsCtx = CONTEXT_TOOLS.has(last.calls[0].toolName)
-        const lastIsCode = CODE_TOOLS.has(last.calls[0].toolName)
-        if (isCtx && lastIsCtx) {
-          last.calls.push(p)
-          return
-        }
-        if (isCode && lastIsCode) {
-          last.calls.push(p)
-          return
-        }
-        if (!isCtx && !lastIsCtx && last.calls[0].toolName === p.toolName && !p.toolName.includes("__")) {
-          last.calls.push(p)
-          return
-        }
+        last.calls.push(p)
+        return
       }
       blocks.push({ kind: "tools", key: `g${i}`, calls: [p] })
     }
@@ -1309,12 +1350,15 @@ function ToolGroup({
   }, 0)
   const [open, setOpen] = useState(false)
 
-  const isContext = CONTEXT_TOOLS.has(calls[0].toolName)
-  const isCode = CODE_TOOLS.has(calls[0].toolName)
+  const isContext = calls.every((call) => CONTEXT_TOOLS.has(call.toolName))
+  const isCode = calls.every((call) => CODE_TOOLS.has(call.toolName))
+  const mixedKinds = new Set(calls.map((call) => call.toolName)).size > 1
   const runningAny = calls.some((c) => !resultMap.get(c.toolCallId))
 
   let typeSummary: string
-  if (isCode) {
+  if (mixedKinds) {
+    typeSummary = t("messageList.toolCallsCount", { count: calls.length })
+  } else if (isCode) {
     typeSummary = summarizeTool(calls[0].toolName, calls.length, runningAny, t)
   } else {
     const counts = new Map<string, { n: number; running: number }>()
@@ -1349,23 +1393,36 @@ function ToolGroup({
   }
 
   return (
-    <div className="my-1 border-l-2 border-codezal-hair pl-2 text-md">
+    <div
+      className="my-2 overflow-hidden rounded-xl border border-codezal-hair bg-[hsl(var(--codezal-panel)_/_0.4)] text-md"
+      aria-busy={runningAny || undefined}
+      aria-live="polite"
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-center gap-2 rounded-r-lg px-2 py-1 text-left hover:bg-codezal-chip/40"
+        aria-expanded={open}
+        className="group flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-codezal-chip/40"
       >
+        {errorCount > 0 ? (
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
+        ) : runningAny ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-codezal-accent" aria-hidden />
+        ) : (
+          <Check className="h-3.5 w-3.5 shrink-0 text-codezal-ok" aria-hidden />
+        )}
         {isContext ? (
           <span className="flex min-w-0 items-baseline gap-1.5 truncate">
-            <span className="shrink-0 text-codezal-dim">{ctxHead}</span>
-            <span className="min-w-0 truncate text-codezal-mute">{ctxCounts}</span>
+            <span className="shrink-0 font-medium text-codezal-text">{ctxHead}</span>
+            <span className="min-w-0 truncate text-codezal-dim">{ctxCounts}</span>
           </span>
         ) : (
-          <span className="min-w-0 truncate text-codezal-dim">{typeSummary}</span>
+          <span className="min-w-0 truncate font-medium text-codezal-text">{typeSummary}</span>
         )}
+        <span className="flex-1" />
         <ChevronRight
           className={cn(
-            "h-3 w-3 shrink-0 text-codezal-mute opacity-0 transition-all group-hover:opacity-100",
+            "h-3.5 w-3.5 shrink-0 text-codezal-dim transition-transform",
             open && "rotate-90",
           )}
         />
@@ -1376,14 +1433,14 @@ function ToolGroup({
         )}
       </button>
       {open && (
-        <div className="mt-1 rounded-xl bg-codezal-panel-2 px-2.5 py-1.5">
+        <div className="border-t border-codezal-hair bg-[hsl(var(--codezal-panel-2)_/_0.45)] px-2 py-1.5">
           {calls.map((c) => (
             <ToolRow
               key={c.toolCallId}
               call={c}
               result={resultMap.get(c.toolCallId)}
               onOpenAgentPanel={onOpenAgentPanel}
-              grouped={isContext}
+              grouped
               streaming={streaming}
             />
           ))}
@@ -1490,7 +1547,7 @@ function ToolRow({
       ? "text-destructive"
       : FILE_EDIT_TOOLS.has(call.toolName)
         ? "text-codezal-cmd"
-        : "text-codezal-mute"
+        : "text-codezal-dim"
 
   // Collapsed = quiet row (chip hover); open = detail indented below — no box,
   // border or panel, so expanding never snaps into a table.
@@ -1503,6 +1560,7 @@ function ToolRow({
           else if (isWorkflow) window.dispatchEvent(new CustomEvent("codezal:open-workflows"))
           else if (!noExpand) setOpen((v) => !v)
         }}
+        aria-expanded={!isAgent && !isWorkflow && !noExpand ? open : undefined}
         className="group flex w-full items-center gap-2 rounded-r-lg px-2 py-1.5 text-left hover:bg-codezal-chip/40"
       >
         {createElement(toolIcon(call.toolName), { className: cn("h-3.5 w-3.5 shrink-0", labelColor) })}

@@ -45,6 +45,15 @@ describe("CLI agent providers", () => {
     expect(modelsForAgentProvider("codex-cli", settings)).toEqual(["gpt-custom", "gpt-live"])
   })
 
+  it("uses the current Codex catalog before runtime discovery", () => {
+    const settings = { ...DEFAULT_SETTINGS, agentProviders: defaultAgentProvidersSettings() }
+    expect(modelsForAgentProvider("codex-cli", settings).slice(0, 3)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+    ])
+  })
+
   it("mode mapping follows approval mode and plan sessions", () => {
     expect(resolveNativeAgentMode({ approvalMode: "ask", sessionMode: "build" })).toBe("ask")
     expect(resolveNativeAgentMode({ approvalMode: "auto-review", sessionMode: "build" })).toBe(

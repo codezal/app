@@ -195,7 +195,8 @@ export type Messages = {
     modePlan: string
     modeOrchestra: string
     orchestraModeClose: string
-    planMode: string
+      planMode: string
+      multitask: string
     planModeTitle: string
     orchestraModeTitle: string
     modeGoal?: string
@@ -313,6 +314,11 @@ export type Messages = {
     rerunTitle: string
     incompleteHint: string
     continueAction: string
+    securityNextStep?: string
+    securityReviewPrompt?: string
+    securityReviewAction?: string
+    securityFixPrompt?: string
+    securityFixAction?: string
     forkTitle: string
     revertTitle: string
     revertFilesTitle: string
@@ -634,6 +640,7 @@ export type Messages = {
     noDescription: string
   }
   tabBar: {
+    agent?: string
     chat: string
     files: string
     context: string
@@ -1578,6 +1585,9 @@ export type Messages = {
     }
     drawer: {
       headerPrefix: string
+      navGroupApp: string
+      navGroupModels: string
+      navGroupTools: string
       themeTitle: string
       fontSizeTitle: string
       defaultProviderModelTitle: string

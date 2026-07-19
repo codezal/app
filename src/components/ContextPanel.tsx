@@ -17,7 +17,6 @@ import { readWorkspaceAgents, readUserAgents, type AgentDef } from "@/lib/agents
 import { AgentCard } from "./AgentCard"
 import type { AgentCardPart } from "@/lib/orchestra/types"
 import { GitPanel } from "./GitPanel"
-import { TerminalPanel } from "./TerminalPanel"
 import { PreviewPanel } from "./PreviewPanel"
 import { SddRequirementView } from "./sdd/SddRequirementView"
 import { TodoList } from "./TodoList"
@@ -50,6 +49,7 @@ import { joinFsPath } from "@/lib/fs-path"
 type Props = {
   mode: PanelMode
   onClose: () => void
+  onModeChange?: (mode: PanelMode) => void
   onSend?: (text: string) => void
   onOpenPreview?: (absPath: string) => void
   onBuild?: (draftId: string, planPath: string) => void
@@ -85,25 +85,22 @@ const PANEL_W_KEY = "codezal.contextPanel.width"
 const PANEL_W_MIN = 240
 const PANEL_W_MAX = 1200
 const PANEL_W_DEFAULT = 320
-// Terminal needs more cols; bump default and per-mode key so non-terminal panels stay compact.
-const PANEL_W_KEY_TERMINAL = "codezal.contextPanel.terminalWidth"
-const PANEL_W_TERMINAL_DEFAULT = 560
 // Preview (iframe) also wants to be wide; its own key so it doesn't fight the others.
 const PANEL_W_KEY_PREVIEW = "codezal.contextPanel.previewWidth"
 const PANEL_W_PREVIEW_DEFAULT = 640
 
-export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: Props) {
+export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPreview, onBuild }: Props) {
   const t = useT()
   const active = useSessionsStore((s) => s.active)
   const ws = active?.workspacePath
-  const isTerminal = mode === "terminal"
   const isPreview = mode === "preview"
   const isSdd = mode === "sdd"
   const isFiles = mode === "files"
-  const isFlush = isTerminal || isPreview || isSdd
+  const isWorkspaceDock = isFiles || mode === "git" || mode === "review"
+  const isFlush = isPreview || isSdd
 
-  const storageKey = isTerminal ? PANEL_W_KEY_TERMINAL : isPreview || isSdd ? PANEL_W_KEY_PREVIEW : PANEL_W_KEY
-  const defaultW = isTerminal ? PANEL_W_TERMINAL_DEFAULT : isPreview || isSdd ? PANEL_W_PREVIEW_DEFAULT : PANEL_W_DEFAULT
+  const storageKey = isPreview || isSdd ? PANEL_W_KEY_PREVIEW : PANEL_W_KEY
+  const defaultW = isPreview || isSdd ? PANEL_W_PREVIEW_DEFAULT : PANEL_W_DEFAULT
   const [width, setWidth] = useState<number>(() => {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null
     const n = raw ? Number(raw) : NaN
@@ -142,25 +139,44 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
     document.body.style.userSelect = "none"
   }
 
+  function resizeBy(delta: number) {
+    setWidth((current) => Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, current + delta)))
+  }
+
   return (
     <aside
       aria-label={t("a11y.contextLandmark")}
       style={{ width }}
-      className={cn(
-        "relative z-20 flex shrink-0 self-stretch flex-col overflow-hidden",
-        isFiles
-          ? "border-l border-codezal-hair bg-codezal-sidebar"
-          : "m-4 max-h-[calc(100%-2rem)] rounded-2xl border border-codezal-panel bg-codezal-bg max-[1350px]:fixed max-[1350px]:bottom-4 max-[1350px]:right-4 max-[1350px]:top-[60px] max-[1350px]:m-0 max-[1350px]:max-h-none max-[1350px]:max-w-[calc(100vw-2rem)] max-[1350px]:shadow-2xl",
-      )}
+      className="relative z-20 flex shrink-0 self-stretch flex-col overflow-hidden border-l border-codezal-panel bg-codezal-sidebar max-[900px]:fixed max-[900px]:bottom-9 max-[900px]:right-0 max-[900px]:top-[44px] max-[900px]:max-w-[calc(100vw-1rem)] max-[900px]:shadow-2xl"
     >
       <div
+        role="separator"
+        aria-label={t("contextPanel.resizeTitle")}
+        aria-orientation="vertical"
+        aria-valuemin={PANEL_W_MIN}
+        aria-valuemax={PANEL_W_MAX}
+        aria-valuenow={width}
+        tabIndex={0}
         onMouseDown={startResize}
-        className="group absolute left-0 top-0 z-20 h-full w-[6px] -translate-x-[3px] cursor-col-resize"
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault()
+            resizeBy(12)
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault()
+            resizeBy(-12)
+          }
+        }}
+        className="group absolute left-0 top-0 z-20 h-full w-[6px] -translate-x-[3px] cursor-col-resize focus-visible:outline-none"
         title={t("contextPanel.resizeTitle")}
       >
-        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-codezal-hair transition-colors group-hover:bg-codezal-accent" />
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-codezal-hair transition-colors group-hover:bg-codezal-accent group-focus-visible:bg-codezal-accent" />
       </div>
-      {!isFlush && !isFiles && <PanelHeader mode={mode} onClose={onClose} />}
+      {isWorkspaceDock ? (
+        <WorkspaceDockHeader mode={mode} onChange={onModeChange} onClose={onClose} />
+      ) : (
+        !isFlush && <PanelHeader mode={mode} onClose={onClose} />
+      )}
       <div
         className={cn(
           "flex-1 min-h-0",
@@ -168,12 +184,12 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
         )}
       >
         {mode === "files" && <FilesSection workspacePath={ws} />}
-        {mode === "git" && <GitPanel workspacePath={ws} />}
+        {mode === "git" && <GitPanel workspacePath={ws} surface="changes" />}
+        {mode === "review" && <GitPanel workspacePath={ws} surface="review" />}
         {mode === "agents" && <AgentsSection workspacePath={ws} />}
         {mode === "skills" && <SkillsSection workspacePath={ws} />}
         {mode === "memory" && <MemorySection workspacePath={ws} />}
         {mode === "rules" && <RulesSection workspacePath={ws} />}
-        {mode === "terminal" && <TerminalPanel workspacePath={ws} onClose={onClose} />}
         {mode === "preview" && <PreviewPanel workspacePath={ws} onClose={onClose} />}
         {mode === "sdd" && (
           <SddRequirementView onSend={onSend} onClose={onClose} onOpenPreview={onOpenPreview} onBuild={onBuild} />
@@ -185,10 +201,62 @@ export function ContextPanel({ mode, onClose, onSend, onOpenPreview, onBuild }: 
   )
 }
 
+function WorkspaceDockHeader({
+  mode,
+  onChange,
+  onClose,
+}: {
+  mode: PanelMode
+  onChange?: (mode: PanelMode) => void
+  onClose: () => void
+}) {
+  const t = useT()
+  const tabs: Array<{ mode: "files" | "git" | "review"; label: string }> = [
+    { mode: "files", label: t("tabBar.modeFiles") },
+    { mode: "git", label: t("prPanel.changes") },
+    { mode: "review", label: t("prPanel.aiReview") },
+  ]
+
+  return (
+    <div className="flex h-11 shrink-0 items-end border-b border-codezal-panel bg-codezal-sidebar px-2">
+      <nav aria-label={t("a11y.contextLandmark")} className="flex min-w-0 flex-1 items-end gap-0.5">
+        {tabs.map((tab) => {
+          const active = mode === tab.mode
+          return (
+            <button
+              key={tab.mode}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange?.(tab.mode)}
+              className={cn(
+                "relative h-10 min-w-0 px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-codezal-accent/45",
+                active
+                  ? "text-codezal-text after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-codezal-accent"
+                  : "text-codezal-mute hover:text-codezal-text",
+              )}
+            >
+              <span className="block truncate">{tab.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+      <button
+        type="button"
+        onClick={onClose}
+        title={t("contextPanel.panelClose")}
+        aria-label={t("contextPanel.panelClose")}
+        className="mb-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/45"
+      >
+        <X className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
+  )
+}
+
 function PanelHeader({ mode, onClose }: { mode: PanelMode; onClose: () => void }) {
   const Icon = MODE_ICON[mode]
   return (
-    <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-codezal-hair bg-codezal-sidebar px-3.5">
+    <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-codezal-panel bg-codezal-sidebar px-3.5">
       <Icon className="h-4 w-4 shrink-0 text-codezal-dim" />
       <span className="flex-1 truncate text-md font-medium text-codezal-text">
         {modeLabel(mode)}

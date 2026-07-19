@@ -958,7 +958,7 @@ export async function buildAllTools(
   const supervisor =
     useSettingsStore.getState().settings.supervisor ??
     (await import("@/lib/agents/runtime/supervisor")).DEFAULT_SUPERVISOR_SETTINGS
-  const delegationMode = useSessionsStore.getState().sessions[ownerSessionId]?.delegationMode
+  const delegationMode = useSessionsStore.getState().sessions[ownerSessionId]?.delegationMode ?? "solo"
   if (
     delegationMode === "solo" ||
     !supervisor.enabled ||

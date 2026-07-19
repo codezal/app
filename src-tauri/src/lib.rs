@@ -145,6 +145,7 @@ pub fn run() {
             editors::open_in_editor,
             exec::os_platform,
             exec::resolve_program,
+            exec::terminal_available_programs,
             exec::login_path,
             exec::process_alive,
             fs::fs_read_text_file,

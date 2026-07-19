@@ -45,6 +45,8 @@ function stackOf(err: unknown): string {
 export function isNoiseError(message: string, name?: string): boolean {
   if (name === "AbortError") return true
   if (/\bAbort(Error)?\b|\baborted\b/i.test(message)) return true
+  // WebKit/Tauri can surface normal ReadableStream teardown as a bare cancellation error.
+  if (/^(?:request\s+)?cancell?ed[.!]?$/i.test(message.trim())) return true
   if (RESOURCE_INVALID.test(message)) return true // plugin-http stream teardown (bkz. http-noise.ts)
   if (isTransientNetworkError(message)) return true
   return false

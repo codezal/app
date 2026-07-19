@@ -63,6 +63,8 @@ describe("buildSkillsCatalog", () => {
     const out = buildSkillsCatalog(skills)
     expect(out).toContain("formatter")
     expect(out).toContain("Formats code")
+    expect(out).toContain("path: /a")
+    expect(out).toContain("task clearly matches its description or triggers")
   })
 
   it("trigger'lar listede görünür", () => {

@@ -218,29 +218,6 @@ async function diagnoseProvider(providerId: ProviderId, settings?: ProviderRunti
   return { providerId, command, exists, version, runtime, sdk: null, sdkError: null }
 }
 
-const CODEX_MODELS: ProviderModel[] = [
-  {
-    id: "gpt-5.5",
-    label: "GPT-5.5",
-    description: "Frontier coding and reasoning model.",
-  },
-  {
-    id: "gpt-5.4",
-    label: "GPT-5.4",
-    description: "Strong default model for everyday coding.",
-  },
-  {
-    id: "gpt-5.4-mini",
-    label: "GPT-5.4 Mini",
-    description: "Fast, cost-efficient model for smaller coding tasks.",
-  },
-  {
-    id: "gpt-5.3-codex-spark",
-    label: "GPT-5.3 Codex Spark",
-    description: "Ultra-fast coding model.",
-  },
-]
-
 const CLAUDE_MODELS: ProviderModel[] = [
   { id: "opus-4.6", label: "Opus 4.6", description: "Highest capability Claude coding model." },
   { id: "sonnet-4.6", label: "Sonnet 4.6", description: "Balanced default Claude coding model." },
@@ -255,14 +232,12 @@ const CLAUDE_MODELS: ProviderModel[] = [
   { id: "opus-3", label: "Opus 3" },
 ]
 
-function providerModels(providerId: ProviderId, settings?: ProviderRuntimeSettings): ProviderModel[] {
-  const custom = settings?.models
-    ?.map((model) => model.trim())
-    .filter(Boolean)
-    .map((model) => ({ id: model, label: model, source: "custom" as const }))
-  if (custom?.length) return custom
-  const defaults = providerId === "codex-cli" ? CODEX_MODELS : CLAUDE_MODELS
-  return defaults.map((model) => ({ ...model, source: "runtime" }))
+async function providerModels(
+  providerId: ProviderId,
+  settings?: ProviderRuntimeSettings,
+): Promise<ProviderModel[]> {
+  if (providerId === "codex-cli") return await listCodexModels(settings)
+  return CLAUDE_MODELS.map((model) => ({ ...model, source: "runtime" }))
 }
 
 function modeForCodex(mode: RuntimeMode): { modeId: string; approvalPolicy: string; sandbox: string; networkAccess?: boolean; approvalsReviewer?: "auto_review" } {
@@ -586,6 +561,64 @@ class CodexAppServerClient {
       return
     }
     if (method) this.opts.onNotification(method, msg.params)
+  }
+}
+
+async function listCodexModels(settings?: ProviderRuntimeSettings): Promise<ProviderModel[]> {
+  const argv = parseCommand(settings?.command, ["codex", "app-server"])
+  const stderr: string[] = []
+  const client = new CodexAppServerClient(argv, {
+    env: settings?.env,
+    onNotification: () => undefined,
+    onRequest: async (method) => {
+      throw new Error(`Unexpected Codex app-server request while listing models: ${method}`)
+    },
+    onStderr: (line) => {
+      const text = line.trim()
+      if (text) stderr.push(text)
+    },
+  })
+  try {
+    await client.start()
+    const models: ProviderModel[] = []
+    const seen = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const response = await client.request(
+        "model/list",
+        { cursor, limit: 100, includeHidden: false },
+        30_000,
+      )
+      if (!isRecord(response) || !Array.isArray(response.data)) {
+        throw new Error("Codex app-server returned an invalid model list")
+      }
+      for (const value of response.data) {
+        if (!isRecord(value)) continue
+        const id = typeof value.model === "string"
+          ? value.model.trim()
+          : typeof value.id === "string"
+            ? value.id.trim()
+            : ""
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+        models.push({
+          id,
+          label: typeof value.displayName === "string" ? value.displayName : id,
+          description: typeof value.description === "string" ? value.description : undefined,
+          source: "runtime",
+        })
+      }
+      cursor = typeof response.nextCursor === "string" && response.nextCursor
+        ? response.nextCursor
+        : null
+    } while (cursor)
+    return models
+  } catch (error) {
+    const detail = stderr.slice(-3).join(" · ")
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(detail ? `${message}: ${detail}` : message, { cause: error })
+  } finally {
+    client.dispose()
   }
 }
 
@@ -935,7 +968,7 @@ async function handleRequest(req: Record<string, unknown>) {
     case "provider/listModels": {
       const providerId = params.providerId as ProviderId
       const settings = isRecord(params.providerSettings) ? params.providerSettings as ProviderRuntimeSettings : undefined
-      return respond(id, { providerId, models: providerModels(providerId, settings) })
+      return respond(id, { providerId, models: await providerModels(providerId, settings) })
     }
     case "session/create": {
       const sessionId = randomUUID()

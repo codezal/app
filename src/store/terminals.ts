@@ -1,7 +1,7 @@
-// Birden fazla terminal session — Claude Code stili.
-// Her terminal kendi entries, history, running state'ini tutar.
+// Multiple terminal sessions. Each terminal owns its output and process state.
 import { create } from "zustand"
 import { createId } from "@/lib/id"
+import type { TerminalCliId } from "@/lib/terminal-cli"
 
 export type TermEntry =
   | { kind: "cmd"; cwd: string; cmd: string }
@@ -12,8 +12,11 @@ export type TermEntry =
 export type TerminalSession = {
   id: string
   name: string
-  chatSessionId?: string
-  // null = running command kill handle
+  chatSessionId: string
+  workspacePath?: string
+  toolId?: TerminalCliId
+  launchCommand?: string
+  // Null when there is no running command kill handle.
   killHandle: { kill: () => Promise<void> } | null
   running: boolean
   entries: TermEntry[]
@@ -24,9 +27,29 @@ type State = {
   sessions: TerminalSession[]
   activeId: string | null
 
-  ensureOne: (chatSessionId?: string) => string
-  hydrate: (sessions: { id: string; name: string; history?: string[] }[], activeId: string | null) => void
-  create: (chatSessionId?: string) => string
+  ensureOne: (chatSessionId: string, workspacePath?: string) => string
+  hydrate: (
+    sessions: {
+      id: string
+      name: string
+      chatSessionId?: string
+      workspacePath?: string
+      toolId?: TerminalCliId
+      launchCommand?: string
+      history?: string[]
+    }[],
+    activeId: string | null,
+  ) => void
+  create: (
+    chatSessionId: string,
+    workspacePath?: string,
+    options?: {
+      id?: string
+      name?: string
+      toolId?: TerminalCliId
+      launchCommand?: string
+    },
+  ) => string
   remove: (id: string) => void
   rename: (id: string, name: string) => void
   setActive: (id: string) => void
@@ -38,51 +61,93 @@ type State = {
 
 const MAX_OUTPUT = 200_000
 
+function nextTerminalName(sessions: TerminalSession[], preferred?: string): string {
+  const names = new Set(sessions.map((session) => session.name))
+  if (preferred) {
+    if (!names.has(preferred)) return preferred
+    let suffix = 2
+    while (names.has(`${preferred} ${suffix}`)) suffix += 1
+    return `${preferred} ${suffix}`
+  }
+
+  let suffix = 1
+  while (names.has(`Terminal ${suffix}`)) suffix += 1
+  return `Terminal ${suffix}`
+}
 
 export const useTerminalsStore = create<State>((set, get) => ({
   sessions: [],
   activeId: null,
 
-  ensureOne: (chatSessionId) => {
+  ensureOne: (chatSessionId, workspacePath) => {
     const st = get()
-    const own = st.sessions.filter((s) => s.chatSessionId === chatSessionId)
+    const own = st.sessions.filter(
+      (s) => s.chatSessionId === chatSessionId && s.workspacePath === workspacePath,
+    )
     if (own.length > 0) {
       const act = own.some((s) => s.id === st.activeId) ? st.activeId! : own[0].id
       if (act !== st.activeId) set({ activeId: act })
       return act
     }
-    const orphan = st.sessions.find((s) => !s.chatSessionId)
-    if (orphan) {
-      set((s) => ({
-        sessions: s.sessions.map((t) => (t.id === orphan.id ? { ...t, chatSessionId } : t)),
-        activeId: orphan.id,
-      }))
-      return orphan.id
+
+    const staleIds = new Set(
+      st.sessions
+        .filter((s) => s.chatSessionId === chatSessionId && s.workspacePath !== workspacePath)
+        .map((s) => s.id),
+    )
+    if (staleIds.size > 0) {
+      set((s) => ({ sessions: s.sessions.filter((terminal) => !staleIds.has(terminal.id)) }))
     }
-    return get().create(chatSessionId)
+    return get().create(chatSessionId, workspacePath)
   },
 
   hydrate: (sessions, activeId) => {
-    if (sessions.length === 0) return
-    const restored: TerminalSession[] = sessions.map((s) => ({
-      id: s.id,
-      name: s.name,
-      killHandle: null,
-      running: false,
-      entries: [],
-      history: s.history ?? [],
-    }))
-    const active = activeId && restored.some((s) => s.id === activeId) ? activeId : restored[0].id
-    set({ sessions: restored, activeId: active })
+    const restored = sessions.reduce<TerminalSession[]>((out, s) => {
+      if (!s.chatSessionId) return out
+      out.push({
+        id: s.id,
+        name: s.name,
+        chatSessionId: s.chatSessionId,
+        workspacePath: s.workspacePath,
+        toolId: s.toolId,
+        launchCommand: s.launchCommand,
+        killHandle: null,
+        running: false,
+        entries: [],
+        history: s.history ?? [],
+      })
+      return out
+    }, [])
+    if (restored.length === 0) return
+    set((current) => {
+      const restoredIds = new Set(restored.map((session) => session.id))
+      const merged = [
+        ...restored,
+        ...current.sessions.filter((session) => !restoredIds.has(session.id)),
+      ]
+      const nextActiveId =
+        current.activeId && merged.some((session) => session.id === current.activeId)
+          ? current.activeId
+          : activeId && merged.some((session) => session.id === activeId)
+            ? activeId
+            : merged[0]?.id ?? null
+      return { sessions: merged, activeId: nextActiveId }
+    })
   },
 
-  create: (chatSessionId) => {
-    const id = createId("terminal")
-    const n = get().sessions.filter((s) => s.chatSessionId === chatSessionId).length + 1
+  create: (chatSessionId, workspacePath, options) => {
+    const id = options?.id ?? createId("terminal")
+    const scopedSessions = get().sessions.filter(
+      (session) =>
+        session.chatSessionId === chatSessionId && session.workspacePath === workspacePath,
+    )
     const session: TerminalSession = {
       id,
-      name: `Terminal ${n}`,
+      name: nextTerminalName(scopedSessions, options?.name),
       chatSessionId,
+      workspacePath,
+      toolId: options?.toolId,
+      launchCommand: options?.launchCommand,
       killHandle: null,
       running: false,
       entries: [],
@@ -97,9 +162,19 @@ export const useTerminalsStore = create<State>((set, get) => ({
 
   remove: (id) => {
     set((st) => {
+      const removed = st.sessions.find((session) => session.id === id)
       const next = st.sessions.filter((s) => s.id !== id)
+      const scoped = removed
+        ? next.filter(
+            (session) =>
+              session.chatSessionId === removed.chatSessionId &&
+              session.workspacePath === removed.workspacePath,
+          )
+        : []
       const active =
-        st.activeId === id ? next[next.length - 1]?.id ?? null : st.activeId
+        st.activeId === id
+          ? (scoped[scoped.length - 1] ?? next[next.length - 1])?.id ?? null
+          : st.activeId
       return { sessions: next, activeId: active }
     })
   },

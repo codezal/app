@@ -9,6 +9,9 @@ const MAX_DEPTH = 6
 const ROOTS: { rel: string; origin: SkillOrigin }[] = [
   { rel: ".codezal/skills", origin: "codezal" },
   { rel: ".agents/skills", origin: "agents" },
+  { rel: ".agent/skills", origin: "agent" },
+  { rel: ".codex/skills", origin: "codex" },
+  { rel: ".claude/skills", origin: "claude" },
 ]
 
 export async function readWorkspaceSkills(

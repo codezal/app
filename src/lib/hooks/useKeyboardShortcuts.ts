@@ -18,6 +18,7 @@ type ShortcutArgs = {
   setShowChatSearch: Dispatch<SetStateAction<boolean>>
   setShowForkDialog: Dispatch<SetStateAction<boolean>>
   setPanelMode: Dispatch<SetStateAction<PanelMode | null>>
+  toggleTerminal: () => void
   menuRef: { current: MenuActions }
 }
 
@@ -61,7 +62,7 @@ export function useKeyboardShortcuts(args: ShortcutArgs) {
         a.setPanelMode((m) => (m ? null : "files"))
       } else if (e.shiftKey && (e.key === "T" || e.key === "t")) {
         e.preventDefault()
-        a.setPanelMode((m) => (m === "terminal" ? null : "terminal"))
+        a.toggleTerminal()
       } else if (e.key === "m" || e.key === "M") {
         // Plan/Build mode toggle
         e.preventDefault()

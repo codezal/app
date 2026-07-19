@@ -7,13 +7,10 @@ import {
 } from "./memory"
 import { DEFAULT_MEMORY, type MemorySettings } from "./memory-settings"
 import { loadMemoryContextBlock } from "./memory-store"
-import { loadMethodsCatalog, relevanceScore } from "./methods"
+import { loadMethodsCatalog } from "./methods"
 import { loadIndex, queryIndex } from "./semantic-index"
 import { sliceCharsSafe } from "./text"
-import { listAllSkills, buildSkillsCatalog } from "./skills"
-
-const SKILLS_RAG_THRESHOLD = 8
-const SKILLS_RAG_TOPK = 6
+import { buildSkillsPromptSection } from "./skills"
 import { readWorkspaceAgents, readUserAgents, buildAgentsCatalog } from "./agents"
 import { listPluginAgents } from "./agents/plugin"
 import type { OrchestraConfig } from "./orchestra/types"
@@ -432,7 +429,7 @@ export async function buildSystemPrompt({
   }
 
   const supervisorCatalog =
-    delegationMode === "solo"
+    (delegationMode ?? "solo") === "solo"
       ? ""
       : buildSupervisorCatalog(
           useSettingsStore.getState().settings.supervisor ?? DEFAULT_SUPERVISOR_SETTINGS,
@@ -463,23 +460,11 @@ export async function buildSystemPrompt({
 
   parts.push(...(await buildMemoryPromptSections({ workspacePath, memory, recentText, mode: "full" })))
 
-  // Skills katalogu (workspace + user + plugin) — dedup + precedence index'te.
-  try {
-    const all = await listAllSkills(workspacePath)
-    const disabled = new Set(useSettingsStore.getState().settings.disabledSkills ?? [])
-    let visible = all.filter((s) => !disabled.has(s.name))
-    if (recentText?.trim() && visible.length > SKILLS_RAG_THRESHOLD) {
-      const ranked = visible
-        .map((s) => ({ s, score: relevanceScore(`${s.name} ${s.description} ${(s.triggers ?? []).join(" ")}`, recentText) }))
-        .sort((a, b) => b.score - a.score)
-      const hits = ranked.filter((r) => r.score > 0)
-      if (hits.length > 0) visible = ranked.slice(0, SKILLS_RAG_TOPK).map((r) => r.s)
-    }
-    const catalog = buildSkillsCatalog(visible)
-    if (catalog) parts.push("\n" + catalog)
-  } catch {
-    // Intentionally ignored.
-  }
+  const skillsCatalog = await buildSkillsPromptSection(workspacePath, {
+    recentText,
+    disabledSkills: useSettingsStore.getState().settings.disabledSkills,
+  })
+  if (skillsCatalog) parts.push("\n" + skillsCatalog)
 
   const sem = useSettingsStore.getState().settings.semantic
   if (sem?.enabled && sem.autoContext && workspacePath && (recentText?.trim().length ?? 0) >= 8) {

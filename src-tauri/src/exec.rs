@@ -60,7 +60,133 @@ pub fn resolve_program(app: AppHandle, name: String) -> Option<String> {
     if let Some(p) = find_in_dirs(&bundled, &name) {
         return Some(p.to_string_lossy().into_owned());
     }
+    let login = login_path(app);
+    let login_dirs: Vec<PathBuf> = std::env::split_paths(&login).collect();
+    if let Some(p) = find_in_dirs(&login_dirs, &name) {
+        return Some(p.to_string_lossy().into_owned());
+    }
     which(&name).map(|p| p.to_string_lossy().into_owned())
+}
+
+fn valid_program_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalAvailableProgram {
+    name: String,
+    launch_command: String,
+}
+
+#[cfg(unix)]
+fn quote_terminal_command(path: &std::path::Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
+fn known_terminal_program(name: &str) -> Option<String> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let candidates: Vec<PathBuf> = match name {
+        "codex" => {
+            let mut paths = vec![PathBuf::from(
+                "/Applications/ChatGPT.app/Contents/Resources/codex",
+            )];
+            if let Some(home) = &home {
+                paths.push(home.join("Applications/ChatGPT.app/Contents/Resources/codex"));
+                paths.push(home.join(".local/bin/codex"));
+            }
+            paths
+        }
+        "claude" => home
+            .map(|home| vec![home.join(".local/bin/claude")])
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    candidates
+        .into_iter()
+        .find(|path| is_executable_file(path))
+        .map(|path| quote_terminal_command(&path))
+}
+
+/// Reports commands visible to the same interactive shell used by the PTY.
+/// This intentionally differs from `resolve_program`: GUI apps can have a
+/// login-shell PATH that does not match the user's interactive shell startup.
+#[tauri::command]
+pub fn terminal_available_programs(names: Vec<String>) -> Vec<TerminalAvailableProgram> {
+    let names: Vec<String> = names
+        .into_iter()
+        .filter(|name| valid_program_name(name))
+        .collect();
+    if names.is_empty() {
+        return Vec::new();
+    }
+
+    #[cfg(unix)]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+        let probe = names
+            .iter()
+            .map(|name| {
+                format!("command -v {name} >/dev/null 2>&1 && printf '__CODEZAL_CLI__{name}\\n'")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        let stdout = std::process::Command::new(shell)
+            .args(["-ic", &probe])
+            .output()
+            .ok()
+            .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+            .unwrap_or_default();
+        return names
+            .into_iter()
+            .filter_map(|name| {
+                let visible = stdout
+                    .lines()
+                    .any(|line| line == format!("__CODEZAL_CLI__{name}"));
+                let launch_command = if visible {
+                    Some(name.clone())
+                } else {
+                    known_terminal_program(&name)
+                }?;
+                Some(TerminalAvailableProgram {
+                    name,
+                    launch_command,
+                })
+            })
+            .collect();
+    }
+
+    #[cfg(windows)]
+    {
+        let shell = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".into());
+        return names
+            .into_iter()
+            .filter_map(|name| {
+                let visible = std::process::Command::new(&shell)
+                    .args(["/D", "/S", "/C", &format!("where {name} >NUL 2>NUL")])
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false);
+                visible.then(|| TerminalAvailableProgram {
+                    launch_command: name.clone(),
+                    name,
+                })
+            })
+            .collect();
+    }
 }
 
 static LOGIN_PATH: OnceLock<String> = OnceLock::new();

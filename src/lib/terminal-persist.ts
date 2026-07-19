@@ -1,12 +1,17 @@
 //
 //
 import { readJson, writeJson } from "@/lib/storage"
+import type { TerminalCliId } from "@/lib/terminal-cli"
 
 const TERMINALS_FILE = "terminals.json"
 
 export type TerminalSnapshot = {
   id: string
   name: string
+  chatSessionId?: string
+  workspacePath?: string
+  toolId?: TerminalCliId
+  launchCommand?: string
   buffer: string
   history?: string[]
   savedAt: number

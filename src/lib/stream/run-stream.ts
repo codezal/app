@@ -32,6 +32,7 @@ import { lastToolBeat } from "@/lib/tool-heartbeat"
 import { applyModelToolPolicy, buildAllTools, deferredToolNames, makeToolSearchTool, resetDoomLoop, TOOL_SEARCH_NAME } from "@/lib/tools"
 import { listConnectedMcpInstructions } from "@/lib/mcp"
 import { buildMemoryPromptSections, buildSystemPrompt } from "@/lib/system-prompt"
+import { buildSkillsPromptSection } from "@/lib/skills"
 import { PrivacyScrubber, privacyActive } from "@/lib/privacy"
 
 function lastUserText(history: ModelMessage[]): string | undefined {
@@ -351,13 +352,22 @@ export function makeRunStream(deps: RunStreamDeps) {
             })
           : []
       const localMemoryText = localMemory.length ? "\n" + localMemory.join("\n") : ""
+      const localSkillsCatalog =
+        localRuntimeProvider && localAgent
+          ? await buildSkillsPromptSection(cur.workspacePath, {
+              recentText,
+              disabledSkills: settings.disabledSkills,
+            })
+          : ""
+      const localSkillsText = localSkillsCatalog ? "\n" + localSkillsCatalog : ""
       const system =
         localRuntimeProvider
           ? localAgent
             ? "You are a coding assistant running locally inside Codezal. You have a lean set of core tools plus a `tool_search` tool to discover more. EMIT tool calls yourself (do not describe them or ask the user to run them) to read/edit files and run commands, then answer." +
               localCodeHint +
               " For plain questions, just answer directly. Reply in the user's language." +
-              localMemoryText
+              localMemoryText +
+              localSkillsText
             : "You are a helpful, concise assistant running locally inside Codezal. Reply directly, in the user's language." +
               localMemoryText
           : await buildSystemPrompt({
@@ -377,7 +387,7 @@ export function makeRunStream(deps: RunStreamDeps) {
               peers: listPeers(useSessionsStore.getState().index, sid),
               ownHandle: cur.handle,
               recentText,
-              delegationMode: cur.delegationMode,
+              delegationMode: cur.delegationMode ?? "solo",
             })
       // Model capabilities (reasoning support, output limit) from the catalog.
       const catalogData = settings.providerCatalog?.data as ProvidersCatalog | undefined

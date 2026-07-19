@@ -95,15 +95,50 @@ const MD_COMPONENTS: Components = {
   },
 }
 
-const Block = memo(function Block({ text, rich }: { text: string; rich: boolean }) {
+type SeverityTone = "critical" | "high" | "medium" | "low"
+
+const SEVERITY_STYLES: Record<SeverityTone, string> = {
+  critical: "border-destructive/40 bg-destructive/10 [&_strong:first-child]:text-destructive",
+  high: "border-amber-500/40 bg-amber-500/10 [&_strong:first-child]:text-amber-500",
+  medium: "border-codezal-accent/40 bg-codezal-accent/10 [&_strong:first-child]:text-codezal-accent",
+  low: "border-codezal-strong bg-[hsl(var(--codezal-panel-2)_/_0.45)] [&_strong:first-child]:text-codezal-dim",
+}
+
+function severityTone(text: string): SeverityTone | null {
+  const label = /^\*\*\s*([^:*]+)\s*:\s*\*\*/.exec(text.trim())?.[1]?.toLocaleLowerCase()
+  if (!label) return null
+  if (label === "critical" || label === "kritik") return "critical"
+  if (label === "high" || label === "yüksek") return "high"
+  if (label === "medium" || label === "orta") return "medium"
+  if (label === "low" || label === "düşük") return "low"
+  return null
+}
+
+const Block = memo(function Block({
+  text,
+  rich,
+  severity,
+}: {
+  text: string
+  rich: boolean
+  severity: SeverityTone | null
+}) {
   return (
-    <ReactMarkdown
-      remarkPlugins={rich ? REMARK_RICH : REMARK_LITE}
-      rehypePlugins={(rich ? REHYPE_RICH : REHYPE_LITE) as ComponentPropsWithoutRef<typeof ReactMarkdown>["rehypePlugins"]}
-      components={MD_COMPONENTS}
+    <div
+      className={cn(
+        severity &&
+          "my-2 rounded-lg border px-3 py-0.5 [&>p]:my-1.5",
+        severity && SEVERITY_STYLES[severity],
+      )}
     >
-      {text}
-    </ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={rich ? REMARK_RICH : REMARK_LITE}
+        rehypePlugins={(rich ? REHYPE_RICH : REHYPE_LITE) as ComponentPropsWithoutRef<typeof ReactMarkdown>["rehypePlugins"]}
+        components={MD_COMPONENTS}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
   )
 })
 
@@ -124,6 +159,16 @@ function splitBlocks(src: string): string[] {
         inFence = false
         fenceChar = ""
       }
+    }
+    if (
+      !inFence &&
+      /^\*\*\s*(?:critical|high|medium|low|kritik|yüksek|orta|düşük)\s*:\s*\*\*/i.test(
+        line.trim(),
+      )
+    ) {
+      if (cur.length > 0) blocks.push(cur.join("\n"))
+      cur = [line]
+      continue
     }
     if (!inFence && line.trim() === "") {
       if (cur.length > 0) {
@@ -155,7 +200,14 @@ function MarkdownImpl({ content, className, streaming }: Props) {
       <div className={cn(PROSE, className)}>
         {blocks.map((raw, i) => {
           const live = !!streaming && i === blocks.length - 1
-          return <Block key={`b${i}`} text={live ? healSafe(raw) : raw} rich={!live} />
+          return (
+            <Block
+              key={`b${i}`}
+              text={live ? healSafe(raw) : raw}
+              rich={!live}
+              severity={severityTone(raw)}
+            />
+          )
         })}
       </div>
     </MarkdownBoundary>

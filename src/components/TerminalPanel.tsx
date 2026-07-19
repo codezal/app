@@ -3,7 +3,6 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { SerializeAddon } from "@xterm/addon-serialize"
-import { ChevronDown, Pencil, Plus, Sparkles, Trash2, X } from "@/lib/icons"
 import { useTerminalsStore, type TerminalSession } from "@/store/terminals"
 import { useSessionsStore } from "@/store/sessions"
 import { spawnPty, type PtyHandle } from "@/lib/pty"
@@ -21,83 +20,87 @@ import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { t as tStatic } from "@/lib/i18n"
 import { errorMessage } from "@/lib/errors"
+import { registerDropTarget } from "@/lib/internal-drag"
+import { formatTerminalPathInput } from "@/lib/terminal-path-input"
 
 type Props = {
   workspacePath?: string
-  onClose?: () => void
+  terminalId?: string
 }
 
-export function TerminalPanel({ workspacePath, onClose }: Props) {
+export function TerminalPanel({ workspacePath, terminalId }: Props) {
   const t = useT()
   const sessions = useTerminalsStore((s) => s.sessions)
   const activeId = useTerminalsStore((s) => s.activeId)
   const ensureOne = useTerminalsStore((s) => s.ensureOne)
-  const setActive = useTerminalsStore((s) => s.setActive)
   const create = useTerminalsStore((s) => s.create)
-  const remove = useTerminalsStore((s) => s.remove)
-  const rename = useTerminalsStore((s) => s.rename)
+  const setActive = useTerminalsStore((s) => s.setActive)
   const chatSessionId = useSessionsStore((s) => s.activeId)
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
   const scopedChatSessionId = chatSessionId ?? undefined
-  const visibleSessions = sessions.filter((s) => s.chatSessionId === scopedChatSessionId)
+  const visibleSession = sessions.find(
+    (session) =>
+      session.id === (terminalId ?? activeId) &&
+      session.chatSessionId === scopedChatSessionId &&
+      session.workspacePath === workspacePath,
+  )
 
   useEffect(() => {
-    if (!sessionsLoaded) return
-    if (hydrated) {
-      ensureOne(scopedChatSessionId)
-      return
-    }
-    hydrated = true
-    void (async () => {
-      const enabled = useSettingsStore.getState().settings.terminalRestore ?? true
-      if (enabled) {
-        const snap = await loadTerminalSnapshots().catch(() => null)
-        if (snap && snap.sessions.length > 0) {
-          for (const s of snap.sessions) {
-            if (s.buffer) pendingSnapshots.set(s.id, s.buffer)
+    if (!sessionsLoaded || !scopedChatSessionId) return
+    if (!hydrationPromise) {
+      hydrationPromise = (async () => {
+        const enabled = useSettingsStore.getState().settings.terminalRestore ?? true
+        if (enabled) {
+          const snap = await loadTerminalSnapshots().catch(() => null)
+          if (snap && snap.sessions.length > 0) {
+            for (const s of snap.sessions) {
+              if (s.chatSessionId && s.buffer) pendingSnapshots.set(s.id, s.buffer)
+            }
+            useTerminalsStore.getState().hydrate(snap.sessions, snap.activeId)
           }
-          useTerminalsStore
-            .getState()
-            .hydrate(
-              snap.sessions.map((s) => ({ id: s.id, name: s.name, history: s.history })),
-              snap.activeId,
-            )
-          ensureOne(scopedChatSessionId)
-          return
         }
+      })()
+    }
+
+    let active = true
+    void hydrationPromise.then(() => {
+      if (!active) return
+      if (!terminalId) {
+        ensureOne(scopedChatSessionId, workspacePath)
+        return
       }
-      ensureOne(scopedChatSessionId)
-    })()
-  }, [ensureOne, scopedChatSessionId, sessionsLoaded])
+      const exists = useTerminalsStore.getState().sessions.some(
+        (session) =>
+          session.id === terminalId &&
+          session.chatSessionId === scopedChatSessionId &&
+          session.workspacePath === workspacePath,
+      )
+      if (!exists) create(scopedChatSessionId, workspacePath, { id: terminalId })
+      setActive(terminalId)
+    })
+    return () => {
+      active = false
+    }
+  }, [create, ensureOne, scopedChatSessionId, sessionsLoaded, setActive, terminalId, workspacePath])
 
   useEffect(() => {
-    const ids = new Set(sessions.map((s) => s.id))
-    for (const id of [...liveTerms.keys()]) {
-      if (!ids.has(id)) disposeLiveTerm(id)
-    }
-  }, [sessions])
+    const onAskAi = () => sendActiveTerminalToAi()
+    window.addEventListener("codezal:terminal-ask-ai", onAskAi)
+    return () => window.removeEventListener("codezal:terminal-ask-ai", onAskAi)
+  }, [])
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-codezal-bg">
-      <HeaderBar
-        sessions={visibleSessions}
-        activeId={activeId}
-        onSelect={setActive}
-        onNew={() => create(scopedChatSessionId)}
-        onClose={remove}
-        onClosePanel={onClose}
-        onRename={rename}
-      />
       <div className="relative flex-1 min-h-0">
-        {visibleSessions.map((s) => (
+        {visibleSession && (
           <TerminalView
-            key={s.id}
-            session={s}
+            key={visibleSession.id}
+            session={visibleSession}
             workspacePath={workspacePath}
-            visible={s.id === activeId}
+            visible
           />
-        ))}
-        {visibleSessions.length === 0 && (
+        )}
+        {!visibleSession && (
           <div className="flex h-full items-center justify-center text-sm text-codezal-mute">
             {t("terminal.noTerminals")}
           </div>
@@ -107,211 +110,10 @@ export function TerminalPanel({ workspacePath, onClose }: Props) {
   )
 }
 
-function HeaderBar({
-  sessions,
-  activeId,
-  onSelect,
-  onNew,
-  onClose,
-  onClosePanel,
-  onRename,
-}: {
-  sessions: TerminalSession[]
-  activeId: string | null
-  onSelect: (id: string) => void
-  onNew: () => void
-  onClose: (id: string) => void
-  onClosePanel?: () => void
-  onRename: (id: string, name: string) => void
-}) {
-  const t = useT()
-  const [open, setOpen] = useState(false)
-  const [renameId, setRenameId] = useState<string | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const active = sessions.find((s) => s.id === activeId)
-
-  function askAi() {
-    if (!activeId) return
-    const raw = liveTerms.get(activeId)?.serialize.serialize({ scrollback: 200 }) ?? ""
-    // eslint-disable-next-line no-control-regex
-    const clean = raw.replace(/\[[0-9;?]*[A-Za-z]/g, "").replace(/\][^]*/g, "")
-    const text = clean.split("\n").slice(-150).join("\n").trimEnd()
-    if (!text.trim()) return
-    window.dispatchEvent(new CustomEvent("codezal:terminal-to-ai", { detail: { text } }))
-  }
-
-  useEffect(() => {
-    if (!open) return
-    function onDoc(e: MouseEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) {
-        setOpen(false)
-        setRenameId(null)
-      }
-    }
-    document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
-  }, [open])
-
-  return (
-    <div className="flex h-11 shrink-0 items-center gap-1 border-b border-codezal-hair bg-codezal-sidebar px-3.5">
-      <div ref={wrapRef} className="relative flex min-w-0 items-center">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm text-codezal-text hover:bg-codezal-panel-2/60"
-        >
-          <span
-            className={cn(
-              "h-1.5 w-1.5 shrink-0 rounded-full",
-              active?.running ? "bg-codezal-accent" : "bg-codezal-mute/50",
-            )}
-          />
-          <span className="max-w-[180px] truncate">{active?.name ?? t("terminal.title")}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-codezal-mute" />
-        </button>
-
-        {open && (
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-[220px] cz-menu py-1">
-            <div className="px-2.5 pb-1 text-sm uppercase tracking-wide text-codezal-mute">
-              {t("terminal.terminalsHeading")}
-            </div>
-            {sessions.map((s) => {
-              const isActive = s.id === activeId
-              if (renameId === s.id) {
-                return (
-                  <div key={s.id} className="px-2 py-1">
-                    <input
-                      autoFocus
-                      defaultValue={s.name}
-                      onBlur={(e) => {
-                        const v = e.currentTarget.value.trim()
-                        if (v) onRename(s.id, v)
-                        setRenameId(null)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.currentTarget.blur()
-                        if (e.key === "Escape") {
-                          e.currentTarget.value = s.name
-                          e.currentTarget.blur()
-                        }
-                      }}
-                      className="w-full rounded border border-codezal-hair bg-codezal-bg px-1.5 py-0.5 text-sm text-codezal-text outline-none focus:border-codezal-accent"
-                    />
-                  </div>
-                )
-              }
-              return (
-                <div
-                  key={s.id}
-                  className={cn(
-                    "group flex items-center gap-1.5 px-2.5 py-1 text-sm",
-                    isActive
-                      ? "bg-codezal-panel-2/60 text-codezal-text"
-                      : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 shrink-0 rounded-full",
-                      s.running ? "bg-codezal-accent" : "bg-codezal-mute/50",
-                    )}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelect(s.id)
-                      setOpen(false)
-                    }}
-                    className="flex-1 truncate text-left"
-                  >
-                    {s.name}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setRenameId(s.id)
-                    }}
-                    title={t("terminal.renameTitle")}
-                    className="opacity-0 group-hover:opacity-70 hover:opacity-100"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  {sessions.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onClose(s.id)
-                      }}
-                      title={t("terminal.closeTitle")}
-                      className="text-codezal-mute opacity-0 group-hover:opacity-70 hover:text-destructive hover:opacity-100"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-            <div className="my-1 h-px bg-codezal-hair" />
-            <button
-              type="button"
-              onClick={() => {
-                onNew()
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-1.5 px-2.5 py-1 text-sm text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
-            >
-              <Plus className="h-4 w-4" />
-              {t("terminal.newTerminal")}
-            </button>
-          </div>
-        )}
-      </div>
-      {activeId && (
-        <button
-          type="button"
-          onClick={() => onClose(activeId)}
-          title={t("terminal.closeTerminal")}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={() => onNew()}
-        title={t("terminal.newTerminal")}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={askAi}
-        title={t("terminal.askAi")}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
-      >
-        <Sparkles className="h-4 w-4" />
-      </button>
-      <div className="flex-1" />
-      {onClosePanel && (
-        <button
-          type="button"
-          onClick={onClosePanel}
-          title={tStatic("contextPanel.panelClose")}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2/60 hover:text-codezal-text"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      )}
-    </div>
-  )
-}
-
-// xterm + portable-pty entegrasyonu.
+// xterm + portable-pty integration.
 type LiveTerm = {
   host: HTMLDivElement
+  workspacePath?: string
   term: Terminal
   fit: FitAddon
   serialize: SerializeAddon
@@ -321,10 +123,33 @@ type LiveTerm = {
 }
 
 const liveTerms = new Map<string, LiveTerm>()
+let liveSessionSubscribed = false
+
+function ensureLiveSessionSubscription() {
+  if (liveSessionSubscribed) return
+  liveSessionSubscribed = true
+  useTerminalsStore.subscribe((state) => {
+    const ids = new Set(state.sessions.map((session) => session.id))
+    for (const id of [...liveTerms.keys()]) {
+      if (!ids.has(id)) disposeLiveTerm(id)
+    }
+  })
+}
+
+function sendActiveTerminalToAi() {
+  const activeId = useTerminalsStore.getState().activeId
+  if (!activeId) return
+  const raw = liveTerms.get(activeId)?.serialize.serialize({ scrollback: 200 }) ?? ""
+  // eslint-disable-next-line no-control-regex
+  const clean = raw.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b\][^\x07]*\x07/g, "")
+  const text = clean.split("\n").slice(-150).join("\n").trimEnd()
+  if (!text.trim()) return
+  window.dispatchEvent(new CustomEvent("codezal:terminal-to-ai", { detail: { text } }))
+}
 
 // ── Session restore (terminals.json) ────────────────────────────────────────
 const pendingSnapshots = new Map<string, string>()
-let hydrated = false
+let hydrationPromise: Promise<void> | null = null
 const SNAPSHOT_SCROLLBACK = 1000
 const RESTORE_MARKER = "\r\n\x1b[90m──────── ⤺ ────────\x1b[0m\r\n"
 
@@ -358,7 +183,17 @@ async function doSnapshot() {
     } else {
       buffer = pendingSnapshots.get(s.id) ?? ""
     }
-    return { id: s.id, name: s.name, buffer, savedAt: now, history: s.history }
+    return {
+      id: s.id,
+      name: s.name,
+      chatSessionId: s.chatSessionId,
+      workspacePath: s.workspacePath,
+      toolId: s.toolId,
+      launchCommand: s.launchCommand,
+      buffer,
+      savedAt: now,
+      history: s.history,
+    }
   })
   await saveTerminalSnapshots({ sessions: out, activeId })
 }
@@ -428,10 +263,12 @@ function ensureThemeObserver() {
 
 function getOrCreateLiveTerm(
   sessionId: string,
-  opts: { workspacePath?: string; shortPrompt: boolean },
+  opts: { workspacePath?: string; shortPrompt: boolean; launchCommand?: string },
 ): LiveTerm {
+  ensureLiveSessionSubscription()
   const existing = liveTerms.get(sessionId)
-  if (existing) return existing
+  if (existing && existing.workspacePath === opts.workspacePath) return existing
+  if (existing) disposeLiveTerm(sessionId)
 
   ensureThemeObserver()
 
@@ -454,7 +291,16 @@ function getOrCreateLiveTerm(
   term.loadAddon(serialize)
   term.open(host)
 
-  const live: LiveTerm = { host, term, fit, serialize, pty: null, ptyReady: Promise.resolve(), error: null }
+  const live: LiveTerm = {
+    host,
+    workspacePath: opts.workspacePath,
+    term,
+    fit,
+    serialize,
+    pty: null,
+    ptyReady: Promise.resolve(),
+    error: null,
+  }
   liveTerms.set(sessionId, live)
 
   const restoredBuffer = pendingSnapshots.get(sessionId)
@@ -507,6 +353,9 @@ function getOrCreateLiveTerm(
       term.onResize(({ rows, cols }) => {
         void handle.resize(rows, cols)
       })
+      if (opts.launchCommand) {
+        await handle.write(`${opts.launchCommand}\r`)
+      }
     } catch (e) {
       const msg = errorMessage(e)
       live.error = msg
@@ -546,7 +395,11 @@ function TerminalView({
     const el = containerRef.current
     if (!el) return
 
-    const live = getOrCreateLiveTerm(session.id, { workspacePath, shortPrompt })
+    const live = getOrCreateLiveTerm(session.id, {
+      workspacePath,
+      shortPrompt,
+      launchCommand: session.launchCommand,
+    })
     liveRef.current = live
     el.appendChild(live.host)
     setError(live.error)
@@ -574,8 +427,7 @@ function TerminalView({
       ro.disconnect()
       if (live.host.parentElement === el) el.removeChild(live.host)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id])
+  }, [session.id, session.launchCommand, shortPrompt, workspacePath])
 
   useEffect(() => {
     if (!visible) return
@@ -587,6 +439,25 @@ function TerminalView({
         // ignore
       }
     }, 0)
+  }, [visible])
+
+  useEffect(() => {
+    if (!visible) return
+    const el = containerRef.current
+    if (!el) return
+
+    return registerDropTarget({
+      el,
+      accepts: "file",
+      onDrop: (path) => {
+        const live = liveRef.current
+        if (!live) return
+        live.term.focus()
+        void live.ptyReady
+          .then(() => live.pty?.write(formatTerminalPathInput(path)))
+          .catch(() => {})
+      },
+    })
   }, [visible])
 
   return (

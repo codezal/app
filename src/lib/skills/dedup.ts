@@ -1,4 +1,4 @@
-// project.codezal > project.agents > user.codezal > user.agents > plugin.
+// Sources keep their discovery order; earlier entries win on duplicate names.
 import type { Skill } from "./types"
 
 export function dedupSkillsByName(skills: Skill[]): Skill[] {

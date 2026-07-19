@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Brain,
   Music,
+  Network,
   Check,
   ChevronDown,
   ChevronRight,
@@ -97,6 +98,8 @@ import { BranchPicker } from "./BranchPicker"
 import { filterCommands, filterMentions } from "@/lib/menu-filters"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
+import { refreshLocalModels } from "@/lib/providers/local"
+import { refreshMlxModels } from "@/lib/providers/mlx"
 
 const MAX_TEXTAREA_PX = 400
 
@@ -198,6 +201,8 @@ type Props = {
   onUnqueue?: (idx: number) => void
   // footer zeminini (kart: codezal-sidebar / sayfa: codezal-bg) hem yatay padding'i
   inCard?: boolean
+  // Main workspace renders project/branch/access/context in the global status bar.
+  showMetaBar?: boolean
 }
 
 export function Composer({
@@ -214,6 +219,7 @@ export function Composer({
   onQueue,
   onUnqueue,
   inCard = false,
+  showMetaBar = true,
 }: Props) {
   const t = useT()
   const suggestionCount = useSuggestionsStore((s) =>
@@ -263,7 +269,7 @@ export function Composer({
   const sess = (s: ReturnType<typeof useSessionsStore.getState>) =>
     sessionId ? s.sessions[sessionId] : s.active
   const mode = useSessionsStore((s) => sess(s)?.mode ?? "build")
-  const delegationMode = useSessionsStore((s) => sess(s)?.delegationMode ?? "inherit")
+  const delegationMode = useSessionsStore((s) => sess(s)?.delegationMode ?? "solo")
   const goal = useSessionsStore((s) => sess(s)?.goal)
   const activeId = useSessionsStore((s) => s.activeId)
   const goalSid = sessionId ?? activeId
@@ -1058,7 +1064,7 @@ export function Composer({
         )}
       <div
         ref={dropZoneRef}
-        className="shadow-composer relative rounded-xl border border-codezal bg-codezal-input transition-[border-color,box-shadow] focus-within:border-codezal-accent/40 focus-within:ring-2 focus-within:ring-codezal-accent/10"
+        className="shadow-composer relative rounded-xl border border-codezal-strong bg-codezal-input transition-[border-color,box-shadow] focus-within:border-codezal-accent/55 focus-within:ring-2 focus-within:ring-codezal-accent/10"
         // Finder drop → Tauri native event (composer-drop); ContextPanel drag →
         onDragOver={(e) => {
           if ((e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault()
@@ -1338,7 +1344,7 @@ export function Composer({
             aria-autocomplete={acListboxId ? "list" : undefined}
             rows={1}
             disabled={disabled}
-            className="relative z-[1] block w-full resize-none overflow-hidden bg-transparent text-md leading-[1.5] text-transparent caret-codezal-text placeholder:text-codezal-mute focus:outline-none disabled:opacity-50"
+            className="relative z-[1] block w-full resize-none overflow-hidden bg-transparent text-md leading-[1.5] text-transparent caret-codezal-text placeholder:text-codezal-dim focus:outline-none disabled:opacity-50"
           />
         </div>
 
@@ -1348,8 +1354,21 @@ export function Composer({
             onPickFolder={() => void pickFolderAttachment()}
             agentMode={mode}
             onAgentModeChange={applyMode}
+            multitaskAvailable={settings.supervisor.enabled}
+            multitaskActive={delegationMode !== "solo"}
+            onMultitaskChange={(active) =>
+              applyMeta({ delegationMode: active ? "adaptive" : "solo" })
+            }
             onOpenGoal={() => setGoalModal({ open: true, mode: goal ? "edit" : "new" })}
           />
+
+          {(mode === "plan" || mode === "orchestra") && (
+            <ModePill agentMode={mode} onExit={() => applyMode("build")} />
+          )}
+
+          {settings.supervisor.enabled && delegationMode !== "solo" && (
+            <MultitaskPill onExit={() => applyMeta({ delegationMode: "solo" })} />
+          )}
 
           <button
             type="button"
@@ -1370,7 +1389,7 @@ export function Composer({
                   ? "bg-codezal-accent/15 text-codezal-accent"
                   : "bg-codezal-chip text-codezal-mute",
               )}
-              title="Vim modu"
+              title="Vim"
             >
               {vim.mode}
             </span>
@@ -1378,37 +1397,39 @@ export function Composer({
 
           <div className="flex-1" />
 
-          <ModelPicker
-            providerId={(provider ?? settings.defaultProvider) as ProviderId}
-            modelId={model ?? settings.defaultModel}
-            catalog={settings.providerCatalog?.data as ProvidersCatalog | undefined}
-            onPickProvider={(id, sessionOnly) => {
-              const defaultModel = isCliAgentProvider(id)
-                ? defaultModelForAgentProvider(id, settings)
-                : defaultModelFor(
-                    id,
-                    settings.providerCatalog?.data as ProvidersCatalog | undefined,
-                  )
-              if (hasActive) applyMeta({ provider: id, model: defaultModel, reasoningEffort: undefined })
-              else void updateSettings({ defaultProvider: id, defaultModel })
-              if (hasActive && !effIsDraft && workspacePath && !sessionOnly) {
-                void setProjectMeta(workspacePath, { defaultProvider: id, defaultModel })
-              }
-            }}
-            onPickModel={(m, sessionOnly) => {
-              if (hasActive) applyMeta({ model: m, reasoningEffort: undefined })
-              else void updateSettings({ defaultModel: m })
-              if (hasActive && !effIsDraft && workspacePath && !sessionOnly) {
-                const prov = (provider ?? settings.defaultProvider) as ProviderId
-                void setProjectMeta(workspacePath, { defaultProvider: prov, defaultModel: m })
-              }
-            }}
-            canScopeToSession={hasActive && !effIsDraft && !!workspacePath}
-          />
+          <div className="flex min-w-0 items-center rounded-lg bg-[hsl(var(--codezal-panel-2)_/_0.45)] px-0.5">
+            <ModelPicker
+              providerId={(provider ?? settings.defaultProvider) as ProviderId}
+              modelId={model ?? settings.defaultModel}
+              catalog={settings.providerCatalog?.data as ProvidersCatalog | undefined}
+              onPickProvider={(id, sessionOnly) => {
+                const defaultModel = isCliAgentProvider(id)
+                  ? defaultModelForAgentProvider(id, settings)
+                  : defaultModelFor(
+                      id,
+                      settings.providerCatalog?.data as ProvidersCatalog | undefined,
+                    )
+                if (hasActive) applyMeta({ provider: id, model: defaultModel, reasoningEffort: undefined })
+                else void updateSettings({ defaultProvider: id, defaultModel })
+                if (hasActive && !effIsDraft && workspacePath && !sessionOnly) {
+                  void setProjectMeta(workspacePath, { defaultProvider: id, defaultModel })
+                }
+              }}
+              onPickModel={(m, sessionOnly) => {
+                if (hasActive) applyMeta({ model: m, reasoningEffort: undefined })
+                else void updateSettings({ defaultModel: m })
+                if (hasActive && !effIsDraft && workspacePath && !sessionOnly) {
+                  const prov = (provider ?? settings.defaultProvider) as ProviderId
+                  void setProjectMeta(workspacePath, { defaultProvider: prov, defaultModel: m })
+                }
+              }}
+              canScopeToSession={hasActive && !effIsDraft && !!workspacePath}
+            />
 
-          {supportsReasoning && (
-            <EffortMenu efforts={efforts} value={shownEffort} onChange={setEffort} />
-          )}
+            {supportsReasoning && (
+              <EffortMenu efforts={efforts} value={shownEffort} onChange={setEffort} />
+            )}
+          </div>
         </div>
 
         {streaming ? (
@@ -1464,52 +1485,35 @@ export function Composer({
         )}
       </div>
 
-      <div className="mt-1.5 flex items-center gap-2 px-1 text-xs text-codezal-mute">
-        {msgCount === 0 && (
-          <WorkspacePicker
-            current={hasActive ? workspacePath : settings.defaultWorkspacePath}
-            onPick={(p) => {
-              if (hasActive) applyMeta({ workspacePath: p })
-              void updateSettings({ defaultWorkspacePath: p })
-            }}
-            onPickNew={pickWorkspace}
-            onClear={() => {
-              if (hasActive) applyMeta({ workspacePath: undefined })
-              void updateSettings({ defaultWorkspacePath: undefined })
-            }}
+      {showMetaBar && (
+        <div className="mt-1.5 flex items-center gap-2 px-1 text-xs text-codezal-mute">
+          {msgCount === 0 && (
+            <WorkspacePicker
+              current={hasActive ? workspacePath : settings.defaultWorkspacePath}
+              onPick={(p) => {
+                if (hasActive) applyMeta({ workspacePath: p })
+                void updateSettings({ defaultWorkspacePath: p })
+              }}
+              onPickNew={pickWorkspace}
+              onClear={() => {
+                if (hasActive) applyMeta({ workspacePath: undefined })
+                void updateSettings({ defaultWorkspacePath: undefined })
+              }}
+            />
+          )}
+          {(hasActive ? workspacePath : settings.defaultWorkspacePath) && (
+            <BranchPicker workspace={hasActive ? workspacePath : settings.defaultWorkspacePath} />
+          )}
+          <ApprovalModeMenu
+            mode={approvalMode}
+            onChange={(m) => void updateSettings({ approvalMode: m })}
           />
-        )}
-        {(hasActive ? workspacePath : settings.defaultWorkspacePath) && (
-          <BranchPicker workspace={hasActive ? workspacePath : settings.defaultWorkspacePath} />
-        )}
-        <ApprovalModeMenu
-          mode={approvalMode}
-          onChange={(m) => void updateSettings({ approvalMode: m })}
-        />
-        {settings.supervisor.enabled && (
-          <button
-            type="button"
-            onClick={() =>
-              applyMeta({ delegationMode: delegationMode === "solo" ? "adaptive" : "solo" })
-            }
-            className="rounded-md border border-codezal px-2 py-1 text-sm text-codezal-dim hover:bg-codezal-panel-2"
-          >
-            {delegationMode === "solo"
-              ? t("settings.cliAgents.delegationSolo")
-              : t("settings.cliAgents.delegationAdaptive")}
-          </button>
-        )}
-        {(mode === "plan" || mode === "orchestra") && (
-          <ModePill agentMode={mode} onExit={() => applyMode("build")} />
-        )}
-        <span
-          className="ml-auto"
-          title={t("composer.contextUsedTitle")}
-        >
-          {formatK(tokenCount)} / {formatK(contextCapValue)}
-        </span>
-        <span className="flex items-center gap-1">{fmtKbd("⌘⏎")}</span>
-      </div>
+          <span className="ml-auto" title={t("composer.contextUsedTitle")}>
+            {formatK(tokenCount)} / {formatK(contextCapValue)}
+          </span>
+          <span className="flex items-center gap-1">{fmtKbd("⌘⏎")}</span>
+        </div>
+      )}
       </div>
       {goalModal.open && goalSid && (
         <GoalModal
@@ -1565,7 +1569,7 @@ function buildApprovalOptions(
   ]
 }
 
-function ApprovalModeMenu({
+export function ApprovalModeMenu({
   mode,
   onChange,
 }: {
@@ -1585,17 +1589,18 @@ function ApprovalModeMenu({
         {...triggerProps}
         title={current.hint}
         className={cn(
-          "flex h-[26px] items-center gap-1.5 rounded-md px-1 text-sm font-medium transition-colors",
+          "flex h-[26px] items-center gap-1.5 rounded-md px-1.5 text-sm font-medium text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text",
           danger
-            ? "text-amber-600 hover:text-amber-700 dark:text-amber-500 dark:hover:text-amber-400"
-            : "text-codezal-dim hover:text-codezal-text",
+            ? "border border-amber-500/20 bg-amber-500/5"
+            : "border border-transparent",
         )}
       >
         <Icon
           className={cn("h-4 w-4", danger && "text-amber-600 dark:text-amber-500")}
+          aria-hidden
         />
         <span>{current.label}</span>
-        <ChevronDown className="h-2 w-2" />
+        <ChevronDown className="h-2 w-2" aria-hidden />
       </button>
       {open && (
         <div {...menuProps} className="absolute bottom-[32px] left-0 z-50 w-[240px] overflow-hidden cz-menu py-1">
@@ -1622,9 +1627,10 @@ function ApprovalModeMenu({
               >
                 <OptIcon
                   className={cn("h-4 w-4 shrink-0", opt.danger && "text-amber-600 dark:text-amber-500")}
+                  aria-hidden
                 />
                 <span className="flex-1">{opt.label}</span>
-                {active && <Check className="h-4 w-4 shrink-0 text-codezal-accent" />}
+                {active && <Check className="h-4 w-4 shrink-0 text-codezal-accent" aria-hidden />}
               </button>
             )
           })}
@@ -1661,6 +1667,28 @@ function ModePill({
         aria-label={t("common.close")}
       >
         <X className="h-3 w-3" />
+      </button>
+    </span>
+  )
+}
+
+function MultitaskPill({ onExit }: { onExit: () => void }) {
+  const t = useT()
+  return (
+    <span
+      className="flex h-[26px] items-center gap-1 rounded-md border border-codezal bg-codezal-panel-2 px-1.5 text-sm font-medium text-codezal-dim"
+      title={t("composer.multitask")}
+    >
+      <Network className="h-3.5 w-3.5 shrink-0 text-codezal-accent" aria-hidden />
+      <span>{t("composer.multitask")}</span>
+      <button
+        type="button"
+        onClick={onExit}
+        className="ml-0.5 rounded p-0.5 text-codezal-mute transition-colors hover:bg-codezal-chip hover:text-codezal-text"
+        title={t("common.close")}
+        aria-label={t("common.close")}
+      >
+        <X className="h-3 w-3" aria-hidden />
       </button>
     </span>
   )
@@ -1843,12 +1871,18 @@ function AttachMenu({
   onPickFolder,
   agentMode,
   onAgentModeChange,
+  multitaskAvailable,
+  multitaskActive,
+  onMultitaskChange,
   onOpenGoal,
 }: {
   onPickFile: () => void
   onPickFolder: () => void
   agentMode: "build" | "plan" | "orchestra"
   onAgentModeChange: (m: "build" | "plan" | "orchestra") => void
+  multitaskAvailable: boolean
+  multitaskActive: boolean
+  onMultitaskChange: (active: boolean) => void
   onOpenGoal: () => void
 }) {
   const t = useT()
@@ -1914,6 +1948,30 @@ function AttachMenu({
             <span className="flex-1">{t("composer.planMode")}</span>
             {planActive && <Check className="h-4 w-4 shrink-0 text-codezal-accent" />}
           </button>
+          {multitaskAvailable && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={multitaskActive}
+              onClick={() => {
+                onMultitaskChange(!multitaskActive)
+                setOpen(false)
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm",
+                multitaskActive
+                  ? "bg-codezal-panel-2 text-codezal-text"
+                  : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
+              )}
+            >
+              <Network
+                className={cn("h-4 w-4 shrink-0", multitaskActive && "text-codezal-accent")}
+                aria-hidden
+              />
+              <span className="flex-1">{t("composer.multitask")}</span>
+              {multitaskActive && <Check className="h-4 w-4 shrink-0 text-codezal-accent" aria-hidden />}
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -2027,7 +2085,7 @@ const Chip = forwardRef<
   )
 })
 
-function WorkspacePicker({
+export function WorkspacePicker({
   current,
   onPick,
   onPickNew,
@@ -2138,8 +2196,17 @@ function modelsForPickerProvider(
   providerId: ProviderId,
   catalog: ProvidersCatalog | undefined,
   settings: Settings,
+  runtimeModels: { local: string[]; mlx: string[] },
 ): string[] {
   if (isCliAgentProvider(providerId)) return modelsForAgentProvider(providerId, settings)
+  if (providerId === "local" || providerId === "mlx") {
+    const runtimeProvider = providerId === "local" ? "local" : "mlx"
+    const raw = runtimeModels[runtimeProvider]
+    const status = settings.modelStatus?.[runtimeProvider]
+    if (!status) return raw
+    const filtered = raw.filter((model) => status[model] !== false)
+    return filtered.length > 0 ? filtered : raw
+  }
   return modelsFor(providerId, catalog, settings.modelStatus)
 }
 
@@ -2168,7 +2235,10 @@ function ModelPicker({
   // popover closes (handled in the event handlers, not an effect, to avoid
   // setState-in-effect).
   const [browseTab, setBrowseTab] = useState<ProviderId | null>(null)
-  const activeTab = browseTab ?? providerId
+  const [runtimeModels, setRuntimeModels] = useState<{ local: string[]; mlx: string[] }>({
+    local: [],
+    mlx: [],
+  })
 
   function closePopover() {
     setOpen(false)
@@ -2192,6 +2262,16 @@ function ModelPicker({
     if (unique.length === 0) return
     void probeEnvVars(unique).then(setEnvHits)
   }, [open, adapters])
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void Promise.all([refreshLocalModels(), refreshMlxModels()]).then(([local, mlx]) => {
+      if (!cancelled) setRuntimeModels({ local, mlx })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open])
   const connected = useMemo(
     () => {
       const apiProviders = adapters
@@ -2204,12 +2284,24 @@ function ModelPicker({
     },
     [adapters, settings, envHits],
   )
+  const visibleProviders = useMemo(
+    () =>
+      connected.filter(
+        (provider) =>
+          modelsForPickerProvider(provider.id, catalog, settings, runtimeModels).length > 0,
+      ),
+    [connected, catalog, settings, runtimeModels],
+  )
+  const requestedTab = browseTab ?? providerId
+  const activeTab = visibleProviders.some((provider) => provider.id === requestedTab)
+    ? requestedTab
+    : visibleProviders[0]?.id ?? requestedTab
 
   // Use the tab provider for the model list. If the user clicked a tab
   // without committing, this lets them search within it.
   const models = useMemo(
-    () => modelsForPickerProvider(activeTab, catalog, settings),
-    [activeTab, catalog, settings],
+    () => modelsForPickerProvider(activeTab, catalog, settings, runtimeModels),
+    [activeTab, catalog, settings, runtimeModels],
   )
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -2316,7 +2408,7 @@ function ModelPicker({
                   has only a couple of models — both columns scroll instead. */}
               <div className="flex h-[320px]">
                 <div className="w-[140px] shrink-0 overflow-y-auto border-r border-codezal-hair py-1">
-                  {connected.map((p) => (
+                  {visibleProviders.map((p) => (
                     <button
                       key={p.id}
                       type="button"

@@ -103,24 +103,29 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
   const cliAgentsLabel = cliAgentsLabelRaw === "settings.tabs.cliAgents" ? "CLI Agents" : cliAgentsLabelRaw
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }>; section: number }[] = [
     { id: "genel", label: t("settings.tabs.general"), icon: Cog, section: 0 },
-    { id: "istatistik", label: t("settings.tabs.stats"), icon: BarChart3, section: 0 },
     { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette, section: 0 },
+    { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck, section: 0 },
+    { id: "gizlilik", label: t("settings.privacy.tab"), icon: Shield, section: 0 },
+    { id: "istatistik", label: t("settings.tabs.stats"), icon: BarChart3, section: 0 },
+    { id: "hakkinda", label: t("settings.tabs.about"), icon: Info, section: 0 },
     { id: "modeller", label: t("settings.nav.providers"), icon: KeyRound, section: 1 },
     { id: "ajanlar", label: cliAgentsLabel, icon: Bot, section: 1 },
     { id: "yerel", label: localModelsLabel, icon: Cpu, section: 1 },
-    { id: "onay", label: t("settings.tabs.approval"), icon: ShieldCheck, section: 1 },
+    { id: "hafiza", label: t("settings.memory.title"), icon: Brain, section: 1 },
+    { id: "gecmis", label: historyLabel, icon: Search, section: 1 },
+    { id: "tokens", label: tokensLabel, icon: Coins, section: 1 },
     { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug, section: 2 },
     { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook, section: 2 },
     { id: "web", label: t("settings.web.title"), icon: Globe, section: 2 },
     { id: "gorsel", label: t("settings.tabs.imageGen"), icon: ImageIcon, section: 2 },
     { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles, section: 2 },
-    { id: "gecmis", label: historyLabel, icon: Search, section: 3 },
-    { id: "tokens", label: tokensLabel, icon: Coins, section: 3 },
-    { id: "skills", label: t("settings.tabs.skills"), icon: ScrollText, section: 3 },
-    { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle, section: 3 },
-    { id: "hafiza", label: t("settings.memory.title"), icon: Brain, section: 3 },
-    { id: "gizlilik", label: t("settings.privacy.tab"), icon: Shield, section: 3 },
-    { id: "hakkinda", label: t("settings.tabs.about"), icon: Info, section: 3 },
+    { id: "skills", label: t("settings.tabs.skills"), icon: ScrollText, section: 2 },
+    { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle, section: 2 },
+  ]
+  const sectionLabels = [
+    t("settings.drawer.navGroupApp"),
+    t("settings.drawer.navGroupModels"),
+    t("settings.drawer.navGroupTools"),
   ]
 
   const activeLabel = tabs.find((tt) => tt.id === tab)?.label ?? ""
@@ -137,66 +142,75 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
       )}
     >
       {/* Left nav */}
-      <nav
-        className={cn(
-          "w-[200px] shrink-0 overflow-y-auto border-r border-codezal-hair bg-codezal-sidebar p-3",
-        )}
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          title={t("settings.drawer.backBtn")}
-          className="mb-2 flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-md text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>{t("settings.drawer.backBtn")}</span>
-        </button>
-        <div className="relative mb-2">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-codezal-mute" aria-hidden />
-          <label htmlFor="settings-nav-search" className="sr-only">
-            {t("common.search")}
-          </label>
-          <input
-            id="settings-nav-search"
-            name="settings-search"
-            autoComplete="off"
-            value={navQuery}
-            onChange={(event) => setNavQuery(event.target.value)}
-            placeholder={`${t("common.search")}…`}
-            className="w-full rounded-md border border-codezal bg-codezal-input py-1.5 pl-8 pr-2 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
-          />
+      <nav className="flex w-[236px] shrink-0 flex-col border-r border-codezal-panel bg-codezal-sidebar">
+        <div className="shrink-0 border-b border-codezal-panel px-3 pb-3 pt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            title={t("settings.drawer.backBtn")}
+            className="mb-2 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-md text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            <span>{t("settings.drawer.backBtn")}</span>
+          </button>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-codezal-mute" aria-hidden />
+            <label htmlFor="settings-nav-search" className="sr-only">
+              {t("common.search")}
+            </label>
+            <input
+              id="settings-nav-search"
+              name="settings-search"
+              autoComplete="off"
+              value={navQuery}
+              onChange={(event) => setNavQuery(event.target.value)}
+              placeholder={`${t("common.search")}…`}
+              className="w-full rounded-md border border-codezal bg-codezal-input py-1.5 pl-8 pr-2 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+            />
+          </div>
         </div>
-        {visibleTabs.map((tt, index) => {
-          const Icon = tt.icon
-          const startsSection = index > 0 && visibleTabs[index - 1].section !== tt.section
-          const active = tab === tt.id
-          return (
-            <div key={tt.id} className={cn(startsSection && "mt-2 border-t border-codezal-hair pt-2")}>
-              <button
-                type="button"
-                onClick={() => setTab(tt.id)}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "mb-0.5 flex w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-1.5 text-left text-md transition-colors",
-                  active
-                    ? "border-codezal-hair bg-codezal-panel font-medium text-codezal-text shadow-sm"
-                    : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
-                )}
-              >
-                <Icon className={cn("h-4 w-4", active && "text-codezal-accent")} />
-                {tt.label}
-              </button>
-            </div>
-          )
-        })}
-        {visibleTabs.length === 0 && (
-          <div className="px-2.5 py-3 text-sm text-codezal-mute">{t("common.noResults")}</div>
-        )}
+        <div className="flex-1 overflow-y-auto px-3 py-3">
+          {[0, 1, 2].map((section) => {
+            const items = visibleTabs.filter((item) => item.section === section)
+            if (items.length === 0) return null
+            return (
+              <div key={section} className="mb-4 last:mb-0">
+                <div className="mb-1 px-2 text-xs font-medium text-codezal-mute">
+                  {sectionLabels[section]}
+                </div>
+                {items.map((tt) => {
+                  const Icon = tt.icon
+                  const active = tab === tt.id
+                  return (
+                    <button
+                      key={tt.id}
+                      type="button"
+                      onClick={() => setTab(tt.id)}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
+                        active
+                          ? "bg-codezal-panel-2 font-medium text-codezal-text"
+                          : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4", active && "text-codezal-accent")} aria-hidden />
+                      <span className="truncate">{tt.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+          {visibleTabs.length === 0 && (
+            <div className="px-2 py-3 text-sm text-codezal-mute">{t("common.noResults")}</div>
+          )}
+        </div>
       </nav>
 
       {/* Right content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="shrink-0 border-b border-codezal-hair bg-codezal-bg px-8 py-4">
+        <header className="shrink-0 border-b border-codezal-panel bg-codezal-bg px-8 py-4">
           <div className="text-sm font-semibold uppercase tracking-[0.12em] text-codezal-mute">
             {t("settings.title")}
           </div>
@@ -204,7 +218,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-4xl px-8 py-8">
+          <div className="mx-auto max-w-5xl px-8 py-8">
             {tab === "genel" && <GeneralTab />}
             {tab === "istatistik" && <StatsTab />}
             {tab === "hafiza" && <MemoryTab />}

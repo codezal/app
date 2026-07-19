@@ -28,7 +28,12 @@ export function parseSkillFile(
 export function buildSkillsCatalog(skills: Skill[]): string {
   if (skills.length === 0) return ""
   const lines = ["# Available Skills (on-demand)"]
-  lines.push("Call the `load_skill` tool to use these skills.")
+  lines.push(
+    "Use progressive disclosure: choose skills from the metadata below, then call `load_skill` before following a skill's workflow.",
+  )
+  lines.push(
+    "Load a skill when the user names it explicitly or when the task clearly matches its description or triggers. Load only relevant skills.",
+  )
   lines.push("")
   for (const s of skills) {
     const trig = s.triggers?.length ? ` · trig: ${s.triggers.join(", ")}` : ""
@@ -36,10 +41,12 @@ export function buildSkillsCatalog(skills: Skill[]): string {
       ? ` [plugin:${s.pluginId}]`
       : s.mcpServer
         ? ` [mcp:${s.mcpServer}]`
-        : s.origin === "agents"
-          ? " [agents]"
+        : s.origin !== "codezal"
+          ? ` [${s.origin}]`
           : ""
-    lines.push(`- **${s.name}** (${s.scope}${tag}): ${s.description}${trig}`)
+    lines.push(
+      `- **${s.name}** (${s.scope}${tag}): ${s.description}${trig} · path: ${s.path}`,
+    )
   }
   return lines.join("\n")
 }

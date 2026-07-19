@@ -68,6 +68,7 @@ function makeEmptySession(
     model,
     workspacePath,
     mode: "build",
+    delegationMode: "solo",
   }
   // (Session.reasoningEffort ?? settings.reasoningEffort ?? "medium").
   if (reasoningEffort) s.reasoningEffort = reasoningEffort
@@ -1800,7 +1801,8 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
       forgetScrollPosition(id)
       clearToolBeat(id)
       const wasActive = get().activeId === id
-      const removedIdx = get().index.findIndex((m) => m.id === id)
+      const removedWorkspacePath =
+        get().index.find((m) => m.id === id)?.workspacePath ?? get().sessions[id]?.workspacePath
       set((st) => {
         const nextIndex = st.index.filter((m) => m.id !== id)
         const sessions = { ...st.sessions }
@@ -1817,8 +1819,11 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         }
       })
       if (wasActive) {
-        const neighbor = get().index[removedIdx]?.id ?? get().index[removedIdx - 1]?.id
-        if (neighbor) await get().open(neighbor)
+        const latestInWorkspace = get().index.reduce<SessionMeta | undefined>((latest, candidate) => {
+          if (candidate.archived || candidate.workspacePath !== removedWorkspacePath) return latest
+          return !latest || candidate.updatedAt > latest.updatedAt ? candidate : latest
+        }, undefined)
+        if (latestInWorkspace) await get().open(latestInWorkspace.id)
       }
     },
 

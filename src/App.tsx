@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { streamText, generateText, smoothStream, type ModelMessage } from "ai"
 import { Sidebar } from "@/components/Sidebar"
 import { Toaster } from "@/components/Toaster"
@@ -9,6 +9,7 @@ import { Composer, type SendOverride } from "@/components/Composer"
 import { SideChatPanel } from "@/components/SideChatPanel"
 import { SIDE_CHAT_SYSTEM, buildSideChatMessages, newSideChatThread } from "@/lib/side-chat"
 import { ContextPanel } from "@/components/ContextPanel"
+import { StatusBar } from "@/components/StatusBar"
 import { AgentTranscriptPane } from "@/components/AgentTranscript"
 import { FileViewer } from "@/components/FileViewer"
 import { DiffViewer } from "@/components/DiffViewer"
@@ -19,6 +20,8 @@ import { isDiffUri } from "@/lib/diff-uri"
 import { isTurnDiffUri, makeTurnDiffUri } from "@/lib/turn-diff-uri"
 import { isOutputUri } from "@/lib/output-doc"
 import { isPrUri } from "@/lib/pr-uri"
+import { isTerminalUri, makeTerminalUri, parseTerminalUri } from "@/lib/terminal-uri"
+import type { PanelMode } from "@/lib/panel-modes"
 import { renderTemplate } from "@/lib/commands"
 import { REVIEW_TEMPLATE } from "@/lib/commands/templates"
 import { SettingsPage, type SettingsTab } from "@/components/SettingsDrawer"
@@ -34,10 +37,11 @@ import { OrchestraConfigModal } from "@/components/OrchestraConfigModal"
 import { WorkflowPanel } from "@/components/WorkflowPanel"
 import { Select } from "@/components/Select"
 import { HelpOverlay } from "@/components/HelpOverlay"
-import { Columns2, MessageSquare, X } from "@/lib/icons"
+import { Columns2, X } from "@/lib/icons"
 import { useNavHistory } from "@/lib/hooks/useNavHistory"
 import { useNewSession } from "@/lib/hooks/useNewSession"
 import { usePanelState } from "@/lib/hooks/usePanelState"
+import { useTerminalsStore } from "@/store/terminals"
 import { useTodoPanelAuto, hasActiveTodos } from "@/lib/hooks/useTodoPanelAuto"
 import { useSuggestionsAuto, triggerSuggestionsFor } from "@/lib/hooks/useSuggestionsAuto"
 import { useSuggestionsStore } from "@/store/suggestions"
@@ -195,6 +199,10 @@ const compactionInFlight = new Set<string>()
 
 const PRECOMPACT_HOOK_TIMEOUT_MS = 5000
 
+const TerminalPanel = lazy(() =>
+  import("@/components/TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
+)
+
 export default function App() {
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const settings = useSettingsStore((s) => s.settings)
@@ -203,8 +211,6 @@ export default function App() {
   const activeFile = useSessionsStore((s) => s.active?.activeFile ?? null)
   const openFile = useSessionsStore((s) => s.openFile)
   const openFilesCount = useSessionsStore((s) => s.active?.openFiles?.length ?? 0)
-  const firstOpenFile = useSessionsStore((s) => s.active?.openFiles?.[0] ?? null)
-  const activeTitle = useSessionsStore((s) => s.active?.title ?? "")
   const activeSessionId = useSessionsStore((s) => s.activeId)
   const sddAvailable = useSddStore((s) =>
     Object.values(s.drafts).some((d) => d.assistantSessionId === activeSessionId),
@@ -234,6 +240,39 @@ export default function App() {
 
   const openNewSession = useNewSession(settings, setPanelMode)
 
+  const toggleTerminalTab = useCallback(() => {
+    if (isTerminalUri(activeFile ?? "")) {
+      const terminalId = parseTerminalUri(activeFile ?? "")
+      if (terminalId) useTerminalsStore.getState().remove(terminalId)
+      if (activeFile) useSessionsStore.getState().closeFile(activeFile)
+      return
+    }
+    const chatSession = useSessionsStore.getState().active
+    if (!chatSession) return
+    const terminalStore = useTerminalsStore.getState()
+    const existing = terminalStore.sessions.find(
+      (session) =>
+        session.chatSessionId === chatSession.id &&
+        session.workspacePath === chatSession.workspacePath,
+    )
+    const terminalId =
+      existing?.id ?? terminalStore.create(chatSession.id, chatSession.workspacePath)
+    terminalStore.setActive(terminalId)
+    setPanelMode(null)
+    openFile(makeTerminalUri(terminalId))
+  }, [activeFile, openFile, setPanelMode])
+
+  const handlePanelModeChange = useCallback(
+    (mode: PanelMode | null) => {
+      if (mode === "terminal") {
+        toggleTerminalTab()
+        return
+      }
+      setPanelMode(mode)
+    },
+    [setPanelMode, toggleTerminalTab],
+  )
+
   const { navCan, navBack, navForward } = useNavHistory(activeFile, activeSessionId)
 
   const [showSettings, setShowSettings] = useState(false)
@@ -246,57 +285,6 @@ export default function App() {
   const [showForkDialog, setShowForkDialog] = useState(false)
   const [sidebarHidden, setSidebarHidden] = useState(false)
   const [chatScrolled, setChatScrolled] = useState(false)
-  const [editorSidebarOpen, setEditorSidebarOpen] = useState(false)
-  const [chatWidth, setChatWidth] = useState<number>(() => {
-    try {
-      const v = Number(localStorage.getItem("codezal.editorChatWidth"))
-      return v >= 280 && v <= 760 ? v : 420
-    } catch {
-      return 420
-    }
-  })
-  const chatWidthRef = useRef(chatWidth)
-  chatWidthRef.current = chatWidth
-  const [turnDiffChatWidth, setTurnDiffChatWidth] = useState<number>(() => {
-    try {
-      const v = Number(localStorage.getItem("codezal.turnDiffChatWidth"))
-      return v >= 360 && v <= 900 ? v : 600
-    } catch {
-      return 600
-    }
-  })
-  const turnDiffChatWidthRef = useRef(turnDiffChatWidth)
-  turnDiffChatWidthRef.current = turnDiffChatWidth
-  const [chatResizing, setChatResizing] = useState(false)
-  const onChatResizeStart = (e: React.MouseEvent, target: "editor" | "turnDiff") => {
-    e.preventDefault()
-    const startX = e.clientX
-    const isTurnDiff = target === "turnDiff"
-    const startW = isTurnDiff ? turnDiffChatWidthRef.current : chatWidthRef.current
-    const minW = isTurnDiff ? 360 : 280
-    const maxW = isTurnDiff ? 900 : 760
-    setChatResizing(true)
-    const onMove = (ev: MouseEvent) => {
-      const next = Math.min(maxW, Math.max(minW, startW + (ev.clientX - startX)))
-      if (isTurnDiff) setTurnDiffChatWidth(next)
-      else setChatWidth(next)
-    }
-    const onUp = () => {
-      setChatResizing(false)
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-      try {
-        localStorage.setItem(
-          isTurnDiff ? "codezal.turnDiffChatWidth" : "codezal.editorChatWidth",
-          String(isTurnDiff ? turnDiffChatWidthRef.current : chatWidthRef.current),
-        )
-      } catch {
-        // Intentionally ignored.
-      }
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-  }
   const [userThemes, setUserThemes] = useState<ThemePreset[]>([])
   const [showOrchestra, setShowOrchestra] = useState(false)
   const [showWorkflows, setShowWorkflows] = useState(false)
@@ -366,7 +354,6 @@ export default function App() {
   const activeEmpty = useSessionsStore(
     (s) => (s.active?.messages.length ?? 0) === 0 && s.loadingMsgId !== s.activeId,
   )
-  const activeWorkspace = useSessionsStore((s) => s.active?.workspacePath)
   const splitEmpty = useSessionsStore((s) =>
     splitId ? (s.sessions[splitId]?.messages.length ?? 0) === 0 : false,
   )
@@ -789,6 +776,7 @@ export default function App() {
     setShowChatSearch,
     setShowForkDialog,
     setPanelMode,
+    toggleTerminal: toggleTerminalTab,
     menuRef,
   })
 
@@ -2066,20 +2054,15 @@ export default function App() {
     if (aid) onAbortFor(aid)
   }
 
-  const filesPanelEmpty = panelMode === "files" && activeEmpty && !activeWorkspace
-  const contextPanelOpen = !showSettings && !showRoutines && panelMode !== null && !filesPanelEmpty
+  const contextPanelOpen =
+    !showSettings && !showRoutines && panelMode !== null && panelMode !== "terminal"
 
-  const editorFile = activeFile ?? firstOpenFile
+  const workspaceTabsOpen = panelMode === "files" || panelMode === "git" || panelMode === "review"
+  const editorFile = activeFile
   const turnDiffOpen = !!editorFile && isTurnDiffUri(editorFile)
-  const filesWorkspaceOpen = panelMode === "files"
-  const editorSplit = openFilesCount > 0 && !turnDiffOpen
-  const editorPaneOpen = (editorSplit || filesWorkspaceOpen) && !turnDiffOpen
-  const chatInCard = editorSplit && !filesWorkspaceOpen
-  const sidebarCollapsed = sidebarHidden || (editorSplit && !filesWorkspaceOpen && !editorSidebarOpen)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!editorSplit && editorSidebarOpen) setEditorSidebarOpen(false)
-  }, [editorSplit, editorSidebarOpen])
+  const editorPaneOpen = editorFile !== null
+  const chatPaneOpen = editorFile === null
+  const sidebarCollapsed = sidebarHidden
 
   const sideChat = sideChatOpen && activeSessionId ? (
     <SideChatPanel
@@ -2105,11 +2088,18 @@ export default function App() {
           <OutputViewer uri={editorFile} />
         ) : isPrUri(editorFile) ? (
           <PRConversationViewer uri={editorFile} />
+        ) : isTerminalUri(editorFile) ? (
+          <Suspense fallback={null}>
+            <TerminalPanel
+              workspacePath={workspacePath}
+              terminalId={parseTerminalUri(editorFile) ?? undefined}
+            />
+          </Suspense>
         ) : (
           <FileViewer path={editorFile} />
         )
       ) : null,
-    [editorFile],
+    [editorFile, workspacePath],
   )
 
   const chatPane = (
@@ -2117,7 +2107,6 @@ export default function App() {
       <div className="flex min-h-0 flex-1 flex-col">
         <MessageList
           streaming={activeStreaming}
-          inCard={chatInCard}
           onScrolledChange={setChatScrolled}
           searchOpen={showChatSearch}
           onCloseSearch={() => setShowChatSearch(false)}
@@ -2130,10 +2119,11 @@ export default function App() {
           onAskSideChat={(question) => openSideChat(question)}
           onAskSplitChat={(question) => void askSelectionInSplit(question)}
           onContinue={() => void onSend(tStatic("messageList.continueAction"))}
+          onQuickPrompt={(prompt) => void onSend(prompt)}
         />
       </div>
 
-      <div className={cn("relative", !chatInCard && activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
+      <div className={cn("relative", activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
         {error && (
           <div className="absolute inset-x-0 bottom-full z-20">
             <div className="mx-auto w-full max-w-[1024px] px-8">
@@ -2156,7 +2146,7 @@ export default function App() {
         <Composer
           streaming={activeStreaming}
           compacting={activeCompacting}
-          inCard={chatInCard}
+          showMetaBar={false}
           onSend={onSend}
           onAbort={onAbort}
           onSlashAction={(a, args) => void onSlashAction(a, args)}
@@ -2179,13 +2169,13 @@ export default function App() {
   const tabBarEl = (
     <TabBar
       panelMode={panelMode}
-      onSetPanelMode={setPanelMode}
+      onSetPanelMode={handlePanelModeChange}
       todoAvailable={todoAvailable}
       sddAvailable={sddAvailable}
-      filesWorkspaceChatWidth={filesWorkspaceOpen ? chatWidth : undefined}
+      workspaceTabsOpen={workspaceTabsOpen && openFilesCount > 0}
       sidebarHidden={sidebarCollapsed}
       scrolled={!activeEmpty && chatScrolled}
-      onExpandSidebar={() => (editorSplit ? setEditorSidebarOpen(true) : setSidebarHidden(false))}
+      onExpandSidebar={() => setSidebarHidden(false)}
       onOpenSearch={() => setShowSearch(true)}
       onOpenSettings={() => setShowSettings(true)}
       onNewSession={() => void openNewSession(false)}
@@ -2220,11 +2210,6 @@ export default function App() {
             setShowRoutines(false)
             setShowSettings((v) => !v)
           }}
-          onOpenCustomize={() => {
-            setSettingsTab("ajanlar")
-            setShowRoutines(false)
-            setShowSettings(true)
-          }}
           onOpenRoutines={() => {
             setShowSettings(false)
             setShowRoutines(true)
@@ -2233,13 +2218,13 @@ export default function App() {
             setShowSettings(false)
             setShowRoutines(false)
           }}
-          onCollapse={() => (editorSplit ? setEditorSidebarOpen(false) : setSidebarHidden(true))}
+          onCollapse={() => setSidebarHidden(true)}
           onOpenSearch={() => setShowSearch(true)}
           onNewProject={() => void onNewProject()}
         />
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-codezal-hair bg-codezal-bg">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-codezal-panel bg-codezal-bg">
         {showSettings ? (
           <SettingsPage
             onClose={() => {
@@ -2266,66 +2251,28 @@ export default function App() {
             <div className="flex min-h-0 flex-1">
               <main
                 id="ana-icerik"
-                className="relative flex min-w-0 flex-1 flex-col"
+                className="relative flex min-w-0 flex-1 flex-col overflow-hidden"
               >
                 <div className="flex min-h-0 flex-1">
-                  <aside
-                    style={{
-                      width: editorPaneOpen
-                        ? chatWidth
-                        : turnDiffOpen
-                          ? turnDiffChatWidth
-                          : "100%",
-                    }}
-                    className={cn(
-                      "relative flex min-w-0 shrink-0 flex-col",
-                      !chatResizing && "transition-[width] duration-200 ease-out",
-                      chatInCard &&
-                        "ml-2 mb-2 mt-2 overflow-hidden rounded-xl border border-codezal bg-codezal-sidebar shadow-panel",
-                    )}
-                  >
-                    {chatInCard && (
-                      <div className="flex h-11 shrink-0 items-center gap-2.5 px-3.5">
-                        <MessageSquare className="h-4 w-4 shrink-0 text-codezal-accent" />
-                        <span className="flex-1 truncate text-md font-semibold text-codezal-text">
-                          {activeTitle || tStatic("tabBar.chat")}
-                        </span>
-                      </div>
-                    )}
-                    {chatPane}
-                    {sideChat}
-                  </aside>
-
-                  {(editorPaneOpen || turnDiffOpen) && (
-                    <div
-                      role="separator"
-                      aria-orientation="vertical"
-                      onMouseDown={(event) =>
-                        onChatResizeStart(event, turnDiffOpen ? "turnDiff" : "editor")
-                      }
-                      className="group relative z-10 w-2 shrink-0 cursor-col-resize"
+                  {chatPaneOpen && (
+                    <aside
+                      className="relative flex min-w-0 flex-1 flex-col"
                     >
-                      <div
-                        className={cn(
-                          "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors",
-                          chatResizing
-                            ? "bg-codezal-accent"
-                            : "bg-transparent group-hover:bg-codezal-accent/60",
-                        )}
-                      />
-                    </div>
+                      {chatPane}
+                      {sideChat}
+                    </aside>
                   )}
 
-                  {(editorPaneOpen || turnDiffOpen) && (
+                  {editorPaneOpen && (
                     <section
                       className={cn(
                         "relative flex min-w-0 flex-1 flex-col overflow-hidden bg-codezal-bg",
-                        turnDiffOpen && "animate-turn-diff-in border-l border-codezal",
+                        turnDiffOpen && "animate-turn-diff-in",
                       )}
                     >
                       {editorContent ?? (
                         <div className="flex min-h-0 flex-1 flex-col bg-codezal-code">
-                          <div className="flex h-9 shrink-0 items-center border-b border-codezal-hair px-3 text-sm text-codezal-dim">
+                          <div className="flex h-9 shrink-0 items-center border-b border-codezal-panel px-3 text-sm text-codezal-dim">
                             {tStatic("common.untitled")}-1
                           </div>
                           <div className="flex min-h-0 flex-1 pt-2 font-mono text-sm">
@@ -2337,8 +2284,7 @@ export default function App() {
                     </section>
                   )}
                 </div>
-
-                {chatResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
+                {splitId && <StatusBar />}
               </main>
 
               {sessionDragActive && !splitId && !agentPaneId && (
@@ -2355,7 +2301,7 @@ export default function App() {
                 <div
                   ref={splitPaneRef}
                   className={cn(
-                    "relative flex min-w-0 flex-1 flex-col border-l border-codezal-hair",
+                    "relative flex min-w-0 flex-1 flex-col overflow-hidden border-l border-codezal-panel",
                     sessionDragActive && "ring-2 ring-inset ring-codezal-accent",
                   )}
                 >
@@ -2364,7 +2310,7 @@ export default function App() {
                       {tStatic("split.dropToSwap")}
                     </div>
                   )}
-                  <div className="flex h-[44px] shrink-0 items-center gap-2 border-b border-codezal-hair bg-codezal-sidebar px-3">
+                  <div className="flex h-[44px] shrink-0 items-center gap-2 border-b border-codezal-panel bg-codezal-sidebar px-3">
                     <Columns2 className="h-4 w-4 shrink-0 text-codezal-accent" />
                     <Select
                       value={splitId}
@@ -2393,15 +2339,22 @@ export default function App() {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className={cn("flex min-h-0 flex-1 flex-col", splitEmpty && "justify-center pb-[44px]")}>
-                    <div className={cn("relative flex flex-col", splitEmpty ? "w-full shrink-0" : "min-h-0 flex-1")}>
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="relative flex min-h-0 flex-1 flex-col">
                       <MessageList sessionId={splitId} streaming={splitStreaming} />
                     </div>
-                    <div className={cn("relative", splitEmpty && "mx-auto w-full max-w-[820px]")}>
+                    <div
+                      className={cn(
+                        "relative",
+                        splitEmpty &&
+                          "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]",
+                      )}
+                    >
                       <Composer
                         sessionId={splitId}
                         streaming={splitStreaming}
                         compacting={splitCompacting}
+                        showMetaBar={false}
                         onSend={onSendSplit}
                         onAbort={() => onAbortFor(splitId)}
                         queued={queuedSplit}
@@ -2410,6 +2363,7 @@ export default function App() {
                       />
                     </div>
                   </div>
+                  <StatusBar sessionId={splitId} />
                 </div>
               )}
 
@@ -2421,9 +2375,17 @@ export default function App() {
               )}
 
               {contextPanelOpen && (
-                <ContextPanel mode={panelMode} onClose={() => setPanelMode(null)} onSend={onSend} onOpenPreview={onOpenSddPreview} onBuild={onBuildSdd} />
+                <ContextPanel
+                  mode={panelMode}
+                  onModeChange={setPanelMode}
+                  onClose={() => setPanelMode(null)}
+                  onSend={onSend}
+                  onOpenPreview={onOpenSddPreview}
+                  onBuild={onBuildSdd}
+                />
               )}
             </div>
+            {!splitId && <StatusBar />}
           </>
         )}
       </div>

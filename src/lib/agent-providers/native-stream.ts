@@ -4,6 +4,7 @@ import { useSessionsStore } from "@/store/sessions"
 import type { Message, Part, Session } from "@/store/types"
 import { errorMessage } from "@/lib/errors"
 import { getAgentRuntimeClient } from "./runtime-client"
+import { buildNativeSystemPrompt } from "./native-prompt"
 import {
   agentProviderSettings,
   isCliAgentProvider,
@@ -49,16 +50,6 @@ function lastUserText(history: ModelMessage[]): string {
     }
   }
   return ""
-}
-
-function buildNativeSystemPrompt(session: Session, provider: CliAgentProviderId): string {
-  const providerLabel = provider === "codex-cli" ? "Codex CLI" : "Claude CLI"
-  const mode = session.mode ?? "build"
-  return [
-    `You are running inside Codezal through ${providerLabel}.`,
-    `Codezal session mode: ${mode}.`,
-    "Use the provider's native tool and permission system. Codezal tools are available through MCP when configured; prefer Codezal code/codemap tools for repository navigation. Reply in the user's language.",
-  ].join("\n")
 }
 
 function isUnknownRuntimeSessionError(error: unknown, runtimeSessionId: string | undefined): boolean {
@@ -194,14 +185,22 @@ export async function runNativeAgentStream(args: RunNativeAgentStreamArgs): Prom
       approvalMode: settings.approvalMode,
       sessionMode: session.mode,
     })
+    const providerSettings = agentProviderSettings(settings, provider)
     const sessionParams = {
       providerId: provider,
       ownerSessionId: sid,
       cwd: session.workspacePath,
       model: modelId,
       mode,
-      injectCodezalTools: agentProviderSettings(settings, provider).injectCodezalTools !== false,
+      injectCodezalTools: providerSettings.injectCodezalTools !== false,
     }
+    const systemPrompt = await buildNativeSystemPrompt({
+      session,
+      provider,
+      settings,
+      recentText: lastUserText(history),
+      skillsEnabled: providerSettings.injectCodezalTools !== false,
+    })
     const writeNativeMeta = () => {
       useSessionsStore.getState().updateMetaFor(sid, {
         nativeAgent: {
@@ -241,8 +240,8 @@ export async function runNativeAgentStream(args: RunNativeAgentStreamArgs): Prom
           prompt: lastUserText(history),
           model: modelId,
           mode,
-          providerSettings: agentProviderSettings(settings, provider),
-          systemPrompt: buildNativeSystemPrompt(session, provider),
+          providerSettings,
+          systemPrompt,
         })
       }
       try {

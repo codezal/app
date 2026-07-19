@@ -1,7 +1,14 @@
 export type SkillScope = "project" | "global" | "plugin" | "mcp"
 
-// .codezal/skills → "codezal", .agents/skills → "agents", plugin loader → "plugin",
-export type SkillOrigin = "codezal" | "agents" | "plugin" | "mcp"
+// Identifies the directory or runtime that supplied the skill.
+export type SkillOrigin =
+  | "codezal"
+  | "agents"
+  | "agent"
+  | "codex"
+  | "claude"
+  | "plugin"
+  | "mcp"
 
 export type Skill = {
   name: string

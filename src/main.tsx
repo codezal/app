@@ -6,6 +6,7 @@ import App from './App.tsx'
 import { installHttpNoiseFilter } from './lib/http-noise'
 import { installGlobalErrorReporter } from './lib/report'
 import { refreshLocalModels } from './lib/providers/local'
+import { refreshMlxModels } from './lib/providers/mlx'
 // Monaco Editor worker + tema kurulumu (import side-effect: loader.config({monaco})).
 import './lib/monaco/setup'
 
@@ -13,8 +14,8 @@ installHttpNoiseFilter()
 
 installGlobalErrorReporter()
 
-// Local in-process models — populate the picker from the Rust models dir (no-op off-Tauri).
-void refreshLocalModels()
+// Installed local models — populate picker sources from the native runtimes.
+void Promise.all([refreshLocalModels(), refreshMlxModels()])
 
 if (import.meta.env.PROD) {
   window.addEventListener('contextmenu', (e) => e.preventDefault())

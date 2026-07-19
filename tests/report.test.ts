@@ -8,6 +8,15 @@ describe("isNoiseError", () => {
   it("aborted mesajı → gürültü", () => {
     expect(isNoiseError("The user aborted a request")).toBe(true)
   })
+  it("exact cancellation messages are noise", () => {
+    expect(isNoiseError("Canceled")).toBe(true)
+    expect(isNoiseError("Cancelled")).toBe(true)
+    expect(isNoiseError("Request canceled")).toBe(true)
+    expect(isNoiseError("Request cancelled.")).toBe(true)
+  })
+  it("errors that only mention cancellation are not hidden", () => {
+    expect(isNoiseError("Cancellation cleanup failed")).toBe(false)
+  })
   it("plugin-http stream teardown (resource id invalid) → gürültü", () => {
     expect(isNoiseError("The resource id 12 is invalid.")).toBe(true)
   })

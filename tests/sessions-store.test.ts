@@ -180,6 +180,58 @@ describe("remove-while-streaming güvenliği", () => {
     expect(() => useSessionsStore.getState().pushMessageFor("A", userMsg("geç"))).not.toThrow()
     expect(useSessionsStore.getState().sessions["A"]).toBeUndefined()
   })
+
+  it("aktif session silinince aynı projedeki en son güncellenen session'ı açar", async () => {
+    const deleted: Session = {
+      id: "deleted",
+      title: "Deleted",
+      updatedAt: 40,
+      messages: [],
+      provider: "openai" as Session["provider"],
+      model: "m",
+      workspacePath: "/project",
+    }
+    const sameOlder: Session = { ...deleted, id: "same-older", updatedAt: 10 }
+    const sameLatest: Session = { ...deleted, id: "same-latest", updatedAt: 30 }
+    const sameArchived: Session = { ...deleted, id: "same-archived", updatedAt: 60, archived: true }
+    const otherLatest: Session = {
+      ...deleted,
+      id: "other-latest",
+      updatedAt: 50,
+      workspacePath: undefined,
+    }
+    useSessionsStore.setState({
+      sessions: {
+        deleted,
+        "same-older": sameOlder,
+        "same-latest": sameLatest,
+        "same-archived": sameArchived,
+        "other-latest": otherLatest,
+      },
+      index: [
+        { id: "deleted", title: "Deleted", updatedAt: 40, workspacePath: "/project" },
+        { id: "other-latest", title: "Other latest", updatedAt: 50 },
+        { id: "same-older", title: "Same older", updatedAt: 10, workspacePath: "/project" },
+        { id: "same-latest", title: "Same latest", updatedAt: 30, workspacePath: "/project" },
+        {
+          id: "same-archived",
+          title: "Same archived",
+          updatedAt: 60,
+          workspacePath: "/project",
+          archived: true,
+        },
+      ],
+      activeId: "deleted",
+      active: deleted,
+      isDraft: false,
+    })
+
+    await useSessionsStore.getState().remove("deleted")
+
+    const st = useSessionsStore.getState()
+    expect(st.activeId).toBe("same-latest")
+    expect(st.active).toBe(st.sessions["same-latest"])
+  })
 })
 
 describe("granular DB write-behind (flush debounce)", () => {
@@ -398,6 +450,7 @@ describe("commitDraft proje hafızası", () => {
   it("draft commit olunca session'ın provider/model'ini projectMeta'ya yazar", async () => {
     const st = useSessionsStore.getState()
     st.createDraft("deepseek" as Session["provider"], "deepseek-v4", "/ws/erp")
+    expect(useSessionsStore.getState().active?.delegationMode).toBe("solo")
     st.updateActiveMeta({ provider: "moonshot" as Session["provider"], model: "kimi-k2.6" })
     await useSessionsStore.getState().commitDraft()
     const after = useSessionsStore.getState()

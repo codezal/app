@@ -202,7 +202,8 @@ const en: Messages = {
     modePlan: "Plan",
     modeOrchestra: "Orchestra Mode",
     orchestraModeClose: "Orchestra mode (close)",
-    planMode: "Plan mode",
+      planMode: "Plan mode",
+      multitask: "Multitask",
     planModeTitle: "Plan mode — read-only. Standard read/write permission is sufficient, no elevated access needed. Close with ⌘M.",
     orchestraModeTitle: "Orchestra mode — orchestrator that distributes parallel tasks to 1-5 workers. Opens configuration modal.",
     modeGoal: "Goal",
@@ -320,6 +321,11 @@ const en: Messages = {
     rerunTitle: "Regenerate",
     incompleteHint: "Turn may be incomplete",
     continueAction: "Continue",
+    securityNextStep: "Next step",
+    securityReviewPrompt: "Review the security scan findings, remove false positives, and prioritize confirmed issues.",
+    securityReviewAction: "Review findings",
+    securityFixPrompt: "Fix the confirmed security findings, starting with critical issues. Verify each fix.",
+    securityFixAction: "Fix issues",
     forkTitle: "Fork from here (new session)",
     revertTitle: "Revert file changes",
     revertFilesTitle: "Revert file changes",
@@ -640,6 +646,7 @@ const en: Messages = {
 
   // ---- Tab Bar ----
   tabBar: {
+    agent: "Agent",
     chat: "Chat",
     files: "Files",
     context: "Context",
@@ -1594,6 +1601,9 @@ const en: Messages = {
     },
     drawer: {
       headerPrefix: "Settings · {tab}",
+      navGroupApp: "Application",
+      navGroupModels: "Agents & Models",
+      navGroupTools: "Tools & Extensions",
       themeTitle: "Theme",
       fontSizeTitle: "Font size",
       defaultProviderModelTitle: "Default provider · model",

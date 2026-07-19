@@ -96,7 +96,7 @@ export function DiffViewer({ uri }: Props) {
   const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b border-codezal px-3 py-2">
         <span className="truncate text-sm">
           <span className="font-medium text-codezal-text">{basename(path)}</span>
@@ -176,7 +176,7 @@ export function DiffViewer({ uri }: Props) {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto bg-codezal-bg">
+      <div className="min-h-0 flex-1 overflow-auto bg-codezal-bg">
         {diff === null ? (
           <div className="px-3 py-2 text-sm text-codezal-mute">…</div>
         ) : (

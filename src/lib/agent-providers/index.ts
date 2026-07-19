@@ -15,8 +15,16 @@ export const CLI_AGENT_PROVIDERS: CliAgentProviderDefinition[] = [
   {
     id: "codex-cli",
     label: "Codex CLI",
-    defaultModel: "gpt-5.4",
-    fallbackModels: ["gpt-5.4", "gpt-5.4-codex"],
+    defaultModel: "gpt-5.6-sol",
+    fallbackModels: [
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.3-codex-spark",
+    ],
     defaultCommand: "codex app-server",
   },
   {

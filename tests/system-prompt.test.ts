@@ -10,6 +10,7 @@ vi.mock("@/lib/skills", () => ({
   readWorkspaceSkills: vi.fn().mockResolvedValue([]),
   readUserSkills: vi.fn().mockResolvedValue([]),
   buildSkillsCatalog: vi.fn().mockReturnValue(""),
+  buildSkillsPromptSection: vi.fn().mockResolvedValue(""),
 }))
 vi.mock("@/lib/skills/plugin", () => ({
   listPluginSkills: vi.fn().mockReturnValue([]),
@@ -119,6 +120,37 @@ describe("buildSystemPrompt", () => {
   it("build modu (varsayılan) → PLAN MODE ACTIVE yok", async () => {
     const r = await buildSystemPrompt({ mode: "build" })
     expect(r).not.toContain("PLAN MODE ACTIVE")
+  })
+
+  it("delegationMode eksik → solo; adaptive → supervisor kataloğu", async () => {
+    mockSettings.mockReturnValue({
+      settings: {
+        narrateProgress: true,
+        supervisor: {
+          enabled: true,
+          routing: "hybrid",
+          autoDelegate: true,
+          maxParallelRuns: 3,
+          maxChildRunsPerTurn: 5,
+          maxDepth: 1,
+          maxWallClockMs: 30 * 60 * 1000,
+          isolation: "auto",
+          mergePolicy: "safe-auto",
+          pool: [
+            {
+              id: "reviewer",
+              agentName: "reviewer",
+              enabled: true,
+              engine: { kind: "sdk", providerId: "openai", modelId: "gpt-test" },
+            },
+          ],
+        },
+      },
+    } as ReturnType<typeof useSettingsStore.getState>)
+    const legacy = await buildSystemPrompt({})
+    const adaptive = await buildSystemPrompt({ delegationMode: "adaptive" })
+    expect(legacy).not.toContain("AVAILABLE AGENT POOL")
+    expect(adaptive).toContain("AVAILABLE AGENT POOL")
   })
 
   it("memory sections memory priority ile modele empoze edilir", async () => {

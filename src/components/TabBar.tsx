@@ -1,6 +1,7 @@
 // Top tab strip for the active session.
 // The first tab is pinned chat, followed by open files in that session.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   ChevronDown,
   ChevronLeft,
@@ -9,27 +10,36 @@ import {
   GitBranch,
   MessageSquare,
   MessageSquarePlus,
+  Loader2,
   PanelLeftOpen,
   PanelRight,
   Search,
   Settings,
   Terminal as TerminalIcon,
+  Plus,
   X,
 } from "@/lib/icons"
 import { CodezalBrandGlyph } from "./icons"
 import { useSessionsStore } from "@/store/sessions"
+import { useTerminalsStore } from "@/store/terminals"
 import { useDirtyFiles, isDirty } from "@/lib/editor-dirty"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { basename } from "@/lib/workspace"
 import { parseDiffUri } from "@/lib/diff-uri"
 import { isTurnDiffUri } from "@/lib/turn-diff-uri"
 import { parseOutputUri } from "@/lib/output-doc"
+import { isTerminalUri, makeTerminalUri, parseTerminalUri } from "@/lib/terminal-uri"
+import {
+  detectInstalledTerminalCliTools,
+  type TerminalCliDefinition,
+} from "@/lib/terminal-cli"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { WindowControls } from "./WindowControls"
 import { isMacOS } from "@/lib/platform"
 import { MODE_ICON, modeLabel, type PanelMode } from "@/lib/panel-modes"
 import { FileTypeIcon } from "@/lib/file-icons"
+import { TerminalCliIcon } from "./TerminalCliIcon"
 
 // PanelMode, modeLabel, and MODE_ICON live in src/lib/panel-modes.tsx to avoid
 // Fast Refresh warnings from non-component exports. Keep this type re-export for
@@ -37,11 +47,11 @@ import { FileTypeIcon } from "@/lib/file-icons"
 export type { PanelMode } from "@/lib/panel-modes"
 
 const editorTabBase =
-  "group relative flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-2.5 text-sm leading-none transition-colors"
+  "group relative flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm leading-none transition-colors focus-visible:ring-2 focus-visible:ring-codezal-accent/45"
 const editorTabActive =
-  "bg-codezal-panel-2 text-codezal-text"
+  "border-codezal-strong bg-codezal-panel-2 text-codezal-text shadow-sm"
 const editorTabInactive =
-  "text-codezal-dim hover:bg-[rgb(var(--codezal-line-rgb)_/_0.04)] hover:text-[hsl(var(--codezal-text))]"
+  "border-transparent text-codezal-dim hover:bg-[rgb(var(--codezal-line-rgb)_/_0.04)] hover:text-[hsl(var(--codezal-text))]"
 const tabRailButton =
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-codezal-dim transition-colors hover:bg-[rgb(var(--codezal-line-rgb)_/_0.04)] hover:text-[hsl(var(--codezal-text))] disabled:opacity-30 disabled:hover:bg-transparent"
 
@@ -52,8 +62,8 @@ type Props = {
   todoAvailable?: boolean
   // Shows "SDD" in the top panel menu only while the active session is linked to a draft.
   sddAvailable?: boolean
-  // Width of the unchanged chat column while the Files workspace is docked.
-  filesWorkspaceChatWidth?: number
+  // Keeps chat and editor tabs visible while a workspace panel is docked.
+  workspaceTabsOpen?: boolean
   // True when the sidebar is collapsed. In that state TabBar takes over the
   // top-left titlebar region (reserves space for traffic lights + expand button).
   sidebarHidden?: boolean
@@ -82,7 +92,7 @@ export function TabBar({
   onSetPanelMode,
   todoAvailable,
   sddAvailable,
-  filesWorkspaceChatWidth,
+  workspaceTabsOpen = false,
   sidebarHidden,
   scrolled,
   onExpandSidebar,
@@ -102,25 +112,49 @@ export function TabBar({
   const tlIcon = "text-codezal-mute"
   const active = useSessionsStore((s) => s.active)
   const setActiveFile = useSessionsStore((s) => s.setActiveFile)
+  const openFile = useSessionsStore((s) => s.openFile)
   const closeFile = useSessionsStore((s) => s.closeFile)
   const pinPreviewFile = useSessionsStore((s) => s.pinPreviewFile)
   const reorderOpenFiles = useSessionsStore((s) => s.reorderOpenFiles)
+  const terminalSessions = useTerminalsStore((s) => s.sessions)
+  const createTerminal = useTerminalsStore((s) => s.create)
+  const removeTerminal = useTerminalsStore((s) => s.remove)
+  const setActiveTerminal = useTerminalsStore((s) => s.setActive)
   const dragPathRef = useRef<string | null>(null)
   const [dragOverPath, setDragOverPath] = useState<string | null>(null)
   const dirtyMap = useDirtyFiles((s) => s.dirty)
   const [pendingClose, setPendingClose] = useState<string | null>(null)
+  const closeTab = (path: string) => {
+    const terminalId = parseTerminalUri(path)
+    if (terminalId) removeTerminal(terminalId)
+    closeFile(path)
+  }
   const requestClose = (p: string) => {
     if (isDirty(p)) setPendingClose(p)
-    else closeFile(p)
+    else closeTab(p)
+  }
+
+  const activateFile = (path: string | null) => {
+    const terminalId = path ? parseTerminalUri(path) : null
+    if (terminalId) setActiveTerminal(terminalId)
+    setActiveFile(path)
   }
 
   const openFiles = active?.openFiles ?? []
   const activeFile = active?.activeFile ?? null
   const previewFile = active?.previewFile ?? null
   const isChat = !activeFile
-  const filesWorkspaceOpen = filesWorkspaceChatWidth !== undefined
-  const editorSplit = openFiles.length > 0 || filesWorkspaceOpen
-  const chatLabel = active && active.messages.length === 0 ? t("sidebar.newSession") : active?.title
+  const editorSplit = openFiles.length > 0 || workspaceTabsOpen
+  const chatLabel = t("tabBar.agent")
+
+  const createTerminalTab = (tool?: TerminalCliDefinition) => {
+    if (!active) return
+    const terminalId = createTerminal(active.id, active.workspacePath, tool
+      ? { name: tool.label, toolId: tool.id, launchCommand: tool.launchCommand ?? tool.command }
+      : undefined)
+    setActiveTerminal(terminalId)
+    openFile(makeTerminalUri(terminalId))
+  }
 
   const stripRef = useRef<HTMLDivElement>(null)
   const [canLeft, setCanLeft] = useState(false)
@@ -167,17 +201,19 @@ export function TabBar({
 
   const tabItems: TabSwitchItem[] = active
     ? [
-        ...(!editorSplit || filesWorkspaceOpen
-          ? [{ path: null, label: chatLabel ?? active.title, active: isChat }]
-          : []),
+        { path: null, label: chatLabel ?? active.title, active: isChat },
         ...openFiles.map((p) => {
           const d = parseDiffUri(p)
           const o = d ? null : parseOutputUri(p)
           const td = !d && !o && isTurnDiffUri(p)
+          const terminal = !d && !o && !td && isTerminalUri(p)
+          const terminalSession = terminal
+            ? terminalSessions.find((session) => session.id === parseTerminalUri(p))
+            : undefined
           return {
             path: p,
-            label: td ? t("messageList.turnDiffTab") : d ? basename(d.path) : o ? o.title : basename(p),
-            title: td ? t("messageList.turnDiffTab") : d ? `diff: ${d.path}` : o ? o.title : p,
+            label: terminal ? terminalSession?.name ?? t("tabBar.modeTerminal") : td ? t("messageList.turnDiffTab") : d ? basename(d.path) : o ? o.title : basename(p),
+            title: terminal ? terminalSession?.name ?? t("tabBar.modeTerminal") : td ? t("messageList.turnDiffTab") : d ? `diff: ${d.path}` : o ? o.title : p,
             active: activeFile === p,
           }
         }),
@@ -189,7 +225,7 @@ export function TabBar({
       aria-label={t("a11y.toolbarLandmark")}
       className={cn(
         // Keep the header above content fades and panel dropdowns.
-        "relative z-30 flex h-[44px] items-center gap-2 border-b border-transparent bg-codezal-bg px-2",
+        "relative z-30 flex h-[44px] items-center gap-2 border-b border-codezal-panel bg-codezal-bg px-2",
         // Sidebar collapsed: traffic lights overlay this row at x=20 (Tauri config). The
         // light-side cluster (expand · settings · search · [new-chat] · back · forward,
         // gap-1.5) sits after the lights. Editor mode hides new-chat → 5 buttons (reserve
@@ -229,7 +265,7 @@ export function TabBar({
             aria-label={t("tabBar.showSidebar")}
             className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
           >
-            <PanelLeftOpen className="h-4 w-4" />
+            <PanelLeftOpen className="h-4 w-4" aria-hidden />
           </button>
           {onOpenSettings && (
             <button
@@ -239,7 +275,7 @@ export function TabBar({
               aria-label={t("sidebar.settings")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4" aria-hidden />
             </button>
           )}
           {onOpenSearch && (
@@ -250,7 +286,7 @@ export function TabBar({
               aria-label={t("common.search")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
             >
-              <Search className="h-4 w-4" />
+              <Search className="h-4 w-4" aria-hidden />
             </button>
           )}
           {!editorSplit && onNewSession && (
@@ -261,7 +297,7 @@ export function TabBar({
               aria-label={t("sidebar.newSession")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text", tlIcon)}
             >
-              <MessageSquarePlus className="h-4 w-4" />
+              <MessageSquarePlus className="h-4 w-4" aria-hidden />
             </button>
           )}
           {onNavBack && (
@@ -273,7 +309,7 @@ export function TabBar({
               aria-label={t("tabBar.navBack")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-codezal-dim", tlIcon)}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
           )}
           {onNavForward && (
@@ -285,33 +321,33 @@ export function TabBar({
               aria-label={t("tabBar.navForward")}
               className={cn("flex h-[22px] w-[22px] items-center justify-center rounded hover:bg-codezal-panel-2 hover:text-codezal-text disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-codezal-dim", tlIcon)}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           )}
         </div>
       )}
       <div className="relative z-10 flex h-full min-w-0 flex-1 items-center gap-1">
-        {/* Chat tab stays pinned outside the scrollable file strip.
-            Hidden in editor mode — chat lives in the left panel there. */}
-        {active && (!editorSplit || filesWorkspaceOpen) && (
+        {/* Chat stays a first-class tab; files never squeeze it into a side panel. */}
+        {active && (
           <button
             type="button"
-            onClick={() => setActiveFile(null)}
+            onClick={() => activateFile(null)}
             aria-current={isChat ? "page" : undefined}
             data-tab-active={isChat ? "true" : "false"}
             className={cn(
               editorTabBase,
               "min-w-[96px] max-w-[220px]",
-              filesWorkspaceOpen && "max-w-none shrink-0 justify-start",
               isChat ? editorTabActive : editorTabInactive,
             )}
-            style={
-              filesWorkspaceOpen
-                ? { width: Math.max(160, filesWorkspaceChatWidth - 16) }
-                : undefined
-            }
             title={chatLabel}
           >
+            <MessageSquare
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                isChat ? "text-codezal-accent" : "text-codezal-mute",
+              )}
+              aria-hidden
+            />
             <span className="truncate font-medium">{chatLabel}</span>
           </button>
         )}
@@ -326,7 +362,7 @@ export function TabBar({
             aria-label={t("tabBar.scrollTabsLeft")}
             className={tabRailButton}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" aria-hidden />
           </button>
         )}
 
@@ -337,12 +373,6 @@ export function TabBar({
           onContextMenu={onStripContextMenu}
           className="flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {filesWorkspaceOpen && openFiles.length === 0 && (
-            <div className={cn(editorTabBase, editorTabActive, "max-w-[220px]")}>
-              <FileTypeIcon name="Untitled-1.txt" />
-              <span className="truncate">{t("common.untitled")}-1</span>
-            </div>
-          )}
           {/* File tabs */}
           {openFiles.map((path) => {
             const isActive = activeFile === path
@@ -352,8 +382,12 @@ export function TabBar({
             const diff = parseDiffUri(path)
             const out = diff ? null : parseOutputUri(path)
             const turn = !diff && !out && isTurnDiffUri(path)
-            const label = turn ? t("messageList.turnDiffTab") : diff ? basename(diff.path) : out ? out.title : basename(path)
-            const title = turn ? t("messageList.turnDiffTab") : diff ? `diff: ${diff.path}` : out ? out.title : path
+            const terminal = !diff && !out && !turn && isTerminalUri(path)
+            const terminalSession = terminal
+              ? terminalSessions.find((session) => session.id === parseTerminalUri(path))
+              : undefined
+            const label = terminal ? terminalSession?.name ?? t("tabBar.modeTerminal") : turn ? t("messageList.turnDiffTab") : diff ? basename(diff.path) : out ? out.title : basename(path)
+            const title = terminal ? terminalSession?.name ?? t("tabBar.modeTerminal") : turn ? t("messageList.turnDiffTab") : diff ? `diff: ${diff.path}` : out ? out.title : path
             return (
               <div
                 key={path}
@@ -400,7 +434,7 @@ export function TabBar({
               >
                 <button
                   type="button"
-                  onClick={() => setActiveFile(path)}
+                  onClick={() => activateFile(path)}
                   // VS Code: double-clicking a preview tab pins it.
                   onDoubleClick={() => isPreview && pinPreviewFile()}
                   aria-current={isActive ? "page" : undefined}
@@ -412,6 +446,15 @@ export function TabBar({
                 >
                   {diff ? (
                     <GitBranch
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        !terminalSession?.toolId &&
+                          (isActive ? "text-codezal-accent" : "text-codezal-mute"),
+                      )}
+                    />
+                  ) : terminal ? (
+                    <TerminalCliIcon
+                      toolId={terminalSession?.toolId}
                       className={cn(
                         "h-4 w-4 shrink-0",
                         isActive ? "text-codezal-accent" : "text-codezal-mute",
@@ -463,6 +506,8 @@ export function TabBar({
             )
           })}
 
+          <NewTerminalMenu onCreate={createTerminalTab} />
+
           {/* Remaining space is draggable window chrome. */}
           <div className="h-full min-w-[40px] flex-1" data-tauri-drag-region />
         </div>
@@ -476,25 +521,27 @@ export function TabBar({
             aria-label={t("tabBar.scrollTabsRight")}
             className={tabRailButton}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
         )}
       </div>
 
+      <div className="relative z-10 flex items-center gap-0.5 rounded-lg border border-codezal-hair bg-[hsl(var(--codezal-panel)_/_0.55)] p-0.5">
       {onToggleSplit && (
         <button
           type="button"
           onClick={onToggleSplit}
           title={t("tabBar.splitView")}
           aria-label={t("tabBar.splitView")}
+          aria-pressed={splitActive}
           className={cn(
-            "relative z-10 flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-sm",
+            "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-codezal-accent/45",
             splitActive
-              ? "border-codezal-accent text-codezal-accent"
-              : "border-transparent text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
+              ? "bg-codezal-panel-2 text-codezal-accent shadow-sm"
+              : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
           )}
         >
-          <Columns2 className="h-4 w-4" />
+          <Columns2 className="h-4 w-4" aria-hidden />
         </button>
       )}
 
@@ -504,18 +551,25 @@ export function TabBar({
           onClick={onToggleSideChat}
           title={t("sideChat.toggle")}
           aria-label={t("sideChat.toggle")}
+          aria-pressed={sideChatActive}
           className={cn(
-            "relative z-10 flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-sm",
+            "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-codezal-accent/45",
             sideChatActive
-              ? "border-codezal-accent text-codezal-accent"
-              : "border-transparent text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
+              ? "bg-codezal-panel-2 text-codezal-accent shadow-sm"
+              : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
           )}
         >
-          <MessageSquare className="h-4 w-4" />
+          <MessageSquare className="h-4 w-4" aria-hidden />
         </button>
       )}
 
-      <PanelMenu mode={panelMode} onSet={onSetPanelMode} todoAvailable={todoAvailable} sddAvailable={sddAvailable} />
+      <PanelMenu
+        mode={panelMode}
+        onSet={onSetPanelMode}
+        todoAvailable={todoAvailable}
+        sddAvailable={sddAvailable}
+      />
+      </div>
 
       <WindowControls />
 
@@ -525,7 +579,7 @@ export function TabBar({
           y={menu.y}
           items={tabItems}
           onPick={(path) => {
-            setActiveFile(path)
+            activateFile(path)
             setMenu(null)
           }}
           onClose={() => setMenu(null)}
@@ -539,12 +593,146 @@ export function TabBar({
         confirmLabel={t("fileViewer.unsavedConfirm")}
         cancelLabel={t("common.cancel")}
         onConfirm={() => {
-          if (pendingClose) closeFile(pendingClose)
+          if (pendingClose) closeTab(pendingClose)
           setPendingClose(null)
         }}
         onCancel={() => setPendingClose(null)}
       />
     </header>
+  )
+}
+
+function NewTerminalMenu({
+  onCreate,
+}: {
+  onCreate: (tool?: TerminalCliDefinition) => void
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [installed, setInstalled] = useState<TerminalCliDefinition[]>([])
+  const [position, setPosition] = useState({ left: 0, top: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    void detectInstalledTerminalCliTools()
+      .then((tools) => {
+        if (active) setInstalled(tools)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    function closeOnOutsidePress(event: PointerEvent) {
+      const target = event.target as Node
+      if (!buttonRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false)
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false)
+    }
+    function closeOnResize() {
+      setOpen(false)
+    }
+    window.addEventListener("pointerdown", closeOnOutsidePress)
+    window.addEventListener("keydown", closeOnEscape)
+    window.addEventListener("resize", closeOnResize)
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsidePress)
+      window.removeEventListener("keydown", closeOnEscape)
+      window.removeEventListener("resize", closeOnResize)
+    }
+  }, [open])
+
+  function toggleMenu() {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (rect) {
+      setPosition({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 240)),
+        top: rect.bottom + 6,
+      })
+    }
+    setInstalled([])
+    setLoading(true)
+    setOpen(true)
+  }
+
+  function create(tool?: TerminalCliDefinition) {
+    onCreate(tool)
+    setOpen(false)
+  }
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={toggleMenu}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t("terminal.newTerminal")}
+        aria-label={t("terminal.newTerminal")}
+        className={cn(tabRailButton, "gap-0.5 px-1")}
+      >
+        <Plus className="h-4 w-4" aria-hidden />
+        <ChevronDown className="h-2.5 w-2.5" aria-hidden />
+      </button>
+
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={position}
+            className="fixed z-[100] w-[232px] overflow-hidden cz-menu p-1.5 shadow-panel"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => create()}
+              className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+            >
+              <TerminalCliIcon className="h-4 w-4" />
+              <span>{t("tabBar.modeTerminal")}</span>
+            </button>
+
+            {(loading || installed.length > 0) && <div className="my-1 h-px bg-codezal-hair" />}
+
+            {loading ? (
+              <div className="flex h-9 items-center gap-2.5 px-2.5 text-sm text-codezal-mute">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                <span>CLI</span>
+              </div>
+            ) : (
+              installed.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => create(tool)}
+                  className="flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+                >
+                  <TerminalCliIcon toolId={tool.id} className="h-4 w-4" />
+                  <span>{tool.label}</span>
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 
@@ -572,7 +760,7 @@ function PanelMenu({
     return () => window.removeEventListener("mousedown", onDoc)
   }, [open])
 
-  const items: PanelMode[] = ["files", "git", "agents", "terminal", "preview"]
+  const items: PanelMode[] = ["files", "git", "review", "agents", "preview"]
   const withTodo: PanelMode[] = todoAvailable ? [...items, "todo"] : items
   const menuItems: PanelMode[] = sddAvailable ? [...withTodo, "sdd"] : withTodo
 
@@ -592,8 +780,8 @@ function PanelMenu({
             : "border-transparent text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
         )}
       >
-        <PanelRight className="h-4 w-4" />
-        <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+        <PanelRight className="h-4 w-4" aria-hidden />
+        <ChevronDown className="h-2.5 w-2.5 shrink-0" aria-hidden />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-40 mt-1 w-[200px] overflow-hidden cz-menu">
@@ -618,6 +806,7 @@ function PanelMenu({
               >
                 <Icon
                   className={cn("h-3.5 w-3.5", active ? "text-codezal-accent" : "text-codezal-mute")}
+                  aria-hidden
                 />
                 <span>{modeLabel(m)}</span>
                 {active && <span className="ml-auto text-sm text-codezal-accent">●</span>}
@@ -633,7 +822,7 @@ function PanelMenu({
               }}
               className="flex w-full items-center gap-2 border-t border-codezal px-3 py-1.5 text-left text-sm text-codezal-dim hover:bg-codezal-panel-2 hover:text-destructive"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden />
               {t("tabBar.closePanel")}
             </button>
           )}
@@ -664,6 +853,7 @@ function TabSwitcherMenu({
   onClose: () => void
 }) {
   const t = useT()
+  const terminalSessions = useTerminalsStore((s) => s.sessions)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: x, top: y })
 
@@ -703,6 +893,10 @@ function TabSwitcherMenu({
       {items.map((it) => {
         const diff = it.path ? parseDiffUri(it.path) : null
         const out = it.path && !diff ? parseOutputUri(it.path) : null
+        const terminal = !!it.path && !diff && !out && isTerminalUri(it.path)
+        const terminalSession = terminal
+          ? terminalSessions.find((session) => session.id === parseTerminalUri(it.path!))
+          : undefined
         return (
           <button
             key={it.path ?? "__chat__"}
@@ -725,6 +919,11 @@ function TabSwitcherMenu({
             ) : diff ? (
               <GitBranch
                 className={cn("h-3.5 w-3.5 shrink-0", it.active ? "text-codezal-accent" : "text-codezal-mute")}
+              />
+            ) : terminal ? (
+              <TerminalCliIcon
+                toolId={terminalSession?.toolId}
+                className="h-3.5 w-3.5 shrink-0"
               />
             ) : out ? (
               <TerminalIcon

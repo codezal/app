@@ -43,6 +43,21 @@ export async function resolveProgram(name: string): Promise<string | null> {
   }
 }
 
+export type TerminalAvailableProgram = {
+  name: string
+  launchCommand: string
+}
+
+export async function terminalAvailablePrograms(
+  names: string[],
+): Promise<TerminalAvailableProgram[]> {
+  try {
+    return await invoke<TerminalAvailableProgram[]>("terminal_available_programs", { names })
+  } catch {
+    return []
+  }
+}
+
 export async function copyDir(src: string, dest: string): Promise<void> {
   await invoke("fs_copy_dir", { src, dest })
 }

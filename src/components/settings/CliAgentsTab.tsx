@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ArrowDown, ArrowUp, RefreshCcw } from "@/lib/icons"
+import { ArrowDown, ArrowUp, ChevronRight, RefreshCcw } from "@/lib/icons"
 import {
   CLI_AGENT_PROVIDERS,
   agentProviderSettings,
@@ -165,6 +165,7 @@ export function CliAgentsTab() {
     summarizeCliUsage([]),
   )
   const [usageLoading, setUsageLoading] = useState(true)
+  const [expandedProvider, setExpandedProvider] = useState<CliAgentProviderId | null>(null)
   const autoRefreshStarted = useRef(false)
   const current = settings.agentProviders ?? defaultAgentProvidersSettings()
   const orderedProviders = [...CLI_AGENT_PROVIDERS].sort((a, b) => {
@@ -280,51 +281,65 @@ export function CliAgentsTab() {
         {orderedProviders.map((provider, index) => {
           const stored = agentProviderSettings(settings, provider.id)
           const customModels = stored.models?.join("\n") ?? ""
+          const expanded = expandedProvider === provider.id
+          const triggerId = `cli-provider-${provider.id}-trigger`
+          const panelId = `cli-provider-${provider.id}-panel`
           return (
-            <div key={provider.id} className="border-b border-codezal-hair py-3 last:border-b-0">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-md font-semibold text-codezal-text">{provider.label}</h4>
-                  <StatusLine
-                    stored={stored}
-                    diagnostic={diagnostics[provider.id]}
-                    error={errors[provider.id]}
-                    busy={busy[provider.id]}
+            <div key={provider.id} className="border-b border-codezal-hair last:border-b-0">
+              <div className="flex min-h-14 items-center gap-3">
+                <button
+                  id={triggerId}
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={panelId}
+                  onClick={() => setExpandedProvider(expanded ? null : provider.id)}
+                  className="group flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-2 text-left hover:bg-codezal-panel-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-codezal-mute transition-transform motion-reduce:transition-none",
+                      expanded && "rotate-90",
+                    )}
+                    aria-hidden
                   />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => move(provider.id, -1)}
-                    disabled={index === 0}
-                    title={t("settings.cliAgents.moveUp")}
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-codezal text-codezal-dim hover:bg-codezal-panel-2 disabled:opacity-40"
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => move(provider.id, 1)}
-                    disabled={index === orderedProviders.length - 1}
-                    title={t("settings.cliAgents.moveDown")}
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-codezal text-codezal-dim hover:bg-codezal-panel-2 disabled:opacity-40"
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-md font-semibold text-codezal-text">
+                      {provider.label}
+                    </span>
+                    <span className="mt-0.5 block truncate" aria-live="polite">
+                      <StatusLine
+                        stored={stored}
+                        diagnostic={diagnostics[provider.id]}
+                        error={errors[provider.id]}
+                        busy={busy[provider.id]}
+                      />
+                    </span>
+                  </span>
+                </button>
+                <div className="pr-1">
                   <Toggle
-                    label={t("settings.cliAgents.visible")}
+                    label={`${provider.label} · ${t("settings.cliAgents.visible")}`}
                     checked={stored.enabled !== false}
                     onChange={(enabled) => patch(provider.id, { enabled })}
                   />
                 </div>
               </div>
-              <div className="space-y-3">
+              {expanded && (
+              <div
+                id={panelId}
+                role="region"
+                aria-labelledby={triggerId}
+                className="border-t border-codezal-hair px-2 pb-4 pt-1"
+              >
                 <Row label={t("settings.cliAgents.command")} description={provider.defaultCommand}>
                   <input
+                    name={`${provider.id}-command`}
+                    autoComplete="off"
+                    spellCheck={false}
                     value={stored.command ?? ""}
                     onChange={(e) => patch(provider.id, { command: e.target.value.trim() || undefined })}
-                    placeholder={provider.defaultCommand}
-                    className="w-72 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text outline-none focus:border-codezal-strong"
+                    placeholder={`${provider.defaultCommand}…`}
+                    className="w-80 max-w-[42vw] rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-strong focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
                   />
                 </Row>
                 <Row
@@ -339,6 +354,9 @@ export function CliAgentsTab() {
                 </Row>
                 <Row label={t("settings.cliAgents.models")} description={t("settings.cliAgents.modelsDesc")}>
                   <textarea
+                    name={`${provider.id}-models`}
+                    autoComplete="off"
+                    spellCheck={false}
                     value={customModels}
                     onChange={(e) =>
                       patch(provider.id, {
@@ -348,9 +366,9 @@ export function CliAgentsTab() {
                           .filter(Boolean),
                       })
                     }
-                    placeholder={provider.fallbackModels.join("\n")}
+                    placeholder={`${provider.fallbackModels.join("\n")}\n…`}
                     rows={3}
-                    className="w-72 resize-y rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text outline-none focus:border-codezal-strong"
+                    className="w-80 max-w-[42vw] resize-y rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-strong focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
                   />
                 </Row>
                 <Row
@@ -365,28 +383,54 @@ export function CliAgentsTab() {
                 </Row>
                 <Row label={t("settings.cliAgents.env")} description={t("settings.cliAgents.envDesc")}>
                   <textarea
+                    name={`${provider.id}-environment`}
+                    autoComplete="off"
+                    spellCheck={false}
                     value={envToText(stored.env)}
                     onChange={(e) => patch(provider.id, { env: parseEnvText(e.target.value) })}
-                    placeholder="CODEZAL_EXAMPLE=1"
+                    placeholder="CODEZAL_EXAMPLE=1…"
                     rows={3}
-                    className="w-72 resize-y rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-sm text-codezal-text outline-none focus:border-codezal-strong"
+                    className="w-80 max-w-[42vw] resize-y rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 font-mono text-sm text-codezal-text outline-none focus:border-codezal-strong focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
                   />
                 </Row>
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between gap-3 pt-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => move(provider.id, -1)}
+                      disabled={index === 0}
+                      title={t("settings.cliAgents.moveUp")}
+                      aria-label={`${provider.label} · ${t("settings.cliAgents.moveUp")}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-codezal text-codezal-dim hover:bg-codezal-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40 disabled:opacity-40"
+                    >
+                      <ArrowUp className="h-4 w-4" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(provider.id, 1)}
+                      disabled={index === orderedProviders.length - 1}
+                      title={t("settings.cliAgents.moveDown")}
+                      aria-label={`${provider.label} · ${t("settings.cliAgents.moveDown")}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-codezal text-codezal-dim hover:bg-codezal-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40 disabled:opacity-40"
+                    >
+                      <ArrowDown className="h-4 w-4" aria-hidden />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void refreshProvider(provider.id)}
                     disabled={busy[provider.id]}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-panel-2",
+                      "inline-flex items-center gap-2 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
                       busy[provider.id] && "opacity-60",
                     )}
                   >
-                    <RefreshCcw className={cn("h-4 w-4", busy[provider.id] && "animate-spin")} />
+                    <RefreshCcw className={cn("h-4 w-4", busy[provider.id] && "animate-spin")} aria-hidden />
                     {t("settings.cliAgents.refresh")}
                   </button>
                 </div>
               </div>
+              )}
             </div>
           )
         })}
@@ -400,13 +444,13 @@ function DiscoveredModels({ models }: { models: CliAgentModel[] }) {
   const t = useT()
   if (models.length === 0) {
     return (
-      <div className="w-72 rounded-md border border-codezal bg-codezal-panel px-3 py-2 text-sm text-codezal-mute">
+      <div className="w-80 max-w-[42vw] rounded-md border border-codezal bg-codezal-panel px-3 py-2 text-sm text-codezal-mute">
         {t("settings.cliAgents.noDiscoveredModels")}
       </div>
     )
   }
   return (
-    <div className="w-72 overflow-hidden rounded-md border border-codezal bg-codezal-panel">
+    <div className="w-80 max-w-[42vw] overflow-hidden rounded-md border border-codezal bg-codezal-panel">
       {models.slice(0, 6).map((model) => (
         <div key={model.id} className="border-b border-codezal-hair px-3 py-2 last:border-b-0">
           <div className="flex min-w-0 items-baseline gap-2">
