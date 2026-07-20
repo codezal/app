@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Codezal",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "identifier": "app.codezal.desktop",
   "build": {
     "frontendDist": "../dist",
