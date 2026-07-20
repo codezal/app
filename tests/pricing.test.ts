@@ -132,6 +132,19 @@ describe("resolveContextCap", () => {
   it("mlx local runtime window'unu kullanır", () => {
     expect(resolveContextCap(undefined, "mlx", "mlx-community/Qwen3-4B-4bit", 32768)).toBe(32768)
   })
+
+  it("custom model için yapılandırılmış context window'u kullanır", () => {
+    expect(
+      resolveContextCap(undefined, "my-llm", "long-model", undefined, [
+        {
+          id: "my-llm",
+          name: "My LLM",
+          baseURL: "https://api.example.com/v1",
+          models: [{ id: "long-model", contextWindow: 1_000_000 }],
+        },
+      ]),
+    ).toBe(1_000_000)
+  })
 })
 
 describe("compactionModelFor", () => {

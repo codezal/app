@@ -858,7 +858,13 @@ export default function App() {
 
     const compactCatalog = settings.providerCatalog?.data as ProvidersCatalog | undefined
     const limits = {
-      context: resolveContextCap(compactCatalog, snap.provider, snap.model, resolveLocalLlm(settings, snap.model).contextWindow),
+      context: resolveContextCap(
+        compactCatalog,
+        snap.provider,
+        snap.model,
+        resolveLocalLlm(settings, snap.model).contextWindow,
+        settings.customProviders,
+      ),
       output: modelDetail(compactCatalog, snap.provider, snap.model)?.limit?.output,
     }
     const eff = estimateMessagesTokens(msgs)

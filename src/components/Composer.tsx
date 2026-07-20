@@ -983,6 +983,7 @@ export function Composer({
     provider,
     model ?? "",
     localEff && localEff > 0 ? Math.min(localEff, localWin) : localWin,
+    settings.customProviders,
   )
 
   const acListboxId =
@@ -1509,7 +1510,7 @@ export function Composer({
             onChange={(m) => void updateSettings({ approvalMode: m })}
           />
           <span className="ml-auto" title={t("composer.contextUsedTitle")}>
-            {formatK(tokenCount)} / {formatK(contextCapValue)}
+            {tokenCount > 0 ? "≈" : ""}{formatK(tokenCount)} / {formatK(contextCapValue)}
           </span>
           <span className="flex items-center gap-1">{fmtKbd("⌘⏎")}</span>
         </div>
@@ -2319,7 +2320,13 @@ function ModelPicker({
   const activeDisplay = detail?.name || displayModelName(modelId)
   const ctxCap = nativeProvider
     ? 0
-    : resolveContextCap(catalog, providerId, modelId, resolveLocalLlm(settings, modelId).contextWindow)
+    : resolveContextCap(
+        catalog,
+        providerId,
+        modelId,
+        resolveLocalLlm(settings, modelId).contextWindow,
+        settings.customProviders,
+      )
   const ctxLabel = nativeProvider
     ? "native CLI"
     : ctxCap >= 1_000_000

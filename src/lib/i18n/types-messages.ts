@@ -1319,6 +1319,7 @@ export type Messages = {
       modelsLabel: string
       modelIdPlaceholder: string
       modelNamePlaceholder: string
+      modelContextPlaceholder?: string
       addModel: string
       headersLabel: string
       headerKeyPlaceholder: string
@@ -1333,6 +1334,7 @@ export type Messages = {
       errorBaseUrlFormat: string
       errorModelsRequired: string
       errorModelDuplicate: string
+      errorContextWindow?: string
       errorHeaderDuplicate: string
       errorHeaderIncomplete: string
       presetsLabel: string

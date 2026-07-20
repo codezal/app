@@ -51,6 +51,7 @@ export type ProviderConfig = {
 export type CustomProviderModel = {
   id: string
   name?: string
+  contextWindow?: number
 }
 
 export type CustomProvider = {

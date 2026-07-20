@@ -52,7 +52,7 @@ export function StatusBar({ sessionId }: Props) {
     model,
   ).contextWindow
   const localCtxWindow = localEff && localEff > 0 ? Math.min(localEff, settingWin) : settingWin
-  const cap = resolveContextCap(catalog, provider, model, localCtxWindow)
+  const cap = resolveContextCap(catalog, provider, model, localCtxWindow, settings.customProviders)
   const deprecated = provider ? modelDetail(catalog, provider, model)?.deprecated === true : false
   const used = usage?.effectiveContextTokens ?? usage?.lastInputTokens ?? 0
   const pct = Math.min(100, Math.round((used / cap) * 100))
@@ -105,7 +105,7 @@ export function StatusBar({ sessionId }: Props) {
             pct > 80 ? "text-destructive" : pct > 50 ? "text-codezal-accent" : "text-codezal-dim",
           )}
         >
-          {formatCount(used)} / {formatCount(cap)}
+          {used > 0 ? "≈" : ""}{formatCount(used)} / {formatCount(cap)}
         </span>
         <span className="inline-block h-1 w-10 overflow-hidden rounded-full bg-codezal-hair" aria-hidden>
           <span

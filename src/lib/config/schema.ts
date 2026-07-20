@@ -183,7 +183,15 @@ const CustomProviderSchema = z
     name: z.string().catch(""),
     baseURL: z.string().min(1),
     models: z
-      .array(z.object({ id: z.string().min(1), name: z.string().optional() }).loose())
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            name: z.string().optional(),
+            contextWindow: z.number().int().positive().optional(),
+          })
+          .loose(),
+      )
       .catch([]),
     headers: z.record(z.string(), z.string()).optional(),
   })

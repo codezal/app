@@ -1,5 +1,5 @@
 // models.dev/api.json — community-maintained provider/model katalogu (135 provider, 400+ model).
-import type { ProviderId } from "./providers"
+import type { CustomProvider, ProviderId } from "./providers"
 import { contextCap, type Pricing } from "./pricing"
 
 const CATALOG_URL = "https://models.dev/api.json"
@@ -186,6 +186,7 @@ export function resolveContextCap(
   // local context, passed in here so the fill gauge + compaction target match
   // the actual runtime window, not a cloud-model fallback.
   localContextWindow?: number,
+  customProviders?: CustomProvider[],
 ): number {
   if (
     (provider === "local" || provider === "mlx") &&
@@ -193,6 +194,12 @@ export function resolveContextCap(
     localContextWindow > 0
   ) {
     return localContextWindow
+  }
+  const customContextWindow = customProviders
+    ?.find((candidate) => candidate.id === provider)
+    ?.models.find((candidate) => candidate.id === model)?.contextWindow
+  if (typeof customContextWindow === "number" && customContextWindow > 0) {
+    return customContextWindow
   }
   if (catalog && provider) {
     const ctx = modelDetail(catalog, provider, model)?.limit?.context

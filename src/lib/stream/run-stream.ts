@@ -249,6 +249,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       provider,
       modelId,
       resolveLocalLlm(settings, modelId).contextWindow,
+      settings.customProviders,
     )
     const maxReadChars = Math.floor(effCtxWindow * 4 * 0.4)
     const protectBudget = Math.min(RECENT_TOOL_PROTECT_TOKENS, Math.floor(effCtxWindow * 0.5))
@@ -457,6 +458,10 @@ export function makeRunStream(deps: RunStreamDeps) {
       const guardReserve = outputLimit && outputLimit > 0 ? outputLimit : 20_000
       const guardTrigger = Math.floor(Math.max(0, effCtxWindow - guardReserve) * 0.7)
 
+      useSessionsStore
+        .getState()
+        .setEffectiveContextTokensFor(sid, estimateMessagesTokens(outboundMessages))
+
       const result = streamText({
         model,
         messages: outboundMessages,
@@ -511,6 +516,9 @@ export function makeRunStream(deps: RunStreamDeps) {
             }
             if (imgs.length) out.messages = [...base, ...imgs]
           }
+          useSessionsStore
+            .getState()
+            .setEffectiveContextTokensFor(sid, estimateMessagesTokens(out.messages ?? base))
           return out
         },
         ...(Object.keys(providerOptions).length > 0

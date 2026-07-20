@@ -18,7 +18,13 @@ const sessionStoreState = vi.hoisted(() => {
     id: "split",
     title: "Split",
     messages: [{ id: "split-message", role: "user", content: "Split" }],
-    usage: { inputTokens: 0, outputTokens: 0, costUsd: 2, turns: 1 },
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      effectiveContextTokens: 8746,
+      costUsd: 2,
+      turns: 1,
+    },
   }
   return {
     activeId: active.id,
@@ -45,5 +51,6 @@ describe("StatusBar", () => {
 
     expect(html).toContain("$2.0000")
     expect(html).not.toContain("$1.0000")
+    expect(html).toContain("≈8.7K")
   })
 })

@@ -9,7 +9,7 @@ const SAMPLE: CustomProvider = {
   name: "My LLM",
   baseURL: "https://api.example.com/v1",
   models: [
-    { id: "fast", name: "Fast Model" },
+    { id: "fast", name: "Fast Model", contextWindow: 1_000_000 },
     { id: "slow" },
   ],
   headers: { "X-Org": "acme" },
@@ -55,6 +55,7 @@ describe("parseSettings — customProviders", () => {
     expect(out.customProviders).toHaveLength(1)
     expect(out.customProviders?.[0].id).toBe("my-llm")
     expect(out.customProviders?.[0].models).toHaveLength(2)
+    expect(out.customProviders?.[0].models[0]?.contextWindow).toBe(1_000_000)
   })
 
   it("alan yoksa default boş dizi", () => {

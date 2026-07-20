@@ -14,7 +14,7 @@ import { useT } from "@/lib/i18n/useT"
 import type { CachedCatalog } from "@/lib/providers-catalog"
 import { errorMessage } from "@/lib/errors"
 
-type ModelRow = { rid: number; id: string; name: string }
+type ModelRow = { rid: number; id: string; name: string; contextWindow: string }
 type HeaderRow = { rid: number; key: string; value: string }
 
 let _rowSeq = 0
@@ -47,8 +47,13 @@ export function CustomProviderModal({
   const [apiKey, setApiKey] = useState(settings.apiKeys?.[existing?.id ?? ""] ?? "")
   const [models, setModels] = useState<ModelRow[]>(() =>
     existing && existing.models.length > 0
-      ? existing.models.map((m) => ({ rid: nextRowId(), id: m.id, name: m.name ?? "" }))
-      : [{ rid: nextRowId(), id: "", name: "" }],
+      ? existing.models.map((m) => ({
+          rid: nextRowId(),
+          id: m.id,
+          name: m.name ?? "",
+          contextWindow: m.contextWindow ? String(m.contextWindow) : "",
+        }))
+      : [{ rid: nextRowId(), id: "", name: "", contextWindow: "" }],
   )
   const [headers, setHeaders] = useState<HeaderRow[]>(() =>
     existing?.headers && Object.keys(existing.headers).length > 0
@@ -85,11 +90,19 @@ export function CustomProviderModal({
 
   const modelIds = models.map((m) => m.id.trim()).filter(Boolean)
   const hasDupModel = new Set(modelIds).size !== modelIds.length
+  const hasInvalidContextWindow = models.some((model) => {
+    const raw = model.contextWindow.trim()
+    if (!raw) return false
+    const value = Number(raw)
+    return !Number.isSafeInteger(value) || value <= 0
+  })
   const modelsError =
     modelIds.length === 0
       ? t("settings.customProvider.errorModelsRequired")
       : hasDupModel
         ? t("settings.customProvider.errorModelDuplicate")
+        : hasInvalidContextWindow
+          ? t("settings.customProvider.errorContextWindow")
         : undefined
 
   const headerKeys = headers.map((h) => h.key.trim().toLowerCase()).filter(Boolean)
@@ -133,7 +146,7 @@ export function CustomProviderModal({
         setScanMsg({ kind: "err", text: t("settings.customProvider.scanEmpty") })
         return
       }
-      setModels(ids.map((mid) => ({ rid: nextRowId(), id: mid, name: "" })))
+      setModels(ids.map((mid) => ({ rid: nextRowId(), id: mid, name: "", contextWindow: "" })))
       setScanMsg({ kind: "ok", text: t("settings.customProvider.scanFound", { count: ids.length }) })
     } catch (e) {
       setScanMsg({ kind: "err", text: t("settings.customProvider.scanError", { error: errorMessage(e) }) })
@@ -155,7 +168,11 @@ export function CustomProviderModal({
     setSaveError(null)
     try {
       const cleanModels: CustomProviderModel[] = models
-        .map((m) => ({ id: m.id.trim(), name: m.name.trim() || undefined }))
+        .map((m) => ({
+          id: m.id.trim(),
+          name: m.name.trim() || undefined,
+          contextWindow: m.contextWindow.trim() ? Number(m.contextWindow) : undefined,
+        }))
         .filter((m) => m.id)
       const cleanHeaders = Object.fromEntries(
         headers
@@ -292,6 +309,15 @@ export function CustomProviderModal({
                   placeholder={t("settings.customProvider.modelNamePlaceholder")}
                   className={inputCls() + " flex-1"}
                 />
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={m.contextWindow}
+                  onChange={(e) => setModel(i, "contextWindow", e.target.value)}
+                  placeholder={t("settings.customProvider.modelContextPlaceholder")}
+                  className={inputCls() + " w-28"}
+                />
                 <IconBtn
                   onClick={() => setModels((prev) => prev.filter((_, idx) => idx !== i))}
                   disabled={models.length <= 1}
@@ -301,7 +327,12 @@ export function CustomProviderModal({
             ))}
             {showErrors && modelsError && <p className="text-md text-red-500">{modelsError}</p>}
             <AddRowBtn
-              onClick={() => setModels((prev) => [...prev, { rid: nextRowId(), id: "", name: "" }])}
+              onClick={() =>
+                setModels((prev) => [
+                  ...prev,
+                  { rid: nextRowId(), id: "", name: "", contextWindow: "" },
+                ])
+              }
               label={t("settings.customProvider.addModel")}
             />
           </div>
