@@ -73,6 +73,16 @@ pub fn pty_spawn(
         }
     });
     let mut cmd = CommandBuilder::new(shell_path);
+
+    // Login shell: let /etc/zprofile (path_helper) and ~/.zprofile (brew shellenv,
+    // nvm, etc.) run. Otherwise a GUI app launched from Finder inherits launchd's
+    // minimal PATH and Homebrew tools such as pnpm can become "command not found".
+    // Terminal.app and Claude Code also open login shells, so match that behavior.
+    #[cfg(unix)]
+    {
+        cmd.arg("-l");
+    }
+
     if let Some(c) = cwd {
         cmd.cwd(c);
     }
@@ -82,9 +92,6 @@ pub fn pty_spawn(
         for (k, v) in extra {
             cmd.env(k, v);
         }
-    }
-    #[cfg(unix)]
-    {
     }
 
     let child = pair
@@ -309,7 +316,11 @@ pub fn pty_kill(state: State<'_, PtyManager>, id: String) -> Result<(), String> 
     Ok(())
 }
 
-/// Konum: $HOME/.codezal/shell/{.zshrc,.bashrc}
+/// Location: $HOME/.codezal/shell/{.zshenv,.zprofile,.zshrc,.bashrc}
+///
+/// When ZDOTDIR is overridden, zsh reads all startup files from this directory.
+/// Generate .zprofile and .zshenv as well as .zshrc so login PATH setup (such
+/// as `brew shellenv` in ~/.zprofile) still chains through to the user's files.
 #[tauri::command]
 pub fn pty_ensure_rcfiles() -> Result<String, String> {
     // Windows USERPROFILE, POSIX HOME — editors.rs pattern'i (tek strateji).
@@ -319,6 +330,30 @@ pub fn pty_ensure_rcfiles() -> Result<String, String> {
     dir.push(".codezal");
     dir.push("shell");
     fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all: {}", e))?;
+
+    let zshenv = [
+        "# Codezal terminal — auto-generated. Do not edit; toggle from Settings → Appearance.",
+        "# Chain to the user's real ~/.zshenv so env vars set there survive the ZDOTDIR override.",
+        "ZDOTDIR_BACKUP=\"$ZDOTDIR\"",
+        "unset ZDOTDIR",
+        "[ -f \"$HOME/.zshenv\" ] && source \"$HOME/.zshenv\"",
+        "export ZDOTDIR=\"$ZDOTDIR_BACKUP\"",
+        "unset ZDOTDIR_BACKUP",
+        "",
+    ]
+    .join("\n");
+
+    let zprofile = [
+        "# Codezal terminal — auto-generated. Do not edit; toggle from Settings → Appearance.",
+        "# Chain to the user's real ~/.zprofile so login PATH (brew shellenv, nvm, ...) applies.",
+        "ZDOTDIR_BACKUP=\"$ZDOTDIR\"",
+        "unset ZDOTDIR",
+        "[ -f \"$HOME/.zprofile\" ] && source \"$HOME/.zprofile\"",
+        "export ZDOTDIR=\"$ZDOTDIR_BACKUP\"",
+        "unset ZDOTDIR_BACKUP",
+        "",
+    ]
+    .join("\n");
 
     let zshrc = [
         "# Codezal terminal — auto-generated. Do not edit; toggle from Settings → Appearance.",
@@ -346,8 +381,12 @@ pub fn pty_ensure_rcfiles() -> Result<String, String> {
     ]
     .join("\n");
 
+    let zshenv_path = dir.join(".zshenv");
+    let zprofile_path = dir.join(".zprofile");
     let zshrc_path = dir.join(".zshrc");
     let bashrc_path = dir.join(".bashrc");
+    fs::write(&zshenv_path, zshenv).map_err(|e| format!("write .zshenv: {}", e))?;
+    fs::write(&zprofile_path, zprofile).map_err(|e| format!("write .zprofile: {}", e))?;
     fs::write(&zshrc_path, zshrc).map_err(|e| format!("write .zshrc: {}", e))?;
     fs::write(&bashrc_path, bashrc).map_err(|e| format!("write .bashrc: {}", e))?;
 

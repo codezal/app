@@ -121,9 +121,9 @@ fn known_terminal_program(name: &str) -> Option<String> {
         .map(|path| quote_terminal_command(&path))
 }
 
-/// Reports commands visible to the same interactive shell used by the PTY.
-/// This intentionally differs from `resolve_program`: GUI apps can have a
-/// login-shell PATH that does not match the user's interactive shell startup.
+/// Reports commands visible to the same login+interactive shell used by the PTY.
+/// This intentionally differs from `resolve_program`: the PTY now spawns a
+/// login shell, so the probe must match that startup (zprofile + zshrc).
 #[tauri::command]
 pub fn terminal_available_programs(names: Vec<String>) -> Vec<TerminalAvailableProgram> {
     let names: Vec<String> = names
@@ -144,8 +144,10 @@ pub fn terminal_available_programs(names: Vec<String>) -> Vec<TerminalAvailableP
             })
             .collect::<Vec<_>>()
             .join("; ");
+        // -ilc: login + interactive. The PTY now opens a login shell, so the
+        // probe must see the same PATH (for example brew shellenv in ~/.zprofile).
         let stdout = std::process::Command::new(shell)
-            .args(["-ic", &probe])
+            .args(["-ilc", &probe])
             .output()
             .ok()
             .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())

@@ -279,7 +279,7 @@ function getOrCreateLiveTerm(
   const term = new Terminal({
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     fontSize: 12,
-    lineHeight: 1.3,
+    lineHeight: 1,
     cursorBlink: true,
     scrollback: 10_000,
     theme: terminalTheme(),
