@@ -22,6 +22,7 @@ import { sddAssistantPreamble } from "./sdd-prompts"
 import type { SddStage } from "@/store/types"
 import type { SupervisorSettings } from "@/lib/agents/runtime"
 import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
+import { COMMIT_ATTRIBUTION_TRAILER } from "./commit-attribution"
 
 const BASE_SYSTEM = `You are Codezal — an interactive coding assistant running on the user's machine.
 When the user gives you a task, use the available tools to make real changes — don't just describe a solution in text. Answer simple questions directly.
@@ -443,9 +444,14 @@ export async function buildSystemPrompt({
   if (mode !== "plan" && useSettingsStore.getState().settings.commitAttribution !== false) {
     parts.push(
       "\n## Git commits\n" +
-        "When you create a git commit, append this trailer as the LAST lines of the commit message, after a blank line — the same byline the app's git panel adds:\n\n" +
-        "Co-Authored-By: Codezal <noreply@codezal.com>\n\n" +
-        "Add it to every commit you author. If the message already ends with this exact trailer, don't duplicate it, and don't add any other co-author or attribution line.",
+        "When you create a git commit, the message must end with exactly ONE attribution trailer, after a blank line — the same byline the app's git panel adds:\n\n" +
+        `${COMMIT_ATTRIBUTION_TRAILER}\n\n` +
+        "Rules: copy that line verbatim, including the email `noreply@codezal.com`. " +
+        "NEVER use `noreply@anthropic.com` or any other address or domain. " +
+        "NEVER add more than one `Co-Authored-By` line. Before appending it, remove ANY " +
+        "existing `Co-Authored-By:` line already in the message (yours or pre-existing) so " +
+        "the commit never ends up with duplicate or wrong trailers. The app's git panel " +
+        "normalizes this automatically, but shell (`git commit`) commits rely on you.",
     )
   }
 

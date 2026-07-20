@@ -45,6 +45,7 @@ import { makeDiffUri } from "@/lib/diff-uri"
 import { makeOutputDoc } from "@/lib/output-doc"
 import { emitGitChanged, onGitChanged } from "@/lib/git-events"
 import { generateCommitMessage } from "@/lib/git-ai-commit"
+import { normalizeCommitAttribution } from "@/lib/commit-attribution"
 import { resolveCompactModel } from "@/lib/compact"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { useSessionsStore } from "@/store/sessions"
@@ -172,7 +173,10 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
         (e) => e.index !== " " && e.index !== "?" && e.index !== "!",
       )
       if (!anyStaged && entries.length > 0) await gitStageAll(workspacePath)
-      await gitCommit(workspacePath, message, { amend })
+      const commitMsg = message.trim()
+        ? normalizeCommitAttribution(message, settings.commitAttribution !== false)
+        : message
+      await gitCommit(workspacePath, commitMsg, { amend })
       setMessage("")
       setAmend(false)
       emitGitChanged()

@@ -4,6 +4,7 @@ import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
 import type { Settings } from "@/store/types"
 import { gitDiffAll, gitDiffStaged } from "@/lib/git"
+import { normalizeCommitAttribution } from "@/lib/commit-attribution"
 
 const SYSTEM =
   "You write git commit messages. For the staged diff, produce exactly one short " +
@@ -55,8 +56,5 @@ export async function generateCommitMessage(opts: {
   }
   const msg = clean(text)
   if (!msg) return null
-  if (opts.settings.commitAttribution !== false) {
-    return `${msg}\n\nCo-Authored-By: Codezal <noreply@codezal.com>`
-  }
-  return msg
+  return normalizeCommitAttribution(msg, opts.settings.commitAttribution !== false)
 }
