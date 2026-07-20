@@ -1,6 +1,6 @@
 {
   "name": "codezal",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "A multi-provider desktop AI workspace built with Tauri, React, and TypeScript.",
   "license": "Apache-2.0",
