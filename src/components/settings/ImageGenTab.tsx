@@ -61,11 +61,11 @@ export function ImageGenTab() {
   return (
     <div className="space-y-6">
       <Section title={t("settings.imageGen.title")}>
-        <p className="mb-3 text-md leading-relaxed text-codezal-mute">
+        <p className="mb-3 text-base leading-relaxed text-codezal-mute">
           {t("settings.imageGen.hint")}
         </p>
 
-        <label className="mb-3 flex items-center justify-between gap-3 text-md">
+        <label className="mb-3 flex items-center justify-between gap-3 text-base">
           <span className="text-codezal-text">{t("settings.imageGen.enable")}</span>
           <Toggle
             checked={cfg.enabled}
@@ -77,26 +77,26 @@ export function ImageGenTab() {
         {cfg.enabled && (
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">
+              <span className="text-base font-medium text-codezal-dim">
                 {t("settings.imageGen.providerLabel")}
               </span>
               <Select value={selectedId} onChange={onProvider} options={providerOptions} />
             </label>
 
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">
+              <span className="text-base font-medium text-codezal-dim">
                 {t("settings.imageGen.baseUrlLabel")}
               </span>
               <input
                 value={cfg.baseUrl ?? ""}
                 onChange={(e) => patch({ baseUrl: e.target.value })}
                 placeholder={t("settings.imageGen.baseUrlPh")}
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </label>
 
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">
+              <span className="text-base font-medium text-codezal-dim">
                 {t("settings.imageGen.apiKeyLabel")}
               </span>
               {/* Anahtar keychain'de (setToolSecret). Uncontrolled + blur'da yazar.
@@ -109,41 +109,41 @@ export function ImageGenTab() {
                 onBlur={(e) => {
                   if (e.target.value !== storedKey) void setToolSecret("imagegen", e.target.value)
                 }}
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
               {!isCustom && preset?.reuseProvider && (
-                <span className="text-md leading-relaxed text-codezal-mute">
+                <span className="text-base leading-relaxed text-codezal-mute">
                   {t("settings.imageGen.apiKeyReuseHint", { provider: preset.label })}
                 </span>
               )}
             </label>
 
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">
+              <span className="text-base font-medium text-codezal-dim">
                 {t("settings.imageGen.modelLabel")}
               </span>
               <input
                 value={cfg.model}
                 onChange={(e) => patch({ model: e.target.value })}
                 placeholder={modelPlaceholder}
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">
+              <span className="text-base font-medium text-codezal-dim">
                 {t("settings.imageGen.sizeLabel")}
               </span>
               <input
                 value={cfg.defaultSize ?? ""}
                 onChange={(e) => patch({ defaultSize: e.target.value })}
                 placeholder="1024x1024"
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">
+              <span className="text-base font-medium text-codezal-dim">
                 {t("settings.imageGen.timeoutLabel")}
               </span>
               <input
@@ -160,11 +160,11 @@ export function ImageGenTab() {
                     ),
                   })
                 }
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </label>
 
-            <p className="col-span-2 mt-1 rounded-lg border border-codezal bg-codezal-panel-2 px-3 py-2 text-md leading-relaxed text-codezal-mute">
+            <p className="col-span-2 mt-1 rounded-lg border border-codezal bg-codezal-panel-2 px-3 py-2 text-base leading-relaxed text-codezal-mute">
               {t("settings.imageGen.qualityHint")}
             </p>
           </div>

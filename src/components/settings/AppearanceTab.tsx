@@ -170,7 +170,7 @@ export function AppearanceTab() {
     <div className="space-y-6">
       <Section title={t("settings.drawer.appearance.displayTitle")}>
         <div className="border-b border-codezal-hair pb-3 pt-1">
-          <div className="mb-2 text-md font-medium text-codezal-text">
+          <div className="mb-2 text-base font-medium text-codezal-text">
             {t("settings.drawer.appearance.modeTitle")}
           </div>
           <Segmented
@@ -185,10 +185,10 @@ export function AppearanceTab() {
         </div>
 
         <div className="border-b border-codezal-hair py-3">
-          <div className="mb-1 text-md font-medium text-codezal-text">
+          <div className="mb-1 text-base font-medium text-codezal-text">
             {t("settings.drawer.appearance.zoomTitle")}
           </div>
-          <p className="mb-2 text-md text-codezal-mute">
+          <p className="mb-2 text-base text-codezal-mute">
             {t("settings.drawer.appearance.zoomDesc")}
           </p>
           <Segmented<FontScale>
@@ -202,7 +202,7 @@ export function AppearanceTab() {
         </div>
 
         <div className="pt-3">
-          <div className="mb-2 text-md font-medium text-codezal-text">
+          <div className="mb-2 text-base font-medium text-codezal-text">
             {t("settings.drawer.appearance.themePresetsTitle")}
           </div>
           <Row
@@ -269,7 +269,7 @@ export function AppearanceTab() {
       </Section>
 
       <Section title={t("settings.drawer.appearance.customColorsTitle", { mode: localizedMode })}>
-        <p className="mb-2 text-md text-codezal-mute">
+        <p className="mb-2 text-base text-codezal-mute">
           {t("settings.drawer.appearance.customColorsHint")}
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -281,7 +281,7 @@ export function AppearanceTab() {
                 key={key}
                 className="flex items-center justify-between rounded-md border border-codezal bg-codezal-panel px-2.5 py-1.5"
               >
-                <span className="text-md text-codezal-text">{tokenLabel[key] ?? label}</span>
+                <span className="text-base text-codezal-text">{tokenLabel[key] ?? label}</span>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -302,7 +302,7 @@ export function AppearanceTab() {
           <button
             type="button"
             onClick={resetOverrides}
-            className="mt-2 text-md text-codezal-accent hover:underline"
+            className="mt-2 text-base text-codezal-accent hover:underline"
           >
             {t("settings.drawer.appearance.resetCustomColors")}
           </button>
@@ -401,7 +401,7 @@ export function AppearanceTab() {
             onChange={(e) => patch({ contrastLight: parseInt(e.target.value, 10) })}
             className="w-48"
           />
-          <span className="ml-2 text-md text-codezal-mute">{appearance.contrastLight}</span>
+          <span className="ml-2 text-base text-codezal-mute">{appearance.contrastLight}</span>
         </Row>
         <Row
           label={t("settings.drawer.appearance.darkContrastLabel")}
@@ -415,7 +415,7 @@ export function AppearanceTab() {
             onChange={(e) => patch({ contrastDark: parseInt(e.target.value, 10) })}
             className="w-48"
           />
-          <span className="ml-2 text-md text-codezal-mute">{appearance.contrastDark}</span>
+          <span className="ml-2 text-base text-codezal-mute">{appearance.contrastDark}</span>
         </Row>
       </Section>
 
@@ -474,7 +474,7 @@ export function AppearanceTab() {
 
       <Section title={t("settings.drawer.appearance.importExportTitle")}>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="cursor-pointer rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-panel-2">
+          <label className="cursor-pointer rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-base text-codezal-text hover:bg-codezal-panel-2">
             {t("settings.drawer.appearance.importTheme")}
             <input
               type="file"
@@ -490,16 +490,16 @@ export function AppearanceTab() {
           <button
             type="button"
             onClick={exportCurrent}
-            className="rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-panel-2"
+            className="rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-base text-codezal-text hover:bg-codezal-panel-2"
           >
             {t("settings.drawer.appearance.exportCurrent")}
           </button>
         </div>
-        <p className="mt-2 text-md text-codezal-mute">
+        <p className="mt-2 text-base text-codezal-mute">
           {t("settings.drawer.appearance.userThemesHint")}
         </p>
         {importError && (
-          <p className="mt-2 text-md text-destructive">{importError}</p>
+          <p className="mt-2 text-base text-destructive">{importError}</p>
         )}
       </Section>
     </div>
@@ -564,7 +564,7 @@ function HexInput({
       spellCheck={false}
       autoCapitalize="off"
       autoCorrect="off"
-      className="w-[78px] rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-md uppercase tracking-tight text-codezal-text focus:border-codezal-accent focus:outline-none"
+      className="w-[78px] rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-base uppercase tracking-tight text-codezal-text focus:border-codezal-accent focus:outline-none"
     />
   )
 }
@@ -624,9 +624,9 @@ function NumberInput({
             ;(e.target as HTMLInputElement).blur()
           }
         }}
-        className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-md text-codezal-text"
+        className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-base text-codezal-text"
       />
-      {suffix && <span className="text-md text-codezal-mute">{suffix}</span>}
+      {suffix && <span className="text-base text-codezal-mute">{suffix}</span>}
     </div>
   )
 }

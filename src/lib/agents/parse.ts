@@ -67,13 +67,29 @@ export function checkSubagentPolicy(
   input: unknown,
 ): { allowed: boolean; reason?: string; requiresApproval: boolean } {
   if (policy.planMode) {
-    const blocked = new Set(["write_file", "edit_file", "bash", "apply_patch"])
-    if (blocked.has(toolName)) {
+    // Plan mode forbids writes. `bash` is blocked too, UNLESS the agent
+    // declares an explicit `bash_allow` list — that lets a read-only
+    // reviewer/refactorer fetch the change set itself (e.g. `git diff`)
+    // while still keeping the shell locked to those allowlisted commands.
+    // Without `bash_allow`, bash stays fully blocked (no unrestricted shell).
+    const writeBlocked = new Set(["write_file", "edit_file", "apply_patch"])
+    if (writeBlocked.has(toolName)) {
       return {
         allowed: false,
         reason: `Subagent is in plan mode; '${toolName}' cannot be used`,
         requiresApproval: false,
       }
+    }
+    if (toolName === "bash") {
+      const hasAllow = Array.isArray(policy.bashAllow) && policy.bashAllow.length > 0
+      if (!hasAllow) {
+        return {
+          allowed: false,
+          reason: `Subagent is in plan mode; 'bash' requires an explicit bash_allow list`,
+          requiresApproval: false,
+        }
+      }
+      // fall through to the bash allowlist enforcement below
     }
   }
   if (policy.denyTools?.includes(toolName)) {
@@ -127,6 +143,45 @@ export function buildAgentsCatalog(agents: AgentDef[]): string {
     "Delegate complex subtasks to an agent with the `spawn_agent` tool. The agent runs its own tool loop and returns a final summary.",
   )
   lines.push("")
+  lines.push("## When to delegate")
+  lines.push(
+    "Spawn an agent when a subtask is SELF-CONTAINED and benefits from focused, uninterrupted execution:",
+  )
+  lines.push(
+    "- Code review of a diff, file, or module (use a reviewer agent instead of reviewing inline)",
+  )
+  lines.push(
+    "- Writing or running tests for code you just changed (use a test agent)",
+  )
+  lines.push(
+    "- Debugging a specific failure with hypothesis-driven investigation (use a debugger agent)",
+  )
+  lines.push(
+    "- Multi-file refactoring or cleanup that can be specified precisely (use a refactorer agent)",
+  )
+  lines.push(
+    "- Research across many files or docs where you need a synthesized answer (use an explorer agent)",
+  )
+  lines.push(
+    "- Writing documentation for code you just implemented (use a doc-writer agent)",
+  )
+  lines.push("")
+  lines.push(
+    "Do NOT delegate trivial single-step actions (reading one file, running one grep). Delegate when the subtask would take you 5+ tool calls and can be fully specified up front.",
+  )
+  lines.push("")
+  lines.push("Task spec — bad vs good:")
+  lines.push(
+    '- Bad: "Review this code" · "Fix the bug" · "Write tests"',
+  )
+  lines.push(
+    '- Good: "Review src/lib/auth/validate.ts for null-safety issues in the token refresh path. Report findings as severity-tagged list with line numbers and suggested fixes."',
+  )
+  lines.push(
+    '- Good: "Write unit tests for src/lib/compact.ts — cover the hysteresis trigger logic and edge cases (empty messages, token count 0). Run them with `npx vitest run tests/compact.test.ts` and fix failures."',
+  )
+  lines.push("")
+  lines.push("## Agents")
   for (const a of agents) {
     const tag = a.pluginId ? ` [plugin:${a.pluginId}]` : ""
     lines.push(`- **${a.name}** (${a.scope}${tag}): ${a.description}`)

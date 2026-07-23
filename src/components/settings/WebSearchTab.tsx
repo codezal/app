@@ -33,11 +33,11 @@ export function WebSearchTab() {
   return (
     <div className="space-y-6">
       <Section title={t("settings.web.title")}>
-        <p className="mb-4 text-md leading-relaxed text-codezal-mute">{t("settings.web.providerHint")}</p>
+        <p className="mb-4 text-base leading-relaxed text-codezal-mute">{t("settings.web.providerHint")}</p>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-md font-medium text-codezal-dim">{t("settings.web.provider")}</span>
+            <span className="text-base font-medium text-codezal-dim">{t("settings.web.provider")}</span>
             <Select
               value={provider}
               onChange={(v) => patch({ provider: v as "tavily" | "brave" | "exa" | "duckduckgo" })}
@@ -51,7 +51,7 @@ export function WebSearchTab() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-md font-medium text-codezal-dim">{t("settings.web.apiKey")}</span>
+            <span className="text-base font-medium text-codezal-dim">{t("settings.web.apiKey")}</span>
             <input
               key={apiKey}
               type="password"
@@ -61,20 +61,20 @@ export function WebSearchTab() {
               onBlur={(e) => {
                 if (e.target.value !== apiKey) void setToolSecret("websearch", e.target.value)
               }}
-              className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent disabled:cursor-not-allowed disabled:opacity-50"
             />
           </label>
         </div>
 
         {!needsKey && (
-          <p className="mt-3 text-md leading-relaxed text-codezal-mute">
+          <p className="mt-3 text-base leading-relaxed text-codezal-mute">
             DuckDuckGo anahtar gerektirmez (best-effort). IP itibarına göre ara sıra bot
             doğrulamasıyla bloklanabilir; sağlam sonuç için anahtarlı bir provider seç.
           </p>
         )}
 
         {link && (
-          <p className="mt-3 text-md leading-relaxed text-codezal-mute">
+          <p className="mt-3 text-base leading-relaxed text-codezal-mute">
             Get a key at{" "}
             <button
               type="button"
@@ -90,7 +90,7 @@ export function WebSearchTab() {
           <button
             type="button"
             onClick={() => void update({ webSearch: undefined })}
-            className="mt-4 flex h-8 items-center gap-1.5 rounded-md border border-codezal px-3 text-md text-codezal-dim hover:border-destructive hover:text-destructive"
+            className="mt-4 flex h-8 items-center gap-1.5 rounded-md border border-codezal px-3 text-base text-codezal-dim hover:border-destructive hover:text-destructive"
           >
             <X className="h-4 w-4" />
             Clear web search config
@@ -99,13 +99,13 @@ export function WebSearchTab() {
       </Section>
 
       <Section title="Firecrawl (web scrape)">
-        <p className="mb-4 text-md leading-relaxed text-codezal-mute">
+        <p className="mb-4 text-base leading-relaxed text-codezal-mute">
           API anahtarı girilince <code>firecrawl</code> tool'u açılır (yoksa modele
           gönderilmez). JS-ağır/SPA/anti-bot sayfaları temiz markdown'a çevirir — webfetch
           yetersiz kaldığında kullanılır.
         </p>
         <label className="flex max-w-xs flex-col gap-1.5">
-          <span className="text-md font-medium text-codezal-dim">API anahtarı</span>
+          <span className="text-base font-medium text-codezal-dim">API anahtarı</span>
           <input
             key={fcStored}
             type="password"
@@ -114,10 +114,10 @@ export function WebSearchTab() {
             onBlur={(e) => {
               if (e.target.value !== fcStored) void setToolSecret("firecrawl", e.target.value)
             }}
-            className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+            className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
           />
         </label>
-        <p className="mt-3 text-md leading-relaxed text-codezal-mute">
+        <p className="mt-3 text-base leading-relaxed text-codezal-mute">
           Anahtar:{" "}
           <button
             type="button"

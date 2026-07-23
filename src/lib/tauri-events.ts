@@ -1,7 +1,3 @@
-//
-//
-//
-// lsp/client.ts (diagnostics) ve lsp/download.ts (install progress) gibi tekil
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 
 export type BufferedListener<T> = {

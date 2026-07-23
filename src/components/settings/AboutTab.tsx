@@ -45,40 +45,40 @@ export function AboutTab() {
   }
 
   return (
-    <div className="space-y-6 text-md text-codezal-dim">
+    <div className="space-y-6 text-base text-codezal-dim">
       <div className="flex items-center gap-3">
         <img src="/codezal-icon-squircle-1024.png" alt="Codezal" className="h-10 w-10 rounded-md" />
         <div>
           <div className="text-md font-semibold text-codezal-text">Codezal</div>
-          <div className="text-md text-codezal-mute">{t("settings.drawer.aboutSubtitle")}</div>
+          <div className="text-base text-codezal-mute">{t("settings.drawer.aboutSubtitle")}</div>
         </div>
       </div>
 
       <Section title={t("settings.about.version")}>
         <div className="flex items-center gap-2.5">
-          <code className="rounded bg-codezal-panel-2 px-1.5 py-0.5 text-md text-codezal-accent">
+          <code className="rounded bg-codezal-panel-2 px-1.5 py-0.5 text-base text-codezal-accent">
             {version || "—"}
           </code>
           <button
             type="button"
             disabled={checking}
             onClick={() => void onCheckUpdates()}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-codezal px-2.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
+            className="flex h-7 items-center gap-1.5 rounded-md border border-codezal px-2.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
           >
             <RefreshCcw className={cn("h-3.5 w-3.5", checking && "animate-spin")} />
             {t("settings.about.checkUpdates")}
           </button>
           {updateStatus === "uptodate" && (
-            <span className="text-md text-codezal-mute">{t("settings.about.upToDate")}</span>
+            <span className="text-base text-codezal-mute">{t("settings.about.upToDate")}</span>
           )}
           {updateStatus === "available" && (
-            <span className="text-md text-codezal-accent">{t("settings.about.updateAvailable")}</span>
+            <span className="text-base text-codezal-accent">{t("settings.about.updateAvailable")}</span>
           )}
         </div>
       </Section>
 
       <Section title={t("settings.feedback.title")}>
-        <p className="mb-2 text-md">{t("settings.feedback.desc")}</p>
+        <p className="mb-2 text-base">{t("settings.feedback.desc")}</p>
         <textarea
           value={fbText}
           onChange={(e) => {
@@ -88,7 +88,7 @@ export function AboutTab() {
           }}
           placeholder={t("settings.feedback.placeholder")}
           rows={3}
-          className="w-full resize-none rounded-md border border-codezal bg-codezal-panel-2 px-2 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-strong"
+          className="w-full resize-none rounded-md border border-codezal bg-codezal-panel-2 px-2 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-strong"
         />
         <div className="mt-2 flex items-center gap-2.5">
           <button
@@ -109,25 +109,25 @@ export function AboutTab() {
                 setFbSending(false)
               }
             }}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-codezal px-2.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
+            className="flex h-7 items-center gap-1.5 rounded-md border border-codezal px-2.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
           >
             {t("settings.feedback.send")}
           </button>
-          {fbSent && <span className="text-md text-codezal-mute">{t("settings.feedback.sent")}</span>}
-          {fbError && <span className="text-md text-codezal-danger">{t("settings.feedback.failed")}</span>}
-          <span className="ml-auto text-md text-codezal-mute">v{version}</span>
+          {fbSent && <span className="text-base text-codezal-mute">{t("settings.feedback.sent")}</span>}
+          {fbError && <span className="text-base text-codezal-danger">{t("settings.feedback.failed")}</span>}
+          <span className="ml-auto text-base text-codezal-mute">v{version}</span>
         </div>
       </Section>
 
       <Section title={t("settings.drawer.aboutDeveloper")}>
-        <div className="space-y-0.5 text-md">
+        <div className="space-y-0.5 text-base">
           <div>Erhan Erbaş</div>
           <button type="button" onClick={() => void openUrl("mailto:erhan@erhanerbas.com")} className="text-codezal-mute hover:text-codezal-accent hover:underline">erhan@erhanerbas.com</button>
         </div>
       </Section>
 
       <Section title={t("settings.drawer.aboutShortcuts")}>
-        <ul className="space-y-0.5 font-mono text-md">
+        <ul className="space-y-0.5 font-mono text-base">
           <li>{t("settings.drawer.shortcutNew")}</li>
           <li>{t("settings.drawer.shortcutPalette")}</li>
           <li>{t("settings.drawer.shortcutSettings")}</li>
@@ -140,7 +140,7 @@ export function AboutTab() {
       </Section>
 
       <Section title={t("settings.drawer.aboutData")}>
-        <p className="text-md">
+        <p className="text-base">
           {t("settings.drawer.aboutDataText")}
         </p>
       </Section>

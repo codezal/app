@@ -42,14 +42,14 @@ export function ApprovalTab() {
             ]}
             onChange={(v) => void update({ approvalMode: v })}
           />
-          <p className="mt-2.5 text-md leading-relaxed text-codezal-mute">
+          <p className="mt-2.5 text-base leading-relaxed text-codezal-mute">
             {t("settings.drawer.modeHint")}
           </p>
         </div>
       </Section>
 
       <Section title={t("settings.drawer.permGlobalTitle")}>
-        <p className="mb-2 text-md leading-relaxed text-codezal-mute">{t("settings.drawer.permGlobalHint")}</p>
+        <p className="mb-2 text-base leading-relaxed text-codezal-mute">{t("settings.drawer.permGlobalHint")}</p>
         <PermissionRuleEditor
           rules={settings.permission ?? []}
           onChange={(rules) => void update({ permission: rules })}
@@ -58,11 +58,11 @@ export function ApprovalTab() {
 
       <Section title={t("settings.drawer.permProjectTitle")}>
         {!activeWs ? (
-          <div className="rounded-lg border border-dashed border-codezal px-3 py-5 text-center text-md text-codezal-mute">
+          <div className="rounded-lg border border-dashed border-codezal px-3 py-5 text-center text-base text-codezal-mute">
             {t("settings.drawer.permProjectNoWorkspace")}
           </div>
         ) : (projectApproved ?? []).length === 0 ? (
-          <div className="rounded-lg border border-dashed border-codezal px-3 py-5 text-center text-md text-codezal-mute">
+          <div className="rounded-lg border border-dashed border-codezal px-3 py-5 text-center text-base text-codezal-mute">
             {t("settings.drawer.permProjectNone")}
           </div>
         ) : (
@@ -70,11 +70,11 @@ export function ApprovalTab() {
             {(projectApproved ?? []).map((r, i) => (
               <li
                 key={`${r.action}-${r.permission}-${r.pattern ?? ""}-${i}`}
-                className="flex items-center gap-2 px-4 py-2.5 text-md"
+                className="flex items-center gap-2 px-4 py-2.5 text-base"
               >
                 <span
                   className={cn(
-                    "rounded px-1.5 py-0.5 text-md font-medium",
+                    "rounded px-1.5 py-0.5 text-base font-medium",
                     r.action === "deny"
                       ? "bg-destructive/15 text-destructive"
                       : "bg-codezal-accent-dim text-codezal-accent",
@@ -88,7 +88,7 @@ export function ApprovalTab() {
                 </span>
                 <span className="font-mono text-codezal-text">{r.permission}</span>
                 {r.pattern && r.pattern !== "*" && (
-                  <span className="truncate font-mono text-md text-codezal-dim">· {r.pattern}</span>
+                  <span className="truncate font-mono text-base text-codezal-dim">· {r.pattern}</span>
                 )}
                 <div className="flex-1" />
                 <button
@@ -107,7 +107,7 @@ export function ApprovalTab() {
 
       {hasActiveSession && (
         <Section title={t("composer.sessionPermTitle")}>
-          <p className="mb-2 text-md leading-relaxed text-codezal-mute">{t("composer.sessionPermHint")}</p>
+          <p className="mb-2 text-base leading-relaxed text-codezal-mute">{t("composer.sessionPermHint")}</p>
           <PermissionRuleEditor
             rules={sessionPermission ?? []}
             onChange={(rules) => updateActiveMeta({ permission: rules })}
@@ -121,11 +121,11 @@ export function ApprovalTab() {
             {settings.approvalRules.map((r, i) => (
               <li
                 key={i}
-                className="flex items-center gap-2 px-4 py-2.5 text-md"
+                className="flex items-center gap-2 px-4 py-2.5 text-base"
               >
                 <span
                   className={cn(
-                    "rounded px-1.5 py-0.5 text-md font-medium",
+                    "rounded px-1.5 py-0.5 text-base font-medium",
                     r.decision === "allow"
                       ? "bg-codezal-accent-dim text-codezal-accent"
                       : "bg-destructive/15 text-destructive",
@@ -135,7 +135,7 @@ export function ApprovalTab() {
                 </span>
                 <span className="font-mono text-codezal-text">{r.tool}</span>
                 {r.pattern && (
-                  <span className="truncate font-mono text-md text-codezal-dim">· {r.pattern}</span>
+                  <span className="truncate font-mono text-base text-codezal-dim">· {r.pattern}</span>
                 )}
                 <div className="flex-1" />
                 <button

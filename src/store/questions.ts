@@ -58,6 +58,7 @@ export const useQuestionsStore = create<QuestionsState>((set, get) => ({
       void sendDesktopNotification(
         "Codezal — yanıtınız bekleniyor",
         normalized[0]?.question,
+        sessionId,
       )
     }
     return new Promise<string[][]>((resolve) => {

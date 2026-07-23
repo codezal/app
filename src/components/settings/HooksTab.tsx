@@ -46,12 +46,12 @@ export function HooksTab() {
   return (
     <div className="space-y-6">
       <Section title={t("settings.drawer.hooksTitle")}>
-        <p className="mb-3 text-md leading-relaxed text-codezal-mute">
+        <p className="mb-3 text-base leading-relaxed text-codezal-mute">
           {t("settings.drawer.hooksHint")}
         </p>
 
         {hooks.length === 0 && (
-          <div className="rounded-lg border border-dashed border-codezal px-3 py-5 text-center text-md text-codezal-mute">
+          <div className="rounded-lg border border-dashed border-codezal px-3 py-5 text-center text-base text-codezal-mute">
             {t("settings.drawer.hooksNoHooks")}
           </div>
         )}
@@ -78,9 +78,9 @@ export function HooksTab() {
                   placeholder={t("settings.drawer.hookMatcherPlaceholder")}
                   value={h.matcher ?? ""}
                   onChange={(e) => patchHook(idx, { matcher: e.target.value })}
-                  className="w-36 rounded-md border border-codezal bg-codezal-input px-2.5 py-1 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                  className="w-36 rounded-md border border-codezal bg-codezal-input px-2.5 py-1 text-base text-codezal-text outline-none focus:border-codezal-accent"
                 />
-                <label className="ml-1 flex items-center gap-1.5 text-md text-codezal-dim">
+                <label className="ml-1 flex items-center gap-1.5 text-base text-codezal-dim">
                   <input
                     type="checkbox"
                     checked={h.enabled ?? true}
@@ -89,7 +89,7 @@ export function HooksTab() {
                   {t("settings.drawer.hookActiveLabel")}
                 </label>
                 {h.event === "PreToolUse" && (
-                  <label className="ml-1 flex items-center gap-1.5 text-md text-codezal-dim">
+                  <label className="ml-1 flex items-center gap-1.5 text-base text-codezal-dim">
                     <input
                       type="checkbox"
                       checked={h.blocking ?? false}
@@ -112,14 +112,14 @@ export function HooksTab() {
                 placeholder={t("settings.drawer.hookDescPlaceholder")}
                 value={h.description ?? ""}
                 onChange={(e) => patchHook(idx, { description: e.target.value })}
-                className="mt-2 w-full rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="mt-2 w-full rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
               <textarea
                 placeholder={t("settings.drawer.hookCmdPlaceholder")}
                 value={h.command}
                 onChange={(e) => patchHook(idx, { command: e.target.value })}
                 rows={2}
-                className="mt-2 w-full rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="mt-2 w-full rounded-md border border-codezal bg-codezal-input px-2.5 py-1.5 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </div>
           ))}
@@ -128,7 +128,7 @@ export function HooksTab() {
         <button
           type="button"
           onClick={addHook}
-          className="mt-3 flex h-8 items-center gap-1.5 rounded-md border border-codezal px-3 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
+          className="mt-3 flex h-8 items-center gap-1.5 rounded-md border border-codezal px-3 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
         >
           <Plus className="h-4 w-4" />
           {t("settings.drawer.hookAdd")}
@@ -147,27 +147,27 @@ function PluginHooksTrust() {
   if (pluginHooks.length === 0) return null
   return (
     <div className="mt-5 border-t border-codezal pt-4">
-      <div className="mb-2 flex items-center gap-2 text-md font-medium text-codezal-text">
+      <div className="mb-2 flex items-center gap-2 text-base font-medium text-codezal-text">
         <ShieldCheck className="h-4 w-4 text-codezal-accent" />
         {t("settings.drawer.pluginHooksTitle")}
       </div>
-      <p className="mb-2.5 text-md leading-relaxed text-codezal-mute">{t("settings.drawer.pluginHooksHint")}</p>
+      <p className="mb-2.5 text-base leading-relaxed text-codezal-mute">{t("settings.drawer.pluginHooksHint")}</p>
       <div className="space-y-2.5">
         {pluginHooks.map((h) => {
           const trusted = isPluginHookTrusted(h.id)
           return (
             <div key={h.id} className="rounded-lg border border-codezal bg-codezal-panel-2 p-3">
               <div className="flex items-center gap-1.5">
-                <span className="rounded bg-codezal-chip px-1.5 py-0.5 text-md text-codezal-dim">
+                <span className="rounded bg-codezal-chip px-1.5 py-0.5 text-base text-codezal-dim">
                   {h.event}
                 </span>
                 {h.matcher && h.matcher !== "*" && (
-                  <span className="font-mono text-md text-codezal-dim">{h.matcher}</span>
+                  <span className="font-mono text-base text-codezal-dim">{h.matcher}</span>
                 )}
-                <span className="ml-1 rounded bg-codezal-chip px-1.5 py-0.5 text-md text-codezal-mute">
+                <span className="ml-1 rounded bg-codezal-chip px-1.5 py-0.5 text-base text-codezal-mute">
                   {h.pluginId}
                 </span>
-                <label className="ml-auto flex items-center gap-1.5 text-md text-codezal-dim">
+                <label className="ml-auto flex items-center gap-1.5 text-base text-codezal-dim">
                   <input
                     type="checkbox"
                     checked={trusted}
@@ -180,9 +180,9 @@ function PluginHooksTrust() {
                 </label>
               </div>
               {h.description && (
-                <div className="mt-1.5 text-md text-codezal-mute">{h.description}</div>
+                <div className="mt-1.5 text-base text-codezal-mute">{h.description}</div>
               )}
-              <code className="mt-2 block overflow-x-auto whitespace-pre rounded bg-codezal-input px-2 py-1.5 font-mono text-md text-codezal-text">
+              <code className="mt-2 block overflow-x-auto whitespace-pre rounded bg-codezal-input px-2 py-1.5 font-mono text-base text-codezal-text">
                 {h.command}
               </code>
             </div>

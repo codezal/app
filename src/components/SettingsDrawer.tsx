@@ -148,7 +148,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
             type="button"
             onClick={onClose}
             title={t("settings.drawer.backBtn")}
-            className="mb-2 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-md text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+            className="mb-2 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             <span>{t("settings.drawer.backBtn")}</span>

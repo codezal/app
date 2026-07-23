@@ -43,7 +43,7 @@ import {
 } from "@/lib/git"
 import { makeDiffUri } from "@/lib/diff-uri"
 import { makeOutputDoc } from "@/lib/output-doc"
-import { emitGitChanged, onGitChanged } from "@/lib/git-events"
+import { emitGitChanged, onGitChanged, onOpenPrView } from "@/lib/git-events"
 import { generateCommitMessage } from "@/lib/git-ai-commit"
 import { normalizeCommitAttribution } from "@/lib/commit-attribution"
 import { resolveCompactModel } from "@/lib/compact"
@@ -106,6 +106,9 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   }, [refresh])
 
   useEffect(() => onGitChanged(() => void refresh()), [refresh])
+
+  // Status-bar CI-checks badge → jump straight to the PR view.
+  useEffect(() => onOpenPrView(() => setView("pr")), [])
 
   const openWorktreeDiff = (e: GitStatusEntry) => {
     const l = statusLabel(e)

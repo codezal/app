@@ -247,7 +247,7 @@ export {
   withSchemaSanitize,
   sanitizeSurrogates,
 } from "./transform"
-export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, retryDelayMs } from "./error"
+export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, retryDelayMs, stallRetryDelayMs } from "./error"
 export type { ParsedError } from "./error"
 
 export { probeModels, LOCAL_PRESETS } from "./discovery"

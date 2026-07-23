@@ -65,7 +65,7 @@ export function QuestionModal() {
           open ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        <div className="mx-auto w-full max-w-[1024px] px-8 pb-0 pt-10">
+        <div className="mx-auto w-full max-w-[860px] px-6 pb-0 pt-10">
           <div
             ref={cardRef}
             className="pointer-events-auto flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-[0_-8px_24px_-8px_rgba(0,0,0,0.20)]"

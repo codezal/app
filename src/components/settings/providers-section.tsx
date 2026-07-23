@@ -28,7 +28,7 @@ export function ProviderCatalogSection() {
 
   return (
     <Section title={t("settings.drawer.catalogTitle")}>
-      <div className="flex items-center justify-between gap-2 text-md">
+      <div className="flex items-center justify-between gap-2 text-base">
         <div className="flex-1 text-codezal-dim">
           {fetched ? (
             <>
@@ -43,12 +43,12 @@ export function ProviderCatalogSection() {
           type="button"
           onClick={() => void refresh()}
           disabled={refreshing}
-          className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
+          className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
         >
           {refreshing ? t("settings.drawer.catalogRefreshing") : t("settings.drawer.catalogRefresh")}
         </button>
       </div>
-      {error && <p className="mt-1.5 text-md text-destructive">{t("settings.drawer.catalogErrorLabel")} {error}</p>}
+      {error && <p className="mt-1.5 text-base text-destructive">{t("settings.drawer.catalogErrorLabel")} {error}</p>}
     </Section>
   )
 }

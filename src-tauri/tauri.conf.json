@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run prepare-lsp && npm run build"
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
@@ -41,7 +41,7 @@
     "createUpdaterArtifacts": true,
     "targets": "all",
     "resources": {
-      "resources/lsp": "lsp",
+      "resources/agent-runtime": "agent-runtime",
       "resources/git": "git",
       "resources/mlx": "mlx"
     },

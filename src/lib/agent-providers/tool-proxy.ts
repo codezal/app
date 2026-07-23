@@ -27,7 +27,6 @@ const NATIVE_MCP_TOOL_NAMES = new Set([
   "read_summary",
   "grep",
   "glob",
-  "lsp",
   "code_query",
   "code_search",
   "code_callers",

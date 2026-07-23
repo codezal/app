@@ -41,11 +41,11 @@ export function SkillsTab() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
-        <p className="text-md leading-relaxed text-codezal-dim">{t("settings.skills.desc")}</p>
+        <p className="text-base leading-relaxed text-codezal-dim">{t("settings.skills.desc")}</p>
         <button
           type="button"
           onClick={refresh}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text"
         >
           <RefreshCcw className="h-4 w-4" />
           {t("settings.skills.refresh")}
@@ -53,9 +53,9 @@ export function SkillsTab() {
       </div>
 
       {!skills ? (
-        <div className="px-1 py-3 text-md text-codezal-mute">…</div>
+        <div className="px-1 py-3 text-base text-codezal-mute">…</div>
       ) : skills.length === 0 ? (
-        <div className="px-1 py-3 text-md text-codezal-mute">{t("settings.skills.empty")}</div>
+        <div className="px-1 py-3 text-base text-codezal-mute">{t("settings.skills.empty")}</div>
       ) : (
         <div className="flex flex-col gap-1.5">
           {skills.map((s) => {
@@ -68,18 +68,18 @@ export function SkillsTab() {
                 <ScrollText className="mt-0.5 h-4 w-4 shrink-0 text-codezal-accent" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-md font-medium text-codezal-text">{s.name}</span>
-                    <span className="shrink-0 rounded bg-codezal-chip px-1.5 py-0.5 text-md text-codezal-mute">
+                    <span className="truncate text-base font-medium text-codezal-text">{s.name}</span>
+                    <span className="shrink-0 rounded bg-codezal-chip px-1.5 py-0.5 text-base text-codezal-mute">
                       {s.scope}
                     </span>
                     {s.origin !== "codezal" && (
-                      <span className="shrink-0 rounded bg-codezal-chip px-1.5 py-0.5 text-md text-codezal-mute">
+                      <span className="shrink-0 rounded bg-codezal-chip px-1.5 py-0.5 text-base text-codezal-mute">
                         {s.pluginId ? `plugin:${s.pluginId}` : s.origin}
                       </span>
                     )}
                   </div>
                   {s.description && (
-                    <p className="mt-0.5 line-clamp-2 text-md leading-relaxed text-codezal-dim">{s.description}</p>
+                    <p className="mt-0.5 line-clamp-2 text-base leading-relaxed text-codezal-dim">{s.description}</p>
                   )}
                 </div>
                 <button

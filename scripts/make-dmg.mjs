@@ -34,15 +34,6 @@ mkdirSync(dmgDir, { recursive: true })
 if (existsSync(out)) rmSync(out)
 
 if (IDENTITY) {
-  const bun = `${appPath}/Contents/Resources/lsp/bin/bun`
-  if (existsSync(bun)) {
-    console.log("→ Bun imzalanıyor (JIT entitlements)…")
-    run("codesign", [
-      "--force", "--options", "runtime",
-      "--entitlements", ENTITLEMENTS, "--timestamp",
-      "--sign", IDENTITY, bun,
-    ])
-  }
   console.log("→ .app yeniden imzalanıyor…")
   run("codesign", [
     "--force", "--options", "runtime",

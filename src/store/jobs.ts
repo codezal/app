@@ -13,7 +13,7 @@ function notifyJobFinished(job: BackgroundJob): void {
   if (job.status === "done") toast.success(msg)
   else toast.error(msg)
   if (typeof document !== "undefined" && !document.hasFocus()) {
-    void sendDesktopNotification("Codezal — arka plan işi", msg)
+    void sendDesktopNotification("Codezal — arka plan işi", msg, job.ownerSessionId)
   }
 }
 

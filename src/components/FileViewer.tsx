@@ -586,7 +586,6 @@ export function FileViewer({ path, reloadSignal }: Props) {
           initialText={getDraft(path) ?? content}
           baselineText={content}
           readOnly={!canEdit}
-          workspaceRoot={workspaceRoot}
           onSave={onSave}
           onDirtyChange={onDirty}
           onInlineEdit={canEdit ? openInlineEdit : undefined}

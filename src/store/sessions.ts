@@ -48,7 +48,7 @@ import { createId } from "@/lib/id"
 import { t as tStatic } from "@/lib/i18n"
 import type { ModelMessage } from "ai"
 import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
-import type { AgentMode, Message, Part, ProjectMeta, Session, SessionGoal, SessionMeta, SideChatMessage, SideChatThread, TodoItem } from "./types"
+import type { AgentMode, ContextBreakdown, Message, Part, ProjectMeta, Session, SessionGoal, SessionMeta, SideChatMessage, SideChatThread, TodoItem } from "./types"
 
 
 function makeEmptySession(
@@ -92,6 +92,7 @@ type UsageDelta = {
   costUsd: number
   lastInputTokens?: number
   effectiveContextTokens?: number
+  contextBreakdown?: ContextBreakdown
   countTurn?: boolean
 }
 
@@ -209,7 +210,7 @@ type SessionsState = {
   replaceModelMessagesFor: (sessionId: string, msgs: ModelMessage[]) => void
 
   setEffectiveContextTokens: (n: number) => void
-  setEffectiveContextTokensFor: (sessionId: string, n: number) => void
+  setEffectiveContextTokensFor: (sessionId: string, n: number, breakdown?: ContextBreakdown) => void
 
   forkAt: (messageId: string) => Promise<string>
 
@@ -970,12 +971,19 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
     },
 
     pushMessageFor: (sessionId, msg) => {
+      const now = Date.now()
       let newTitle: string | null = null
+      let userAt: number | null = null
       mut(sessionId, (s) => {
         const next: Session = {
           ...s,
           messages: [...s.messages, msg],
-          updatedAt: Date.now(),
+          updatedAt: now,
+        }
+        // Sidebar ordering + the per-row time track the user's last message.
+        if (msg.role === "user") {
+          next.lastUserMessageAt = now
+          userAt = now
         }
         if (next.title === tStatic("commandPalette.newChat")) {
           next.title = autoTitleFromMessages(next.messages)
@@ -983,9 +991,15 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         }
         return next
       })
-      if (newTitle !== null) {
+      if (newTitle !== null || userAt !== null) {
         set((st) => ({
-          index: st.index.map((m) => (m.id === sessionId ? { ...m, title: newTitle! } : m)),
+          index: st.index.map((m) => {
+            if (m.id !== sessionId) return m
+            const nm = { ...m }
+            if (newTitle !== null) nm.title = newTitle
+            if (userAt !== null) nm.lastUserMessageAt = userAt
+            return nm
+          }),
         }))
       }
     },
@@ -1065,6 +1079,7 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
             turns: cur.turns + (delta.countTurn === false ? 0 : 1),
             lastInputTokens: delta.lastInputTokens ?? delta.inputTokens,
             effectiveContextTokens: delta.effectiveContextTokens ?? cur.effectiveContextTokens,
+            contextBreakdown: delta.contextBreakdown ?? cur.contextBreakdown,
           },
           updatedAt: Date.now(),
         }
@@ -1081,7 +1096,7 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
       if (id) get().replaceModelMessagesFor(id, msgs)
     },
 
-    setEffectiveContextTokensFor: (sessionId, n) =>
+    setEffectiveContextTokensFor: (sessionId, n, breakdown) =>
       mut(sessionId, (s) => {
         const cur = s.usage ?? {
           inputTokens: 0,
@@ -1092,7 +1107,15 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
           costUsd: 0,
           turns: 0,
         }
-        return { ...s, usage: { ...cur, effectiveContextTokens: n }, updatedAt: Date.now() }
+        return {
+          ...s,
+          usage: {
+            ...cur,
+            effectiveContextTokens: n,
+            ...(breakdown ? { contextBreakdown: breakdown } : {}),
+          },
+          updatedAt: Date.now(),
+        }
       }),
     setEffectiveContextTokens: (n) => {
       const id = get().activeId

@@ -2,11 +2,8 @@ import { useEffect, useImperativeHandle, useRef, type Ref, type MouseEvent as Re
 import Editor, { type OnMount } from "@monaco-editor/react"
 import type { editor as MonacoNs, IDisposable } from "monaco-editor"
 import { monaco, monacoLanguageFor, applyCurrentTheme, watchThemeChanges } from "@/lib/monaco/setup"
-import { registerLspCodeActionProvider } from "@/lib/monaco/code-actions"
 import { getFileScroll, setFileScroll } from "@/lib/file-scroll-cache"
 import { setDraft, clearDraft } from "@/lib/editor-drafts"
-import { findProjectRoot } from "@/lib/project-root"
-import { lspEditSession, type LspEditHandle, type LspDiagnostic } from "@/lib/lsp"
 import { useSessionsStore } from "@/store/sessions"
 
 export type InlineSelection = {
@@ -37,7 +34,6 @@ type Props = {
   initialText: string
   baselineText: string
   readOnly?: boolean
-  workspaceRoot: string | null
   onSave: () => void
   onDirtyChange: (dirty: boolean) => void
   onInlineEdit?: () => void
@@ -50,7 +46,6 @@ export function CodeEditor({
   initialText,
   baselineText,
   readOnly = false,
-  workspaceRoot,
   onSave,
   onDirtyChange,
   onInlineEdit,
@@ -70,12 +65,6 @@ export function CodeEditor({
     onInlineEditRef.current = onInlineEdit
   })
 
-  // dil sunucusu spawn etmeyelim).
-  const sessionRef = useRef<LspEditHandle | null>(null)
-  const unlistenRef = useRef<(() => void) | null>(null)
-  const sessionStarted = useRef(false)
-  const codeActionProviderRegistered = useRef(false)
-  const changeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -123,45 +112,11 @@ export function CodeEditor({
           const st = useSessionsStore.getState()
           if (st.active?.previewFile === path) st.pinPreviewFile()
         } else clearDraft(path)
-        if (changeTimer.current) clearTimeout(changeTimer.current)
-        changeTimer.current = setTimeout(() => {
-          sessionRef.current?.change(text)
-        }, 400)
       })
       disposablesRef.current.push(changeDisp)
     }
 
     onDirtyRef.current(initialText !== baselineRef.current)
-
-    if (!readOnly && !sessionStarted.current) {
-      sessionStarted.current = true
-      void (async () => {
-        const root = (await findProjectRoot(path)) ?? workspaceRoot
-        const ed = editorRef.current
-        if (!root || !ed) return
-        const mdl = ed.getModel()
-        if (!mdl) return
-        const text = mdl.getValue()
-        const res = await lspEditSession(root, path, text)
-        if (!res.available) return
-        sessionRef.current = res.data
-        unlistenRef.current = await res.data.onDiagnostics((diags) => {
-          const curEd = editorRef.current
-          const curMdl = curEd?.getModel()
-          if (!curMdl) return
-          monaco.editor.setModelMarkers(curMdl, "lsp", toMonacoMarkers(curMdl, diags))
-        })
-        if (!codeActionProviderRegistered.current) {
-          codeActionProviderRegistered.current = true
-          const provider = registerLspCodeActionProvider(
-            ["typescript", "javascript", "typescriptreact", "javascriptreact", "rust", "go", "python", "json", "html", "css"],
-            () => sessionRef.current,
-          )
-          disposablesRef.current.push(provider)
-        }
-      })().catch(() => {
-      })
-    }
   }
 
   useEffect(() => {
@@ -171,11 +126,6 @@ export function CodeEditor({
         setFileScroll(path, { top: ed.getScrollTop(), left: ed.getScrollLeft() })
       }
       if (scrollTimer.current) clearTimeout(scrollTimer.current)
-      if (changeTimer.current) clearTimeout(changeTimer.current)
-      unlistenRef.current?.()
-      void sessionRef.current?.dispose()
-      unlistenRef.current = null
-      sessionRef.current = null
       for (const d of disposablesRef.current) d.dispose()
       disposablesRef.current = []
     }
@@ -329,39 +279,4 @@ export function CodeEditor({
       />
     </div>
   )
-}
-
-// LSP → Monaco markers — { line, character } (0-based) → 1-based clamp'li model konumu.
-function toMonacoMarkers(model: MonacoNs.ITextModel, diags: LspDiagnostic[]): MonacoNs.IMarkerData[] {
-  const sev: Record<number, MonacoNs.IMarkerData["severity"]> = {
-    1: monaco.MarkerSeverity.Error,
-    2: monaco.MarkerSeverity.Warning,
-    3: monaco.MarkerSeverity.Info,
-    4: monaco.MarkerSeverity.Hint,
-  }
-  return diags.map((d) => {
-    const lineCount = model.getLineCount()
-    const startLine = Math.min(Math.max(d.range.start.line + 1, 1), lineCount)
-    const startCol = Math.min(Math.max(d.range.start.character + 1, 1), model.getLineMaxColumn(startLine))
-    let endLine = Math.min(Math.max(d.range.end.line + 1, 1), lineCount)
-    let endCol = Math.min(Math.max(d.range.end.character + 1, 1), model.getLineMaxColumn(endLine))
-    if (endLine < startLine || (endLine === startLine && endCol < startCol)) {
-      endLine = startLine
-      endCol = startCol
-    }
-    if (endLine === startLine && endCol === startCol) {
-      endCol = Math.min(startCol + 1, model.getLineMaxColumn(endLine))
-    }
-    const code = d.code !== undefined ? ` [${d.code}]` : ""
-    const src = d.source ? ` (${d.source})` : ""
-    return {
-      severity: sev[d.severity ?? 1] ?? monaco.MarkerSeverity.Error,
-      message: `${d.message}${src}${code}`,
-      startLineNumber: startLine,
-      startColumn: startCol,
-      endLineNumber: endLine,
-      endColumn: endCol,
-      source: d.source,
-    }
-  })
 }

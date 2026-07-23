@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react"
-import { AlertCircle, FileText, GitBranch, Sparkles } from "@/lib/icons"
+import { FileText, GitBranch, Sparkles } from "@/lib/icons"
 import { FileTypeIcon, FolderTypeIcon } from "@/lib/file-icons"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
@@ -29,17 +29,12 @@ export type MentionSkillItem = {
   name: string
   description?: string
 }
-export type MentionProblemsItem = {
-  kind: "problems"
-  count: number
-}
 
 export type MentionItem =
   | MentionFileItem
   | MentionMcpItem
   | MentionBranchItem
   | MentionSkillItem
-  | MentionProblemsItem
 
 type Props = {
   open: boolean
@@ -48,17 +43,18 @@ type Props = {
   selectedIndex: number
   onSelectIndex: (i: number) => void
   onPick: (item: MentionItem) => void
+  // Composer'ın yatay padding'iyle aynı girintiyi uygular; menu composer kartıyla aynı genişlikte olur.
+  inCard?: boolean
 }
 
 function itemKey(it: MentionItem): string {
   if (it.kind === "file") return `file:${it.path}`
   if (it.kind === "branch") return `branch:${it.name}`
   if (it.kind === "skill") return `skill:${it.name}`
-  if (it.kind === "problems") return "problems:all"
   return `mcp:${it.server}/${it.uri}`
 }
 
-export function MentionMenu({ open, query, items, selectedIndex, onSelectIndex, onPick }: Props) {
+export function MentionMenu({ open, query, items, selectedIndex, onSelectIndex, onPick, inCard = false }: Props) {
   const t = useT()
   const filtered = useMemo(() => filterMentions(items, query), [items, query])
   const listRef = useRef<HTMLDivElement>(null)
@@ -71,7 +67,12 @@ export function MentionMenu({ open, query, items, selectedIndex, onSelectIndex, 
   if (!open || filtered.length === 0) return null
 
   return (
-    <div className="absolute bottom-full left-8 right-8 mb-1 flex max-h-[340px] flex-col overflow-hidden cz-menu">
+    <div
+      className={cn(
+        "absolute bottom-full mb-1 flex max-h-[340px] flex-col overflow-hidden cz-menu",
+        inCard ? "left-3 right-3" : "left-6 right-6",
+      )}
+    >
       <div ref={listRef} role="listbox" id="composer-mention-listbox" className="min-h-0 flex-1 overflow-y-auto">
         {filtered.map((it, i) => {
           const selected = i === selectedIndex
@@ -123,17 +124,6 @@ export function MentionMenu({ open, query, items, selectedIndex, onSelectIndex, 
                   </span>
                   <span className="ml-auto shrink-0 whitespace-nowrap rounded bg-codezal-chip px-1.5 py-0.5 text-sm text-codezal-dim">
                     skill
-                  </span>
-                </>
-              ) : it.kind === "problems" ? (
-                <>
-                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
-                  <span className="shrink-0 whitespace-nowrap font-mono text-base">problems</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-codezal-mute">
-                    {it.count} {t("mentionMenu.diagnostics")}
-                  </span>
-                  <span className="ml-auto shrink-0 whitespace-nowrap rounded bg-codezal-chip px-1.5 py-0.5 text-sm text-codezal-dim">
-                    LSP
                   </span>
                 </>
               ) : (

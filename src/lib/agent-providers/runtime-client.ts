@@ -35,17 +35,15 @@ async function commandScript(command: string, args: string[]): Promise<string> {
 }
 
 async function resolveRuntimeInvocation(): Promise<{ command: string; args: string[]; label: string }> {
-  const lspDir = await invoke<string | null>("lsp_resource_dir")
-  const platform = await invoke<{ os: string; arch: string }>("lsp_platform")
-  if (lspDir) {
-    const bun = await join(lspDir, "bin", `bun${platform.os === "windows" ? ".exe" : ""}`)
-    const entry = await join(lspDir, "agent-runtime", "index.js")
-    const hasBun = await invoke<boolean>("lsp_path_exists", { path: bun }).catch(() => false)
-    const hasEntry = await invoke<boolean>("lsp_path_exists", { path: entry }).catch(() => false)
-    if (hasBun && hasEntry) {
-      return { command: bun, args: [entry], label: "bundled-bun" }
-    }
+  const dir = await invoke<string | null>("agent_runtime_dir")
+  if (dir) {
+    const entry = await join(dir, "index.js")
+    const hasEntry = await invoke<boolean>("path_exists", { path: entry }).catch(() => false)
     if (hasEntry) {
+      // CLI agents (Claude Code / Codex) install their own runtimes; prefer a
+      // PATH bun, fall back to system node. We no longer ship a bundled Bun.
+      const bun = await resolveProgram("bun")
+      if (bun) return { command: bun, args: [entry], label: "system-bun" }
       const node = await resolveProgram("node")
       if (node) return { command: node, args: [entry], label: "system-node" }
     }

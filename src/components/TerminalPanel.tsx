@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { SerializeAddon } from "@xterm/addon-serialize"
+import { CanvasAddon } from "@xterm/addon-canvas"
 import { useTerminalsStore, type TerminalSession } from "@/store/terminals"
 import { useSessionsStore } from "@/store/sessions"
 import { spawnPty, type PtyHandle } from "@/lib/pty"
@@ -290,6 +291,10 @@ function getOrCreateLiveTerm(
   term.loadAddon(new WebLinksAddon())
   term.loadAddon(serialize)
   term.open(host)
+  // DOM renderer yarım-blok (▄/▀) karakterleri font metriğine göre çizer; bu da
+  // QR kod / box-drawing çıktısında her satırın altında boşluk bırakır. Canvas
+  // renderer block glyph'leri piksel-perfect basar → aralıklar kapanır.
+  term.loadAddon(new CanvasAddon())
 
   const live: LiveTerm = {
     host,

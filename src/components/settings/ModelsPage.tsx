@@ -147,18 +147,18 @@ export function ModelsPage(): React.ReactElement {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("settings.modelsPage.searchPlaceholder")}
-            className="w-full rounded-md border border-codezal bg-codezal-input px-8 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-accent"
+            className="w-full rounded-md border border-codezal bg-codezal-input px-8 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-accent"
           />
         </div>
         <div className="flex items-center justify-between gap-2">
           <button
             onClick={() => setPicking(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1 text-md font-medium text-white hover:bg-codezal-accent/90"
+            className="inline-flex items-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1 text-base font-medium text-white hover:bg-codezal-accent/90"
           >
             <Plus className="size-3.5" />
             {t("settings.providersPage.addProvider")}
           </button>
-          <div className="flex items-center gap-1 text-md">
+          <div className="flex items-center gap-1 text-base">
             <GhostButton onClick={expandAll}>
               {t("settings.modelsPage.expandAll")}
             </GhostButton>
@@ -171,7 +171,7 @@ export function ModelsPage(): React.ReactElement {
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-6">
-          <p className="text-md text-codezal-mute">
+          <p className="text-base text-codezal-mute">
             {groups.length === 0
               ? t("settings.providersPage.emptyHint")
               : t("settings.modelsPage.noResults")}
@@ -179,7 +179,7 @@ export function ModelsPage(): React.ReactElement {
           {groups.length === 0 && (
             <button
               onClick={() => setPicking(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1.5 text-md font-medium text-white hover:bg-codezal-accent/90"
+              className="inline-flex items-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1.5 text-base font-medium text-white hover:bg-codezal-accent/90"
             >
               <Plus className="size-3.5" />
               {t("settings.providersPage.addProvider")}
@@ -328,7 +328,7 @@ function ProviderHeader({
         // Placeholder keeps the row aligned with expandable peers.
         <span className="inline-block size-3.5 shrink-0" />
       )}
-      <span className="truncate text-md font-medium text-codezal-text">
+      <span className="truncate text-base font-medium text-codezal-text">
         {provider.label}
       </span>
       {provider.popular && !connected && (
@@ -338,23 +338,23 @@ function ProviderHeader({
         </span>
       )}
       {badge === "apiKey" && (
-        <span className="rounded-full border border-codezal bg-codezal-input px-2 py-0.5 text-md text-codezal-dim">
+        <span className="rounded-full border border-codezal bg-codezal-input px-2 py-0.5 text-base text-codezal-dim">
           {t("settings.providersPage.badgeApiKey")}
         </span>
       )}
       {badge === "oauth" && (
-        <span className="rounded-full border border-codezal bg-codezal-input px-2 py-0.5 text-md text-codezal-dim">
+        <span className="rounded-full border border-codezal bg-codezal-input px-2 py-0.5 text-base text-codezal-dim">
           {t("settings.providersPage.badgeOauth")}
         </span>
       )}
       {badge === "env" && (
-        <span className="rounded-full border border-codezal bg-codezal-input px-2 py-0.5 text-md text-codezal-dim">
+        <span className="rounded-full border border-codezal bg-codezal-input px-2 py-0.5 text-base text-codezal-dim">
           {t("settings.providersPage.badgeEnv")}
         </span>
       )}
       <div className="flex-1" />
       {connected && (
-        <span className="shrink-0 text-md text-codezal-mute">
+        <span className="shrink-0 text-base text-codezal-mute">
           {t("settings.modelsPage.countLabel", {
             enabled: String(enabledCount),
             total: String(totalCount),
@@ -411,8 +411,8 @@ function HeaderButton({
       onClick={onClick}
       className={
         kind === "primary"
-          ? "shrink-0 rounded-md bg-codezal-accent px-2.5 py-0.5 text-md font-medium text-white hover:bg-codezal-accent/90"
-          : "shrink-0 rounded-md border border-codezal px-2 py-0.5 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
+          ? "shrink-0 rounded-md bg-codezal-accent px-2.5 py-0.5 text-base font-medium text-white hover:bg-codezal-accent/90"
+          : "shrink-0 rounded-md border border-codezal px-2 py-0.5 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
       }
     >
       {children}
@@ -447,12 +447,12 @@ function ProviderBody({
   return (
     <div className="border-t border-codezal bg-codezal-bg/40 px-3 py-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="text-md text-codezal-mute">
+        <div className="text-base text-codezal-mute">
           {filteredOut > 0
             ? t("settings.modelsPage.filteredHint", { hidden: String(filteredOut) })
             : ""}
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-md">
+        <div className="flex shrink-0 items-center gap-1 text-base">
           <GhostButton onClick={onOnlyRecommended}>
             {t("settings.modelsPage.onlyRecommended")}
           </GhostButton>
@@ -473,7 +473,7 @@ function ProviderBody({
           return (
             <li key={m} className="flex items-center justify-between gap-3 px-3 py-1.5">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-md text-codezal-text">
+                <span className="truncate text-base text-codezal-text">
                   {displayName}
                 </span>
                 {recommended.has(m) && (

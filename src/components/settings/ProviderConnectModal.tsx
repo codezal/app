@@ -170,14 +170,14 @@ export function ProviderConnectModal({
         <div className="flex flex-col gap-4 px-4 py-4">
           {supportsOAuth && (
             <div className="flex flex-col gap-2 rounded-md border border-codezal bg-codezal-input p-3">
-              <div className="text-md font-medium text-codezal-text">
+              <div className="text-base font-medium text-codezal-text">
                 {t("settings.providersPage.oauthSignIn")}
               </div>
               {!oauthState ? (
                 <button
                   onClick={() => void handleOAuthStart()}
                   disabled={oauthBusy}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1.5 text-md font-medium text-white hover:bg-codezal-accent/90 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1.5 text-base font-medium text-white hover:bg-codezal-accent/90 disabled:opacity-60"
                 >
                   <ExternalLink className="size-3.5" />
                   {oauthBusy
@@ -186,19 +186,19 @@ export function ProviderConnectModal({
                 </button>
               ) : oauthState.kind === "authCodePkce" ? (
                 <div className="flex flex-col gap-2">
-                  <p className="text-md text-codezal-dim">
+                  <p className="text-base text-codezal-dim">
                     {t("settings.providersPage.oauthPasteHint")}
                   </p>
                   <input
                     value={oauthCallback}
                     onChange={(e) => setOauthCallback(e.target.value)}
                     placeholder={t("settings.providersPage.oauthCallbackPlaceholder")}
-                    className="rounded-md border border-codezal bg-codezal-panel px-2 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                    className="rounded-md border border-codezal bg-codezal-panel px-2 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-accent"
                   />
                   <button
                     onClick={() => void handleOAuthComplete()}
                     disabled={oauthBusy || !oauthCallback.trim()}
-                    className="self-start rounded-md bg-codezal-accent px-3 py-1.5 text-md font-medium text-white hover:bg-codezal-accent/90 disabled:opacity-60"
+                    className="self-start rounded-md bg-codezal-accent px-3 py-1.5 text-base font-medium text-white hover:bg-codezal-accent/90 disabled:opacity-60"
                   >
                     {oauthBusy
                       ? t("settings.providersPage.oauthCompleting")
@@ -207,19 +207,19 @@ export function ProviderConnectModal({
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  <p className="text-md text-codezal-dim">
+                  <p className="text-base text-codezal-dim">
                     {t("settings.providersPage.deviceCodeHint")}
                   </p>
-                  <div className="rounded-md border border-codezal bg-codezal-panel px-2.5 py-2 font-mono text-md tracking-widest text-codezal-text">
+                  <div className="rounded-md border border-codezal bg-codezal-panel px-2.5 py-2 font-mono text-base tracking-widest text-codezal-text">
                     {oauthState.userCode}
                   </div>
-                  <p className="text-md text-codezal-mute">
+                  <p className="text-base text-codezal-mute">
                     {t("settings.providersPage.deviceCodePolling")}
                   </p>
                 </div>
               )}
               {oauthError && (
-                <p className="text-md text-red-500">{oauthError}</p>
+                <p className="text-base text-red-500">{oauthError}</p>
               )}
             </div>
           )}
@@ -237,7 +237,7 @@ export function ProviderConnectModal({
                 className="rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-codezal-text outline-none focus:border-codezal-accent"
               />
               {provider.envVars.length > 0 && (
-                <p className="text-md text-codezal-mute">
+                <p className="text-base text-codezal-mute">
                   {t("settings.providersPage.envVarHint", {
                     vars: provider.envVars.join(", "),
                   })}
@@ -271,28 +271,28 @@ export function ProviderConnectModal({
                 value={optionsJson}
                 onChange={(e) => setOptionsJson(e.target.value)}
                 rows={4}
-                className="font-mono rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="font-mono rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
-              <p className="text-md text-codezal-mute">
+              <p className="text-base text-codezal-mute">
                 {t("settings.providersPage.optionsJsonHint")}
               </p>
             </div>
           )}
 
-          {saveError && <p className="text-md text-red-500">{saveError}</p>}
+          {saveError && <p className="text-base text-red-500">{saveError}</p>}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-codezal px-4 py-3">
           <button
             onClick={onClose}
-            className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-input"
+            className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-text hover:bg-codezal-input"
           >
             {t("common.cancel")}
           </button>
           {supportsApiKey && (
             <button
               onClick={() => void handleSaveApiKey()}
-              className="rounded-md bg-codezal-accent px-3 py-1.5 text-md font-medium text-white hover:bg-codezal-accent/90"
+              className="rounded-md bg-codezal-accent px-3 py-1.5 text-base font-medium text-white hover:bg-codezal-accent/90"
             >
               {t("common.save")}
             </button>

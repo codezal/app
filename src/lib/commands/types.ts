@@ -1,4 +1,4 @@
-export type SlashScope = "builtin" | "project" | "global" | "plugin" | "mcp" | "skill" | "workflow"
+export type SlashScope = "builtin" | "project" | "global" | "plugin" | "mcp" | "skill"
 
 export type SlashAction =
   | "clear"
@@ -13,8 +13,6 @@ export type SlashAction =
   | "routines"
   | "settings"
   | "orchestra"
-  | "workflows"
-  | "workflow-run"
   | "plugins"
   | "goal"
   | "codemap-index"

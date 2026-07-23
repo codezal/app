@@ -470,3 +470,16 @@
     animation: none;
   }
 }
+
+/* xterm QR / box-drawing boşluk fix'i.
+   xterm her satıra inline `line-height: <cell.height>px` yazar (stylesheet ile
+   ezilemez) ve cell.height, gizli `.xterm-char-measure-element` ölçümünden gelir.
+   xterm.css o ölçüm kutusuna `line-height: normal` verir; `normal` fontun
+   lineGap'ini de kutuya kattığı için ölçülen hücre, glyph'in em-kutusundan büyük
+   çıkar. Yarım-blok (▄/▀) karakterler em-kutusuna göre çizildiğinden, fazladan
+   lineGap her satırın altına yarım-boşluk olarak biner → QR kodda yatay çizgiler.
+   Ölçümü em-kutusuna (lineGap=0) sabitleyince hücre = em olur, half-leading sıfıra
+   iner ve blok karakterler satır satır tam değer. */
+.xterm-char-measure-element {
+  line-height: 1 !important;
+}

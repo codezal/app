@@ -14,7 +14,7 @@ export function Section({
     <section>
       <h3 className="text-md font-semibold tracking-tight text-codezal-text">{title}</h3>
       {description && (
-        <p className="mt-1 text-md leading-relaxed text-codezal-mute">{description}</p>
+        <p className="mt-1 text-base leading-relaxed text-codezal-mute">{description}</p>
       )}
       <div className="mt-3 rounded-xl border border-codezal-hair bg-codezal-panel/70 px-5 py-1">
         {children}
@@ -43,7 +43,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
             className={cn(
-              "rounded px-2.5 py-1 text-md transition-colors",
+              "rounded px-2.5 py-1 text-base transition-colors",
               active
                 ? "bg-codezal-accent font-semibold text-white shadow-sm"
                 : "text-codezal-dim hover:bg-codezal-panel hover:text-codezal-text",
@@ -69,8 +69,8 @@ export function Row({
   return (
     <div className="flex items-start justify-between gap-6 border-b border-codezal-hair py-3.5 last:border-b-0">
       <div className="min-w-0 flex-1">
-        <div className="text-md font-medium text-codezal-text">{label}</div>
-        {description && <div className="mt-1 max-w-2xl text-md leading-6 text-codezal-mute">{description}</div>}
+        <div className="text-base font-medium text-codezal-text">{label}</div>
+        {description && <div className="mt-1 max-w-2xl text-base leading-6 text-codezal-mute">{description}</div>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -143,7 +143,7 @@ export function NumberField({
       onChange={(e) =>
         onChange(Math.max(min, Math.min(max, Number(e.target.value) || fallback)))
       }
-      className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-md tabular-nums text-codezal-text outline-none [appearance:textfield] focus:border-codezal-strong focus-visible:ring-2 focus-visible:ring-codezal-accent/40 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      className="w-16 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-right text-base tabular-nums text-codezal-text outline-none [appearance:textfield] focus:border-codezal-strong focus-visible:ring-2 focus-visible:ring-codezal-accent/40 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
     />
   )
 }

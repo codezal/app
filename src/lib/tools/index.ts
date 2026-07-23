@@ -19,7 +19,6 @@ import EDIT_DESC from "./prompts/edit.txt?raw"
 import APPLY_PATCH_DESC from "./prompts/apply_patch.txt?raw"
 import BASH_DESC from "./prompts/bash.txt?raw"
 import BASH_STATUS_DESC from "./prompts/bash_status.txt?raw"
-import LSP_DESC from "./prompts/lsp.txt?raw"
 import PROPOSE_BUILD_DESC from "./prompts/propose_build.txt?raw"
 import PROPOSE_PLAN_DESC from "./prompts/propose_plan.txt?raw"
 import WEBFETCH_DESC from "./prompts/webfetch.txt?raw"
@@ -33,8 +32,6 @@ import INDEX_DOCS_DESC from "./prompts/index_docs.txt?raw"
 import SKILL_DESC from "./prompts/skill.txt?raw"
 import SPAWN_AGENT_DESC from "./prompts/spawn_agent.txt?raw"
 import DELEGATE_AGENTS_DESC from "./prompts/delegate_agents.txt?raw"
-import RUN_WORKFLOW_DESC from "./prompts/run_workflow.txt?raw"
-import WORKFLOW_STATUS_DESC from "./prompts/workflow_status.txt?raw"
 import REMEMBER_DESC from "./prompts/remember.txt?raw"
 import NOTEBOOK_EDIT_DESC from "./prompts/notebook_edit.txt?raw"
 import NOTIFY_DESC from "./prompts/notify.txt?raw"
@@ -128,7 +125,12 @@ import {
   type ProviderId,
 } from "../providers"
 import { makeToolCallRepair } from "../tool-repair"
-import { beatTool, beginToolActivity, endToolActivity } from "../tool-heartbeat"
+import {
+  readProjectMemory,
+  readUserMemory,
+  buildMemorySystemPrompt,
+} from "../memory"
+import { beatTool, beginToolActivity, endToolActivity, lastToolBeat } from "../tool-heartbeat"
 import type { WorkerEvent, AgentCardPart } from "../orchestra/types"
 import { useSettingsStore } from "@/store/settings"
 import { getEffectiveSettings } from "@/lib/config"
@@ -139,7 +141,6 @@ import { useSessionsStore } from "@/store/sessions"
 import { db } from "@/lib/db"
 import { ensureHistorySchema, getThreadMessages, searchThreads } from "@/lib/harness-history/store"
 import { useJobsStore, DEFAULT_WAIT_MS, type BackgroundJob } from "@/store/jobs"
-import { useWorkflowsStore, WF_DEFAULT_WAIT_MS, type WorkflowRun } from "@/store/workflows"
 import { recordToolCall } from "@/store/tool-telemetry"
 import { estimateTextTokens } from "@/lib/tokens"
 import { buildMcpTools, listPluginMcps, listConnectedMcpResources, readMcpResource } from "../mcp"
@@ -148,19 +149,6 @@ import { createId } from "@/lib/id"
 import type { Message, Settings } from "@/store/types"
 import { isAbsolutePath, resolveInWorkspace, WorkspaceError } from "./paths"
 import { withLock } from "../lock"
-import {
-  lspHover,
-  lspDefinition,
-  lspReferences,
-  lspImplementation,
-  lspDocumentSymbol,
-  lspWorkspaceSymbol,
-  lspPrepareCallHierarchy,
-  lspIncomingCalls,
-  lspOutgoingCalls,
-  lspDiagnostics,
-} from "../lsp"
-import type { LspDiagnostic } from "../lsp"
 import { listPluginAgents } from "../agents/plugin"
 import { checkpoint } from "../snapshots"
 import { scanToolInput, secretDenyGuidance, redactSecrets } from "@/lib/security/scan"
@@ -170,40 +158,7 @@ import { formatSymbol } from "../token-savers"
 import type { CodeSymbol } from "../token-savers"
 import { invoke } from "@tauri-apps/api/core"
 
-const READ_ONLY = new Set(["list_dir", "read_file", "load_skill", "question", "lsp", "tool_search"])
-
-// Format LSP diagnostics for the AI tool: "SEVERITY [line:col] [code] message".
-// LSP positions are 0-based; we display them 1-based to match editors.
-function formatDiagnostics(diags: LspDiagnostic[]): string {
-  if (!diags.length) return "No diagnostics."
-  const sev = (s?: number) => (s === 1 ? "ERROR" : s === 2 ? "WARN" : s === 3 ? "INFO" : "HINT")
-  return diags
-    .map((d) => {
-      const { line, character } = d.range.start
-      const code = d.code != null ? ` [${d.code}]` : ""
-      return `${sev(d.severity)} [${line + 1}:${character + 1}]${code} ${d.message}`
-    })
-    .join("\n")
-}
-
-function lspResultString(
-  res: { available: boolean; reason?: string; data?: unknown },
-  operation: string,
-): string {
-  if (!res.available) return `LSP unavailable: ${res.reason}`
-  if (res.data == null) return "(no result)"
-  if (Array.isArray(res.data)) {
-    if (res.data.length === 0) return `No results found for ${operation}`
-    const CAP = 100
-    if (res.data.length > CAP) {
-      return (
-        JSON.stringify(res.data.slice(0, CAP), null, 2) +
-        `\n\n(Showing the first ${CAP} of ${res.data.length} results; use a narrower query.)`
-      )
-    }
-  }
-  return JSON.stringify(res.data, null, 2)
-}
+const READ_ONLY = new Set(["list_dir", "read_file", "load_skill", "question", "tool_search"])
 
 const GREP_LIMIT = 100
 function formatHits(hits: SearchHit[]): string {
@@ -239,6 +194,58 @@ const AGENT_SUMMARY_TIMEOUT_MS = 60_000
 function truncateForContext(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   return sliceCharsSafe(text, maxChars) + `\n\n[... truncated, ${text.length} total chars]`
+}
+
+// Build an enriched system prompt for subagents. The agent's own prompt is the
+// core; we append workspace context, tool discipline, code-navigation hints, and
+// project memory/rules so the subagent operates with the same awareness as the
+// parent — minus the language directive (the app is multilingual).
+const SUBAGENT_MEMORY_BUDGET = 8_000 // bytes — leaner than the parent's full budget
+
+async function buildSubagentSystem(
+  agentPrompt: string,
+  workspace: string | undefined,
+): Promise<string> {
+  const parts: string[] = [agentPrompt]
+
+  if (workspace) {
+    parts.push(`\nWorking directory: ${workspace}`)
+    parts.push(
+      "\n## Code navigation\n" +
+        "A tree-sitter Code Map is indexed for this workspace. For structural questions prefer:\n" +
+        "- code_search (find symbol) · code_callers (what calls X) · code_callees (what X calls)\n" +
+        "- code_context (definition + callers + callees in one call)\n" +
+        "- code_query (semantic/concept search)\n" +
+        "Use grep only for literal text (strings, comments, config values).",
+    )
+  }
+
+  parts.push(
+    "\n## Tool discipline\n" +
+      "- Read a file before editing it.\n" +
+      "- For edit_file, include enough surrounding context that old_string is unique.\n" +
+      "- When calling bash, pass a short `description` (5-10 words) of what the command does.\n" +
+      "- Keep bash commands inside the workspace.\n" +
+      "- Finish the task fully before your final summary. Verify with tests/typecheck when applicable.",
+  )
+
+  // Project + user memory/rules (AGENTS.md, memory.md, etc.) — lean budget.
+  if (workspace) {
+    try {
+      const [proj, user] = await Promise.all([
+        readProjectMemory(workspace, {}),
+        readUserMemory({}),
+      ])
+      const memBlock = buildMemorySystemPrompt([...proj, ...user], {
+        totalBudgetBytes: SUBAGENT_MEMORY_BUDGET,
+      })
+      if (memBlock) parts.push("\n" + memBlock)
+    } catch {
+      // Non-critical — proceed without memory if reading fails.
+    }
+  }
+
+  return parts.join("\n")
 }
 
 function formatJobOutput(job: BackgroundJob, cursor?: number): string {
@@ -298,9 +305,15 @@ function isDoomTracked(tool: string): boolean {
   )
 }
 
+// Cap the serialized input to avoid storing megabyte-sized keys for tools like
+// write_file/edit_file. 500 chars is more than enough to detect identical
+// repeated calls while keeping memory bounded (~3KB per session window).
+const DOOM_KEY_MAX = 500
+
 function recordDoomAndWarn(tool: string, input: unknown, ownerSessionId: string): string | null {
   const sid = ownerSessionId || "default"
-  const key = `${tool}:${JSON.stringify(input)}`
+  const raw = JSON.stringify(input)
+  const key = `${tool}:${raw.length > DOOM_KEY_MAX ? raw.slice(0, DOOM_KEY_MAX) : raw}`
   const hist = doomHistory.get(sid) ?? []
   const repeat = isDoomRepeat(hist, key)
   hist.push(key)
@@ -313,7 +326,7 @@ function recordDoomAndWarn(tool: string, input: unknown, ownerSessionId: string)
   )
 }
 
-const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch", "notebook_edit", "monitor", "remember", "save_method", "run_workflow", "send_to_session"])
+const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch", "notebook_edit", "monitor", "remember", "save_method", "send_to_session"])
 
 const READ_ONLY_EXTRA = new Set([
   "repo_overview",
@@ -329,7 +342,6 @@ const READ_ONLY_EXTRA = new Set([
   "code_trace",
   "code_impact",
   "code_context",
-  "workflow_status",
 ])
 
 function wrapToolsWithPolicy(
@@ -519,8 +531,6 @@ export type ToolName =
   | "delegate_agents"
   | "dispatch_workers"
   | "merge_workers"
-  | "run_workflow"
-  | "workflow_status"
   | "propose_build"
   | "propose_plan"
   | "notebook_edit"
@@ -769,7 +779,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
 
 export const READONLY_ALLOW = new Set<string>([
   "read_file", "read_summary", "list_dir", "grep", "glob",
-  "lsp", "code_query", "code_search", "code_callers", "code_callees", "code_trace", "code_impact", "code_context",
+  "code_query", "code_search", "code_callers", "code_callees", "code_trace", "code_impact", "code_context",
   "repo_overview", "load_skill",
   "webfetch", "websearch", "firecrawl",
   "question", "notify", "todo_write", "propose_plan", "propose_build",
@@ -937,10 +947,6 @@ export async function buildAllTools(
     delete merged.dispatch_workers
     delete merged.merge_workers
   }
-  if (useSettingsStore.getState().settings.disableWorkflows === true) {
-    delete merged.run_workflow
-    delete merged.workflow_status
-  }
   if (merged.spawn_agent) {
     try {
       const [proj, user] = await Promise.all([
@@ -970,7 +976,7 @@ export async function buildAllTools(
     delete merged.remember
     delete merged.save_method
   }
-  // dispatch/workflow/remember/notebook_edit/schedule/monitor gibi mutasyon/exec
+  // dispatch/remember/notebook_edit/schedule/monitor gibi mutasyon/exec
   //
   // (write_file/edit_file/bash/apply_patch/monitor/remember/notebook_edit/schedule_task/
   // clone_repo/create_worktree/remove_worktree hepsi strip).
@@ -1014,7 +1020,12 @@ export const CORE_TOOL_NAMES = new Set<string>([
   "todo_write",
   "question",
   "webfetch",
-  "lsp",
+  // Agent delegation & planning — must be immediately callable so models
+  // actually delegate instead of doing everything inline (deferred tools
+  // require a tool_search round-trip first, which most models skip).
+  "spawn_agent",
+  "propose_plan",
+  "propose_build",
 ])
 
 export function isMcpToolName(name: string): boolean {
@@ -1099,7 +1110,23 @@ export function makeToolSearchTool(tools: ToolSet, deferred: string[], activeSet
       let matches: string[]
       if (sel) {
         const want = sel[1].split(",").map((s) => s.trim()).filter(Boolean)
-        matches = want.filter((n) => deferred.includes(n))
+        // Separate already-active tools from deferred ones so the model gets
+        // actionable feedback instead of a confusing "not found".
+        const alreadyActive = want.filter((n) => activeSet.has(n) || (tools[n] && !deferred.includes(n)))
+        matches = want.filter((n) => deferred.includes(n) && !activeSet.has(n))
+        if (matches.length === 0 && alreadyActive.length > 0) {
+          return `${alreadyActive.join(", ")} already active — call directly without tool_search.`
+        }
+        if (alreadyActive.length > 0) {
+          // Some were already active; note it briefly then load the rest.
+          const note = `(note: ${alreadyActive.join(", ")} already active)\n`
+          for (const n of matches) activeSet.add(n)
+          const lines = matches.map((n) => {
+            const desc = String(tools[n]?.description ?? "").split("\n")[0].slice(0, 120)
+            return `- ${n}: ${desc}`
+          })
+          return `${note}${matches.length} tool(s) loaded and now callable:\n${lines.join("\n")}\n\nNext step: call the selected tool now.`
+        }
       } else {
         matches = searchDeferred(query, deferred, tools, max)
       }
@@ -1253,60 +1280,13 @@ function buildWebTools(ownerSessionId: string): ToolSet {
       }),
       execute: async ({ title, body }) => {
         await gateFor("notify", { title, body })
-        await sendDesktopNotification(title, body)
+        await sendDesktopNotification(title, body, ownerSessionId)
         return `Notification sent: ${title}`
       },
     }),
   }
 }
 
-function formatWorkflowRun(run: WorkflowRun): string {
-  const lines: string[] = []
-  let tokOut = 0
-  for (const a of run.agents) tokOut += a.tokensOut ?? 0
-  lines.push(
-    `Workflow "${run.name}" [${run.status}] - ${run.agents.length} agents, ${run.phases.length} phases, ~${tokOut} output tokens`,
-  )
-  const phaseOrder = run.phases.map((p) => p.title)
-  const grouped = new Map<string, typeof run.agents>()
-  for (const a of run.agents) {
-    const k = a.phase || "(no phase)"
-    const arr = grouped.get(k) ?? []
-    arr.push(a)
-    grouped.set(k, arr)
-  }
-  const keys = [...new Set([...phaseOrder, ...grouped.keys()])]
-  for (const k of keys) {
-    const arr = grouped.get(k)
-    if (!arr || arr.length === 0) continue
-    const done = arr.filter((a) => a.status === "done").length
-    const err = arr.filter((a) => a.status === "error").length
-    const run_ = arr.filter((a) => a.status === "running" || a.status === "pending").length
-    lines.push(`  ${k}: ${arr.length} agents (${done} done, ${run_} running, ${err} errors)`)
-  }
-  if (run.logLines.length > 0) {
-    lines.push("--- log (last 5) ---")
-    for (const l of run.logLines.slice(-5)) lines.push(`  ${l}`)
-  }
-  if (run.status === "done") {
-    lines.push("--- RESULT ---")
-    lines.push(truncateForContext(run.result ?? "(empty)", WORKER_OUTPUT_MAX))
-  } else if (run.status === "error") {
-    lines.push(`ERROR: ${run.error ?? "unknown"}`)
-  } else if (run.status === "cancelled") {
-    lines.push("Cancelled.")
-  } else {
-    lines.push("(still running; poll again with workflow_status)")
-  }
-  return lines.join("\n")
-}
-
-function formatWorkflowList(runs: WorkflowRun[]): string {
-  if (runs.length === 0) return "No active or completed workflow runs."
-  return runs
-    .map((r) => `${r.runId} - "${r.name}" [${r.status}] · ${r.agents.length} agents`)
-    .join("\n")
-}
 
 export function buildTools(
   workWorkspace: string | undefined,
@@ -1447,77 +1427,6 @@ export function buildTools(
           out += `\n\n(Results truncated: showing first ${GLOB_LIMIT}. Use a narrower pattern or path.)`
         }
         return out
-      },
-    }),
-
-    lsp: tool({
-      description: LSP_DESC,
-      inputSchema: z.object({
-        operation: z.enum([
-          "hover",
-          "definition",
-          "references",
-          "implementation",
-          "documentSymbol",
-          "workspaceSymbol",
-          "prepareCallHierarchy",
-          "incomingCalls",
-          "outgoingCalls",
-          "diagnostics",
-        ]),
-        path: z.string().describe("Workspace-relative file path (anchor file for workspaceSymbol)"),
-        line: z.number().int().min(1).optional().describe("1-based line (position-based operations)"),
-        character: z.number().int().min(1).optional().describe("1-based column (position-based operations)"),
-        query: z
-          .string()
-          .optional()
-          .describe("Search query for workspaceSymbol (empty string = all symbols)"),
-      }),
-      execute: async ({ operation, path, line, character, query }) => {
-        let abs: string
-        try {
-          abs = resolveInWorkspace(workspace ?? "", path)
-        } catch (e) {
-          return String(e)
-        }
-        const root = workspace ?? ""
-
-        // Operations that do not require a position.
-        if (operation === "diagnostics") {
-          const res = await lspDiagnostics(root, abs)
-          if (res.available) return formatDiagnostics(res.data)
-          return `LSP unavailable: ${"reason" in res ? res.reason : "unknown"}`
-        }
-        if (operation === "documentSymbol") {
-          return lspResultString(await lspDocumentSymbol(root, abs), operation)
-        }
-        if (operation === "workspaceSymbol") {
-          return lspResultString(await lspWorkspaceSymbol(root, abs, query ?? ""), operation)
-        }
-
-        // Operations that require a position (hover/definition/references/implementation/callHierarchy).
-        if (line === undefined || character === undefined) {
-          return `'${operation}' requires line and character (1-based).`
-        }
-        const l = line - 1
-        const c = character - 1
-
-        const res =
-          operation === "hover"
-            ? await lspHover(root, abs, l, c)
-            : operation === "definition"
-              ? await lspDefinition(root, abs, l, c)
-              : operation === "references"
-                ? await lspReferences(root, abs, l, c)
-                : operation === "implementation"
-                  ? await lspImplementation(root, abs, l, c)
-                  : operation === "prepareCallHierarchy"
-                    ? await lspPrepareCallHierarchy(root, abs, l, c)
-                    : operation === "incomingCalls"
-                      ? await lspIncomingCalls(root, abs, l, c)
-                      : await lspOutgoingCalls(root, abs, l, c)
-
-        return lspResultString(res, operation)
       },
     }),
 
@@ -2288,6 +2197,10 @@ export function buildTools(
         const parentSignal = (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal
         emit({ type: "started" })
 
+        // Enrich the agent prompt with workspace context, tool discipline, and
+        // project memory so the subagent operates with full awareness.
+        const subagentSystem = await buildSubagentSystem(agent.systemPrompt, workspace)
+
         let finalText = ""
         let lastResult: ReturnType<typeof streamText> | undefined
         let lastErr: unknown
@@ -2296,11 +2209,20 @@ export function buildTools(
         let currentAc: AbortController | undefined
         const spawnStart = Date.now()
         let attemptBeat = spawnStart
+        // Track pending tool executions so the watchdog applies a longer timeout
+        // while a tool is actively running (e.g. a 3-min `npm install` should not
+        // be killed by the 2.5-min text-stall timer).
+        let subagentToolsPending = 0
         const wd = setInterval(() => {
           const ac = currentAc
           if (!ac) return
           const now = Date.now()
-          if (now - attemptBeat > AGENT_STALL_MS || now - spawnStart > AGENT_DEADLINE_MS) {
+          // Use the tool heartbeat as an additional liveness signal — tools like
+          // bash beat internally while streaming output.
+          const beat = lastToolBeat(ownerSessionId)
+          const ref = beat && beat > attemptBeat ? beat : attemptBeat
+          const stallLimit = subagentToolsPending > 0 ? AGENT_DEADLINE_MS : AGENT_STALL_MS
+          if (now - ref > stallLimit || now - spawnStart > AGENT_DEADLINE_MS) {
             softStopped = true
             ac.abort()
           }
@@ -2320,7 +2242,7 @@ export function buildTools(
             try {
               const result = streamText({
                 model,
-                system: agent.systemPrompt,
+                system: subagentSystem,
                 messages: [{ role: "user", content: task }],
                 tools: policedTools,
                 stopWhen: stepCountIs(agent.maxSteps ?? 40),
@@ -2341,12 +2263,15 @@ export function buildTools(
                     break
                   }
                   case "tool-call":
+                    subagentToolsPending++
                     emit({ type: "tool-call", name: chunk.toolName, id: chunk.toolCallId })
                     break
                   case "tool-result":
+                    if (subagentToolsPending > 0) subagentToolsPending--
                     emit({ type: "tool-result", name: chunk.toolName, id: chunk.toolCallId })
                     break
                   case "tool-error":
+                    if (subagentToolsPending > 0) subagentToolsPending--
                     emit({ type: "tool-result", name: chunk.toolName, id: chunk.toolCallId, isError: true })
                     break
                   case "error": {
@@ -2431,51 +2356,6 @@ export function buildTools(
       },
     }),
 
-    run_workflow: tool({
-      description: RUN_WORKFLOW_DESC,
-      inputSchema: z.object({
-        script: z
-          .string()
-          .min(20)
-          .max(100_000)
-          .describe("Full workflow JS script starting with export const meta = {...}"),
-        args: z.unknown().optional().describe("Value passed to the script as the global `args`"),
-        resumeFromRunId: z
-          .string()
-          .optional()
-          .describe("Resume from a previous run; unchanged agent() prefixes return from cache"),
-      }),
-      execute: async ({ script, args, resumeFromRunId }) => {
-        await gateFor("run_workflow", { script })
-        const runId = await useWorkflowsStore.getState().spawn({
-          sessionId: ownerSessionId,
-          script,
-          args,
-          workspace,
-          configWorkspace,
-          resumeFromRunId,
-        })
-        return `Workflow started (runId: ${runId}). Read progress and final result with workflow_status({ runId: "${runId}", wait: true }).`
-      },
-    }),
-
-    workflow_status: tool({
-      description: WORKFLOW_STATUS_DESC,
-      inputSchema: z.object({
-        runId: z.string().optional().describe("Run id; omit to list all runs"),
-        wait: z.boolean().optional().describe("true -> block until the run finishes, bounded"),
-      }),
-      execute: async ({ runId, wait }) => {
-        const store = useWorkflowsStore.getState()
-        if (!runId) return formatWorkflowList(store.list())
-        let run = store.read(runId)
-        if (!run) return `Workflow not found: ${runId}`
-        if (wait && run.status === "running") {
-          run = (await store.wait(runId, WF_DEFAULT_WAIT_MS)) ?? run
-        }
-        return formatWorkflowRun(run)
-      },
-    }),
 
     propose_build: tool({
       description: PROPOSE_BUILD_DESC,
@@ -2711,7 +2591,7 @@ export function buildTools(
                 content: `🔔 [monitor] ${line}`,
               }
               useSessionsStore.getState().pushMessageFor(sid, msg)
-              if (behavior === "notify") void sendDesktopNotification("Monitor", line)
+              if (behavior === "notify") void sendDesktopNotification("Monitor", line, sid)
             }
           },
         })

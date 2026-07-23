@@ -62,7 +62,7 @@ export function PrivacyTab() {
         </div>
       </Section>
 
-      <div className="flex items-start gap-2 rounded-lg border border-codezal bg-codezal-panel px-4 py-3 text-md text-codezal-mute">
+      <div className="flex items-start gap-2 rounded-lg border border-codezal bg-codezal-panel px-4 py-3 text-base text-codezal-mute">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-codezal-accent" />
         <span>{t("settings.privacy.failClosed")}</span>
       </div>

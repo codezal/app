@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { uriToPath, uriMatchesPath } from "@/lib/lsp/uri"
+import { uriToPath, uriMatchesPath } from "@/lib/uri"
 
 describe("uriToPath", () => {
   it("posix file:// URI → path", () => {

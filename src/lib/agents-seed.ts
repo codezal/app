@@ -1,7 +1,7 @@
 import { exists, mkdir, writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
 import { homeDir } from "@tauri-apps/api/path"
 
-export const SEED_VERSION = 6
+export const SEED_VERSION = 7
 
 export type AgentTemplate = {
   name: string
@@ -21,11 +21,13 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       "96a2bc0cf969d753377653fbfc9865cb9827a0734939adcd3d9d08dae6c10f17",
       "a660f01175021f92ab0c73e6d9c3e978aa296ac4a9dd66bec36376fce7019da3",
       "152b95283c80031f30137419a7c4a3e88703ac0f3016904a03640ab5f27e3f00",
+      "f847d88b6256445aa393bedaba4001b5fd8f91e23fb172642543df03160f35f5",
     ],
     body: `---
 name: code-reviewer
 description: Code review specialist - reviews diffs/files and returns severity-tagged findings.
-tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, code_query]
+tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, code_query, bash]
+bash_allow: ["git diff", "git log", "git show", "git status", "git blame"]
 plan_mode: true
 max_steps: 20
 ---
@@ -42,6 +44,11 @@ Tools (do not guess by eye; produce evidence):
 - \`code_callers\` + \`code_impact\` -> measure the impact of a changed symbol (how many callers may break).
 - \`code_callees\` -> inspect what the changed function calls and verify dependencies are used correctly.
 - Use \`code_search\` to find symbols by name; use \`grep\`/\`glob\` to scan text/files.
+
+Getting the change set:
+- If the task supplies a diff or specific files, review those directly.
+- If asked to review uncommitted changes without a supplied diff, run \`git diff\` (and \`git diff --cached\` for staged changes) via \`bash\` to obtain it first.
+- For a specific commit or range, use \`git show <ref>\` or \`git diff <ref1>..<ref2>\`.
 
 Security lens (scan every review):
 - Injection (SQL/shell/path), missing authz/authn, leaked secrets/tokens/keys, unsafe \`bash\`/fs (\`rm -rf\`, eval, path traversal), unvalidated user input, unsafe deserialization. Mark these 🔴/🟠 when found.
@@ -165,11 +172,13 @@ Rules:
       "a7e4520a64615a16a11c15e0bf63404159d0dea4c77552926b8c585bd4fc0ac7",
       "22cfea8212b4f2eddae1b18cff8404f94be2a185abf74aef3b3cb983419453c6",
       "e927d9f1662627d19a56786caaaad912369cf70d0ea3de2d033021d489e8794d",
+      "75a0e48267155846c2bfb609b72a5f67438a8d22a28655d3259d5b328e6e867f",
     ],
     body: `---
 name: refactorer
 description: Suggest refactors by finding duplication, complexity, poor naming, and giving a plan.
-tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, code_query]
+tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, code_query, bash]
+bash_allow: ["git diff", "git log", "git show", "git status", "git blame"]
 plan_mode: true
 max_steps: 20
 ---
@@ -186,6 +195,11 @@ Flow:
    - Wrong abstractions: inspect coupling with \`code_callers\`/\`code_callees\`, and unnecessary indirection chains with \`code_trace\`.
 3. For each finding: file:line + issue + recommended change (1-2 sentences).
 4. Prioritize: measure risk with \`code_impact\` (how many hops/callers are affected).
+
+Getting the change set:
+- If the task supplies specific files or a diff, inspect those directly.
+- If asked to review uncommitted changes, run \`git diff\` (and \`git diff --cached\` for staged changes) via \`bash\` to see what changed.
+- For a specific commit or range, use \`git show <ref>\` or \`git diff <ref1>..<ref2>\`.
 
 Rules:
 - Do NOT write code; plan only.

@@ -137,10 +137,10 @@ export function BranchPicker({ workspace, onChanged }: Props) {
         disabled={disabled}
         title={disabled ? t("branchPicker.noWorkspaceTitle") : t("branchPicker.branchTitle", { branch: label })}
         className={cn(
-          "flex h-[30px] shrink-0 items-center gap-[7px] whitespace-nowrap rounded-lg border px-[9px] text-base font-medium",
+          "flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 text-xs font-medium transition-colors",
           disabled
-            ? "border-transparent text-codezal-mute opacity-60"
-            : "border-transparent text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
+            ? "text-codezal-mute opacity-60"
+            : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
         )}
       >
         <GitBranch className="h-3.5 w-3.5" />

@@ -39,10 +39,39 @@ export function useTodoPanelAuto(
   }, [panelMode])
 
   useEffect(() => {
-    autoEngagedRef.current = false
-    restoreRef.current = null
+    // The todo panel is owned by the session whose active todos auto-opened it.
+    // On a session switch we must re-evaluate against the *new* session so an
+    // empty panel never leaks into an unrelated chat, and a chat that does have
+    // active todos shows them again when revisited.
+    const wasAuto = autoEngagedRef.current
+    const restore = restoreRef.current
     prevActiveRef.current = active
     expectedRef.current = panelModeRef.current
+
+    if (active) {
+      // New session has active todos: surface them and take ownership so the
+      // panel auto-closes once they finish.
+      if (panelModeRef.current !== "todo") {
+        restoreRef.current = panelModeRef.current
+        expectedRef.current = "todo"
+        setPanelMode("todo")
+      }
+      autoEngagedRef.current = true
+    } else {
+      // New session has no active todos: a todo panel must never leak into an
+      // unrelated chat. The todo tab is only meaningful while a session has
+      // active todos (the menu entry is gated on the same condition), so if the
+      // panel is sitting on "todo" — left over from a previous session, whether
+      // auto-opened or not — drop it back to its prior mode or close it
+      // entirely instead of showing an empty "no active tasks" list.
+      if (panelModeRef.current === "todo") {
+        const back = wasAuto ? restore : null
+        expectedRef.current = back
+        setPanelMode((m) => (m === "todo" ? back : m))
+      }
+      autoEngagedRef.current = false
+      restoreRef.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId])
 
@@ -55,13 +84,15 @@ export function useTodoPanelAuto(
       expectedRef.current = "todo"
       setPanelMode("todo")
     } else if (!active && wasActive) {
-      if (autoEngagedRef.current) {
-        const back = restoreRef.current
-        autoEngagedRef.current = false
+      // Todos just finished (or the stream ended). A todo panel has nothing to
+      // show without active todos, so close it regardless of whether it was
+      // auto-opened — otherwise an empty panel lingers after the run.
+      if (panelModeRef.current === "todo") {
+        const back = autoEngagedRef.current ? restoreRef.current : null
         expectedRef.current = back
-        // (m !== "todo") dokunma.
         setPanelMode((m) => (m === "todo" ? back : m))
       }
+      autoEngagedRef.current = false
       restoreRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -68,7 +68,7 @@ function LanguageSelect({
                   setOpen(false)
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-md hover:bg-codezal-panel-2 hover:text-codezal-text",
+                  "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-base hover:bg-codezal-panel-2 hover:text-codezal-text",
                   active ? "text-codezal-text" : "text-codezal-dim",
                 )}
               >
@@ -97,23 +97,23 @@ export function GeneralTab() {
     <div className="space-y-8">
       <Section title={t("settings.general.defaultsTitle")}>
         <div className="border-b border-codezal-hair pb-3 pt-1">
-          <div className="mb-2 text-md font-medium text-codezal-text">
+          <div className="mb-2 text-base font-medium text-codezal-text">
             {t("settings.general.language")}
           </div>
           <LanguageSelect
             value={settings.language ?? "tr"}
             onChange={(code) => void update({ language: code })}
           />
-          <p className="mt-2 text-md leading-relaxed text-codezal-mute">
+          <p className="mt-2 text-base leading-relaxed text-codezal-mute">
             {t("settings.general.languageDesc")}
           </p>
         </div>
         <div className="pb-1 pt-3">
-          <div className="mb-2 text-md font-medium text-codezal-text">
+          <div className="mb-2 text-base font-medium text-codezal-text">
             {t("settings.drawer.defaultProviderModelTitle")}
           </div>
           <DefaultProviderModelSelector />
-          <p className="mt-2 text-md leading-relaxed text-codezal-mute">
+          <p className="mt-2 text-base leading-relaxed text-codezal-mute">
             {t("settings.drawer.defaultProviderModelHint")}
           </p>
         </div>
@@ -210,7 +210,7 @@ export function GeneralTab() {
               />
             </Row>
             <div className="border-b border-codezal-hair py-3 last:border-b-0">
-              <div className="mb-2 text-md font-medium text-codezal-text">
+              <div className="mb-2 text-base font-medium text-codezal-text">
                 {t("settings.drawer.compactModelLabel")}
               </div>
               <input
@@ -226,9 +226,9 @@ export function GeneralTab() {
                     },
                   })
                 }}
-                className="w-full rounded-md border border-codezal bg-codezal-input px-3 py-2 text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="w-full rounded-md border border-codezal bg-codezal-input px-3 py-2 text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
-              <div className="mt-1.5 text-md leading-relaxed text-codezal-mute">
+              <div className="mt-1.5 text-base leading-relaxed text-codezal-mute">
                 {t("settings.drawer.compactExplain")}
               </div>
             </div>
@@ -363,7 +363,7 @@ function DefaultProviderModelSelector() {
 
   if (connected.length === 0) {
     return (
-      <p className="text-md text-codezal-mute">
+      <p className="text-base text-codezal-mute">
         {t("composer.noProvidersConnected")}
       </p>
     )

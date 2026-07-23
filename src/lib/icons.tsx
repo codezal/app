@@ -96,4 +96,9 @@ export {
   Hash,
   TrendingUp,
   Trophy,
+  Star,
+  FilePen,
+  GitCommitHorizontal,
+  Upload,
+  CheckCircle2,
 } from "lucide-react"

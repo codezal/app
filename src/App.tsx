@@ -9,7 +9,6 @@ import { Composer, type SendOverride } from "@/components/Composer"
 import { SideChatPanel } from "@/components/SideChatPanel"
 import { SIDE_CHAT_SYSTEM, buildSideChatMessages, newSideChatThread } from "@/lib/side-chat"
 import { ContextPanel } from "@/components/ContextPanel"
-import { StatusBar } from "@/components/StatusBar"
 import { AgentTranscriptPane } from "@/components/AgentTranscript"
 import { FileViewer } from "@/components/FileViewer"
 import { DiffViewer } from "@/components/DiffViewer"
@@ -22,6 +21,7 @@ import { isOutputUri } from "@/lib/output-doc"
 import { isPrUri } from "@/lib/pr-uri"
 import { isTerminalUri, makeTerminalUri, parseTerminalUri } from "@/lib/terminal-uri"
 import type { PanelMode } from "@/lib/panel-modes"
+import { requestOpenPrView } from "@/lib/git-events"
 import { renderTemplate } from "@/lib/commands"
 import { REVIEW_TEMPLATE } from "@/lib/commands/templates"
 import { SettingsPage, type SettingsTab } from "@/components/SettingsDrawer"
@@ -34,7 +34,6 @@ import { QuestionModal } from "@/components/QuestionModal"
 import { AutopilotPage } from "@/components/RoutinesOverlay"
 import { ForkDialog } from "@/components/ForkDialog"
 import { OrchestraConfigModal } from "@/components/OrchestraConfigModal"
-import { WorkflowPanel } from "@/components/WorkflowPanel"
 import { Select } from "@/components/Select"
 import { HelpOverlay } from "@/components/HelpOverlay"
 import { Columns2, X } from "@/lib/icons"
@@ -121,8 +120,6 @@ import { useSddStore } from "@/store/sdd"
 import { usePreviewStore } from "@/store/preview"
 import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import { useJobsStore } from "@/store/jobs"
-import { useWorkflowsStore } from "@/store/workflows"
-import { readTextFileSafe } from "@/lib/fs-safe"
 import { useSettingsStore } from "@/store/settings"
 import { resolveEffectiveSettings, getEffectiveSettings } from "@/lib/config"
 import type { Message, MessageImage, MessageFile, MessagePdf } from "@/store/types"
@@ -161,27 +158,6 @@ function buildIssueAgentPrompt(o: {
     `4. PR açıldıktan sonra PR linkini bildir.`,
     ``,
     `Doğrudan uygula (plan modunda değilsin). Belirsizlikte makul varsayım yap, kapsamı küçük tut.`,
-  ].join("\n")
-}
-
-function buildAiFixPrompt(o: {
-  path: string
-  diagnostics: { message: string; line: number }[]
-  code: string
-  startLine: number
-}): string {
-  const diag = o.diagnostics.map((d) => `- satır ${d.line}: ${d.message}`).join("\n")
-  return [
-    `Şu kod tanılarını (LSP/derleyici) düzelt:`,
-    diag || "(tanı yok)",
-    ``,
-    `Dosya: \`${o.path}\` (≈ satır ${o.startLine}'dan)`,
-    "```",
-    o.code,
-    "```",
-    ``,
-    `Sorunu kök nedeninden çöz — yüzeysel bastırma (any, @ts-ignore, null-suppress) yapma. ` +
-      `Dosyayı oku, minimal düzelt, sonra doğrula.`,
   ].join("\n")
 }
 
@@ -287,7 +263,6 @@ export default function App() {
   const [chatScrolled, setChatScrolled] = useState(false)
   const [userThemes, setUserThemes] = useState<ThemePreset[]>([])
   const [showOrchestra, setShowOrchestra] = useState(false)
-  const [showWorkflows, setShowWorkflows] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [sideChatOpen, setSideChatOpen] = useState(false)
   const [sideChatThreadId, setSideChatThreadId] = useState<string | null>(null)
@@ -389,19 +364,16 @@ export default function App() {
       changeSplit(null)
       setAgentPaneId(id)
     }
-    const onOpenWorkflows = () => setShowWorkflows(true)
     const onPreviewNav = (e: Event) => {
       const sid = (e as CustomEvent<{ sessionId?: string }>).detail?.sessionId
       if (sid && sid === useSessionsStore.getState().activeId) setPanelMode("preview")
     }
     window.addEventListener("codezal:agent-card-pushed", onPushed)
     window.addEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
-    window.addEventListener("codezal:open-workflows", onOpenWorkflows)
     window.addEventListener("codezal:preview-navigate", onPreviewNav as EventListener)
     return () => {
       window.removeEventListener("codezal:agent-card-pushed", onPushed)
       window.removeEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
-      window.removeEventListener("codezal:open-workflows", onOpenWorkflows)
       window.removeEventListener("codezal:preview-navigate", onPreviewNav as EventListener)
     }
   }, [changeSplit, setPanelMode])
@@ -1011,6 +983,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Status-bar CI-checks badge → open the git panel and switch it to the PR view.
+  useEffect(() => {
+    const onOpenPr = () => {
+      setPanelMode("git")
+      requestOpenPrView()
+    }
+    window.addEventListener("codezal:open-pr-view", onOpenPr)
+    return () => window.removeEventListener("codezal:open-pr-view", onOpenPr)
+  }, [setPanelMode])
+
   useEffect(() => {
     const onIssueToAgent = (e: Event) => {
       const d = (e as CustomEvent<{ repoPath?: string; number?: number; title?: string }>).detail
@@ -1051,31 +1033,6 @@ export default function App() {
     }
     window.addEventListener("codezal:issue-to-agent", onIssueToAgent as EventListener)
     return () => window.removeEventListener("codezal:issue-to-agent", onIssueToAgent as EventListener)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    const onAiFix = (e: Event) => {
-      const d = (
-        e as CustomEvent<{
-          path?: string
-          diagnostics?: { message: string; line: number }[]
-          code?: string
-          startLine?: number
-        }>
-      ).detail
-      if (!d?.code?.trim()) return
-      void onSend(
-        buildAiFixPrompt({
-          path: d.path ?? "",
-          diagnostics: d.diagnostics ?? [],
-          code: d.code,
-          startLine: d.startLine ?? 1,
-        }),
-      )
-    }
-    window.addEventListener("codezal:ai-fix", onAiFix as EventListener)
-    return () => window.removeEventListener("codezal:ai-fix", onAiFix as EventListener)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1851,37 +1808,6 @@ export default function App() {
       case "orchestra":
         setShowOrchestra(true)
         return
-      case "workflows":
-        setShowWorkflows(true)
-        return
-      case "workflow-run": {
-        try {
-          const { path, args: rawArgs } = JSON.parse(args) as { path: string; args: string }
-          const script = await readTextFileSafe(path)
-          const sess = useSessionsStore.getState().active
-          if (!sess) return
-          let wfArgs: unknown = undefined
-          const trimmed = (rawArgs ?? "").trim()
-          if (trimmed) {
-            try {
-              wfArgs = JSON.parse(trimmed)
-            } catch {
-              wfArgs = trimmed
-            }
-          }
-          await useWorkflowsStore.getState().spawn({
-            sessionId: sess.id,
-            script,
-            args: wfArgs,
-            workspace: sess.workspacePath,
-            configWorkspace: sess.workspacePath,
-            scriptPath: path,
-          })
-        } catch (e) {
-          setError(errorMessage(e))
-        }
-        return
-      }
       case "goal": {
         const trimmed = args.trim()
         if (trimmed.toLowerCase() === "stop" || trimmed.toLowerCase() === "cancel") {
@@ -2132,7 +2058,7 @@ export default function App() {
       <div className={cn("relative", activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
         {error && (
           <div className="absolute inset-x-0 bottom-full z-20">
-            <div className="mx-auto w-full max-w-[1024px] px-8">
+            <div className="mx-auto w-full max-w-[860px] px-6">
               <ErrorBanner
                 message={error}
                 onDismiss={() => setError(null)}
@@ -2152,7 +2078,6 @@ export default function App() {
         <Composer
           streaming={activeStreaming}
           compacting={activeCompacting}
-          showMetaBar={false}
           onSend={onSend}
           onAbort={onAbort}
           onSlashAction={(a, args) => void onSlashAction(a, args)}
@@ -2207,7 +2132,7 @@ export default function App() {
         {tStatic("a11y.skipToContent")}
       </a>
       <Toaster />
-      <MascotOverlay hidden={showSettings || showRoutines || showOrchestra || showWorkflows || showHelp} />
+      <MascotOverlay hidden={showSettings || showRoutines || showOrchestra || showHelp} />
       {settingsLoaded && !settings.onboardingCompleted && <Onboarding />}
       {!sidebarCollapsed && !showSettings && (
         <Sidebar
@@ -2290,7 +2215,6 @@ export default function App() {
                     </section>
                   )}
                 </div>
-                {splitId && <StatusBar />}
               </main>
 
               {sessionDragActive && !splitId && !agentPaneId && (
@@ -2360,7 +2284,6 @@ export default function App() {
                         sessionId={splitId}
                         streaming={splitStreaming}
                         compacting={splitCompacting}
-                        showMetaBar={false}
                         onSend={onSendSplit}
                         onAbort={() => onAbortFor(splitId)}
                         queued={queuedSplit}
@@ -2369,7 +2292,6 @@ export default function App() {
                       />
                     </div>
                   </div>
-                  <StatusBar sessionId={splitId} />
                 </div>
               )}
 
@@ -2391,7 +2313,6 @@ export default function App() {
                 />
               )}
             </div>
-            {!splitId && <StatusBar />}
           </>
         )}
       </div>
@@ -2422,7 +2343,6 @@ export default function App() {
         <OrchestraConfigModal onClose={() => setShowOrchestra(false)} />
       )}
 
-      {showWorkflows && <WorkflowPanel onClose={() => setShowWorkflows(false)} />}
 
       <HelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
 

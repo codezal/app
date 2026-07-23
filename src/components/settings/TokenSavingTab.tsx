@@ -107,7 +107,7 @@ export function TokenSavingTab() {
 
   return (
     <div className="space-y-6">
-      <p className="text-md text-codezal-mute">
+      <p className="text-base text-codezal-mute">
         {tt(
           "settings.drawer.tokensIntro",
           "Three independent features reduce token usage. Each toggle works on its own.",
@@ -198,7 +198,7 @@ function SavingsPanel() {
           onClick={() => reset()}
           disabled={tokens === 0}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border border-codezal bg-codezal-chip px-2.5 py-1 text-md text-codezal-dim",
+            "inline-flex items-center gap-1.5 rounded-md border border-codezal bg-codezal-chip px-2.5 py-1 text-base text-codezal-dim",
             "hover:bg-codezal-panel hover:text-codezal-text disabled:cursor-not-allowed disabled:opacity-40",
           )}
         >
@@ -208,13 +208,13 @@ function SavingsPanel() {
       </div>
       <div className="mt-2 font-mono text-md font-semibold tabular-nums text-codezal-text">
         {tokens.toLocaleString()}{" "}
-        <span className="text-md font-normal text-codezal-mute">{unit}</span>
+        <span className="text-base font-normal text-codezal-mute">{unit}</span>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2">
         {rows.map((r) => (
           <div
             key={r.label}
-            className="rounded-md border border-codezal bg-codezal-panel-2 px-2 py-1.5 text-md"
+            className="rounded-md border border-codezal bg-codezal-panel-2 px-2 py-1.5 text-base"
           >
             <div className="truncate text-codezal-mute">{r.label}</div>
             <div className="font-mono tabular-nums text-codezal-text">{r.value.toLocaleString()}</div>
@@ -256,7 +256,7 @@ function ToolTelemetryPanel() {
           onClick={() => reset()}
           disabled={rows.length === 0}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border border-codezal bg-codezal-chip px-2.5 py-1 text-md text-codezal-dim",
+            "inline-flex items-center gap-1.5 rounded-md border border-codezal bg-codezal-chip px-2.5 py-1 text-base text-codezal-dim",
             "hover:bg-codezal-panel hover:text-codezal-text disabled:cursor-not-allowed disabled:opacity-40",
           )}
         >
@@ -266,7 +266,7 @@ function ToolTelemetryPanel() {
       </div>
 
       {rows.length === 0 ? (
-        <p className="mt-3 text-md text-codezal-mute">
+        <p className="mt-3 text-base text-codezal-mute">
           {tt(
             "settings.drawer.toolTelemetryEmpty",
             "No tool calls yet — run commands to see per-tool timing and token cost.",
@@ -274,7 +274,7 @@ function ToolTelemetryPanel() {
         </p>
       ) : (
         <div className="mt-3 overflow-hidden rounded-md border border-codezal">
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 bg-codezal-panel-2 px-3 py-1.5 text-md font-medium text-codezal-dim">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 bg-codezal-panel-2 px-3 py-1.5 text-base font-medium text-codezal-dim">
             <span>{tt("settings.drawer.toolTelemetryTool", "Tool")}</span>
             <span className="text-right">{tt("settings.drawer.toolTelemetryCalls", "Calls")}</span>
             <span className="text-right">{tt("settings.drawer.toolTelemetryAvg", "Avg")}</span>
@@ -284,7 +284,7 @@ function ToolTelemetryPanel() {
             {rows.map((r) => (
               <div
                 key={r.name}
-                className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-t border-codezal px-3 py-1.5 text-md"
+                className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-t border-codezal px-3 py-1.5 text-base"
               >
                 <span className="truncate font-mono text-codezal-text">
                   {r.name}
@@ -327,7 +327,7 @@ function HistoryHygieneCard({ settings, onToggle, onMaxLines, onMaxBytes }: Hist
       onToggle={onToggle}
     >
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1 text-md">
+        <label className="flex flex-col gap-1 text-base">
           <span className="text-codezal-dim">
             {tt("settings.drawer.tokensHistoryHygieneMaxLines", "Max lines per tool result")}
           </span>
@@ -338,10 +338,10 @@ function HistoryHygieneCard({ settings, onToggle, onMaxLines, onMaxBytes }: Hist
             disabled={!settings.enabled}
             value={settings.maxLines}
             onChange={(e) => onMaxLines(Math.max(1, Number(e.target.value) || 0))}
-            className="rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-md text-codezal-text disabled:opacity-50"
+            className="rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-base text-codezal-text disabled:opacity-50"
           />
         </label>
-        <label className="flex flex-col gap-1 text-md">
+        <label className="flex flex-col gap-1 text-base">
           <span className="text-codezal-dim">
             {tt("settings.drawer.tokensHistoryHygieneMaxBytes", "Max bytes per tool result")}
           </span>
@@ -352,7 +352,7 @@ function HistoryHygieneCard({ settings, onToggle, onMaxLines, onMaxBytes }: Hist
             disabled={!settings.enabled}
             value={settings.maxBytes}
             onChange={(e) => onMaxBytes(Math.max(256, Number(e.target.value) || 0))}
-            className="rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-md text-codezal-text disabled:opacity-50"
+            className="rounded-md border border-codezal bg-codezal-input px-2 py-1 font-mono text-base text-codezal-text disabled:opacity-50"
           />
         </label>
       </div>
@@ -408,7 +408,7 @@ function BriefModeCard({ enabled, level, onToggle, onLevel }: BriefCardProps) {
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="mb-2 text-md text-codezal-dim">
+      <div className="mb-2 text-base text-codezal-dim">
         {tt("settings.drawer.tokensBriefLevel", "Compression level")}
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -421,7 +421,7 @@ function BriefModeCard({ enabled, level, onToggle, onLevel }: BriefCardProps) {
               disabled={!enabled}
               onClick={() => onLevel(l.id)}
               className={cn(
-                "relative flex flex-col items-start gap-1 rounded-md border-2 px-2.5 py-2 pr-7 text-left text-md transition",
+                "relative flex flex-col items-start gap-1 rounded-md border-2 px-2.5 py-2 pr-7 text-left text-base transition",
                 selected
                   ? "border-codezal-accent bg-codezal-accent/10 text-codezal-text shadow-[0_0_0_2px_rgba(var(--codezal-accent-rgb,251_146_60),0.25)]"
                   : "border-codezal bg-codezal-panel-2 text-codezal-dim hover:bg-codezal-panel",
@@ -450,14 +450,14 @@ function BriefModeCard({ enabled, level, onToggle, onLevel }: BriefCardProps) {
       <button
         type="button"
         onClick={() => setShowPreview((v) => !v)}
-        className="mt-3 text-md text-codezal-dim hover:text-codezal-text"
+        className="mt-3 text-base text-codezal-dim hover:text-codezal-text"
       >
         {showPreview
           ? tt("settings.drawer.tokenSavingHideDirective", "▾ Hide directive preview")
           : tt("settings.drawer.tokenSavingShowDirective", "▸ Show directive preview")}
       </button>
       {showPreview && (
-        <pre className="mt-2 max-h-48 overflow-auto rounded-md border border-codezal bg-codezal-input p-2 font-mono text-md leading-relaxed text-codezal-text">
+        <pre className="mt-2 max-h-48 overflow-auto rounded-md border border-codezal bg-codezal-input p-2 font-mono text-base leading-relaxed text-codezal-text">
           {previewText}
         </pre>
       )}
@@ -500,12 +500,12 @@ function CompactOutputCard({ enabled, filters, onToggle, onFilter }: CompactCard
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="mb-2 text-md text-codezal-dim">{tt("settings.drawer.tokenSavingFiltersLabel", "Filters")}</div>
+      <div className="mb-2 text-base text-codezal-dim">{tt("settings.drawer.tokenSavingFiltersLabel", "Filters")}</div>
       <div className="grid grid-cols-2 gap-1.5">
         {COMPACT_FILTERS.map((f) => (
           <label
             key={f.key}
-            className="flex items-start gap-2 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 text-md"
+            className="flex items-start gap-2 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 text-base"
           >
             <input
               type="checkbox"
@@ -597,7 +597,7 @@ function CodeMapCard({ enabled, autoReindex, onToggle, onAutoReindex }: CodeMapC
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="space-y-2 text-md">
+      <div className="space-y-2 text-base">
         <p className="rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-2 text-codezal-mute">
           <strong className="font-medium text-codezal-text">
             {tt("settings.drawer.tokenSavingParserLabel", "Parser:")}
@@ -650,7 +650,7 @@ function CodeMapCard({ enabled, autoReindex, onToggle, onAutoReindex }: CodeMapC
             disabled={!enabled || !workspace || building}
             onClick={() => void build()}
             className={cn(
-              "rounded-md border border-codezal bg-codezal-chip px-3 py-1.5 text-md text-codezal-text",
+              "rounded-md border border-codezal bg-codezal-chip px-3 py-1.5 text-base text-codezal-text",
               "hover:bg-codezal-panel disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
@@ -694,11 +694,11 @@ function FeatureCard({ icon, title, desc, enabled, onToggle, comingSoonLabel, ch
               {title}
             </h4>
             {placeholder ? (
-              <span className="rounded-full bg-codezal-chip px-2 py-0.5 text-md text-codezal-dim">
+              <span className="rounded-full bg-codezal-chip px-2 py-0.5 text-base text-codezal-dim">
                 {comingSoonLabel}
               </span>
             ) : (
-              <label className="inline-flex cursor-pointer items-center gap-2 text-md">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-base">
                 <input
                   type="checkbox"
                   checked={enabled}
@@ -717,7 +717,7 @@ function FeatureCard({ icon, title, desc, enabled, onToggle, comingSoonLabel, ch
               </label>
             )}
           </div>
-          <p className="mt-1 text-md text-codezal-mute">{desc}</p>
+          <p className="mt-1 text-base text-codezal-mute">{desc}</p>
         </div>
       </div>
       {!placeholder && children ? (

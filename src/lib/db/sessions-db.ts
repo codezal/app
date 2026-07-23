@@ -172,11 +172,18 @@ export async function listSessionMetas(db: Db): Promise<SessionMeta[]> {
     if (r.unread) m.unread = true
     if (r.archived) m.archived = true
     try {
-      const d = JSON.parse(r.data) as { forkParentId?: string; routineId?: string; handle?: string }
+      const d = JSON.parse(r.data) as {
+        forkParentId?: string
+        routineId?: string
+        handle?: string
+        lastUserMessageAt?: number
+      }
       if (d.forkParentId) m.forkParentId = d.forkParentId
       if (d.routineId) m.routineId = d.routineId
       // handle data blob'da — peer adresleme (resolveHandle) + sidebar rozeti
       if (d.handle) m.handle = d.handle
+      // sidebar sıralaması + sağdaki tarih bu alana bakar (yoksa updatedAt fallback)
+      if (typeof d.lastUserMessageAt === "number") m.lastUserMessageAt = d.lastUserMessageAt
     } catch {
       // Intentionally ignored.
     }
@@ -207,9 +214,14 @@ export async function listSessionsByRoutineId(
     if (r.unread) m.unread = true
     if (r.archived) m.archived = true
     try {
-      const d = JSON.parse(r.data) as { forkParentId?: string; routineId?: string }
+      const d = JSON.parse(r.data) as {
+        forkParentId?: string
+        routineId?: string
+        lastUserMessageAt?: number
+      }
       if (d.forkParentId) m.forkParentId = d.forkParentId
       if (d.routineId) m.routineId = d.routineId
+      if (typeof d.lastUserMessageAt === "number") m.lastUserMessageAt = d.lastUserMessageAt
     } catch {
       // bozuk data → skip
     }

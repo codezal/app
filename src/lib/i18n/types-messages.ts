@@ -220,6 +220,12 @@ export type Messages = {
     switchModel: string
     contextUsed: string
     contextUsedTitle: string
+    contextUsage?: string
+    ctxUsed?: string
+    ctxFull?: string
+    ctxSystem?: string
+    ctxTools?: string
+    ctxConversation?: string
     tokens: string
     cost: string
     sessionCost: string
@@ -377,7 +383,6 @@ export type Messages = {
     toolGrepCount?: string
     toolWebfetch?: string
     toolWebsearch?: string
-    toolLsp?: string
     toolPatch?: string
     toolCode?: string
     toolWorktree?: string
@@ -432,7 +437,6 @@ export type Messages = {
     toolBrowserWaitIng?: string
     toolBrowserEval?: string
     toolBrowserEvalIng?: string
-    toolLspIng?: string
     toolPatchIng?: string
     toolCodeIng?: string
     toolWorktreeIng?: string
@@ -451,10 +455,6 @@ export type Messages = {
     launchOpenProjectDesc?: string
     launchAutopilotDesc?: string
     launchQuickChatDesc?: string
-    workflowRunning?: string
-    workflowStarted?: string
-    workflowWatching?: string
-    workflowStatus?: string
     linesMore?: string
   }
 
@@ -1108,6 +1108,25 @@ export type Messages = {
     ctxTitle: string
     deprecatedTitle?: string
     deprecatedLabel?: string
+    commitChanges?: string
+    commitAhead?: string
+    changesLabel?: string
+    aheadLabel?: string
+    commitTitle?: string
+    commitMessagePlaceholder?: string
+    commitAi?: string
+    commitAiWorking?: string
+    commitAiNeedsModel?: string
+    commitAiEmpty?: string
+    commitEmptyMessage?: string
+    commitBtn?: string
+    commitAndPush?: string
+    commitPush?: string
+    commitCommitted?: string
+    commitPushed?: string
+    checksTitle?: string
+    checksOpen?: string
+    checksLabel?: string
   }
 
   settings: {
@@ -1954,6 +1973,11 @@ export type Messages = {
     // Startup load failure (read-only/locked config dir). Optional — locales
     // without it fall back to EN/TR via the runtime BASE_MESSAGES lookup.
     startupLoadFailed?: string
+    // Stream stall / sleep-wake notifications. Optional — EN fallback.
+    streamRetry?: string
+    streamStalledFailed?: string
+    streamWakeReconnect?: string
+    streamFailedBg?: string
   }
 
   // Optional — new-project rule-notice modal. Locales without this key fall
@@ -2138,7 +2162,6 @@ export type Messages = {
     folder: string
     file: string
     currentBranch: string
-    diagnostics?: string
   }
 
   outputViewer?: {
@@ -2146,17 +2169,6 @@ export type Messages = {
     gone: string
   }
 
-  workflowPanel?: {
-    title: string
-    empty: string
-    starting: string
-    result: string
-    error: string
-    stop: string
-    agents: string
-    phases: string
-    tools: string
-  }
 
   statsView?: {
     totalChats: string

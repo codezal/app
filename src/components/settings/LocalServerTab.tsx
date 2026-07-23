@@ -83,7 +83,7 @@ export function LocalServerTab() {
           <div className="flex items-center gap-3">
             <span
               className={
-                "inline-flex items-center gap-1.5 text-md " +
+                "inline-flex items-center gap-1.5 text-base " +
                 (status.running ? "text-emerald-500" : "text-codezal-mute")
               }
             >
@@ -124,7 +124,7 @@ export function LocalServerTab() {
       </Section>
 
       {cfg.expose && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-md text-amber-700 dark:text-amber-300">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-base text-amber-700 dark:text-amber-300">
           {t("settings.localServer.exposeWarn")}
         </div>
       )}
@@ -133,13 +133,13 @@ export function LocalServerTab() {
         <div className="space-y-1.5 py-1">
           {endpoints.map((url) => (
             <div key={url} className="flex items-center gap-2">
-              <code className="flex-1 truncate rounded-md bg-codezal-panel-2 px-2.5 py-1.5 text-md text-codezal-text">
+              <code className="flex-1 truncate rounded-md bg-codezal-panel-2 px-2.5 py-1.5 text-base text-codezal-text">
                 {url}
               </code>
               <button
                 type="button"
                 onClick={() => copy(url)}
-                className="shrink-0 rounded-md bg-codezal-chip px-2.5 py-1.5 text-md text-codezal-text hover:bg-codezal-panel-2"
+                className="shrink-0 rounded-md bg-codezal-chip px-2.5 py-1.5 text-base text-codezal-text hover:bg-codezal-panel-2"
               >
                 {copied === url ? t("settings.localServer.copied") : "Kopyala"}
               </button>

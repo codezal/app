@@ -51,7 +51,6 @@ export function filterMentions(items: MentionItem[], query: string): MentionItem
     if (it.kind === "file") return [it.name, it.rel]
     if (it.kind === "branch") return [it.name]
     if (it.kind === "skill") return [it.name, it.description ?? ""]
-    if (it.kind === "problems") return ["problems", "diagnostics", "errors"]
     return [it.name, it.uri, it.description ?? ""]
   }
   const scored: Array<{ it: MentionItem; score: number }> = []

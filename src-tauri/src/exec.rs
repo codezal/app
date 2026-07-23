@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tauri::AppHandle;
-#[cfg(windows)]
 use tauri::Manager;
 
 fn find_in_dirs(dirs: &[PathBuf], cmd: &str) -> Option<PathBuf> {
@@ -52,6 +51,20 @@ fn bundled_git_dirs(_app: &AppHandle) -> Vec<PathBuf> {
 #[tauri::command]
 pub fn os_platform() -> String {
     std::env::consts::OS.to_string()
+}
+
+/// Resource dir holding the bundled agent-runtime bundle (resources/agent-runtime).
+#[tauri::command]
+pub fn agent_runtime_dir(app: AppHandle) -> Option<String> {
+    app.path()
+        .resource_dir()
+        .ok()
+        .map(|p| p.join("agent-runtime").to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn path_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
 }
 
 #[tauri::command]

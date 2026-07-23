@@ -32,6 +32,7 @@ import {
 import { useSessionsStore } from "@/store/sessions"
 import { useSuggestionsStore } from "@/store/suggestions"
 import { useSettingsStore } from "@/store/settings"
+import { useComposerDraftStore } from "@/store/composer-drafts"
 import { useVim } from "@/lib/vim/useVim"
 import { isMacOS, fmtKbd } from "@/lib/platform"
 import type { ApprovalMode, MessageImage, MessageFile, MessagePdf, SessionGoal, Settings } from "@/store/types"
@@ -93,8 +94,9 @@ import {
 } from "@/lib/mcp"
 import { SlashMenu } from "./SlashMenu"
 import { MentionMenu, type MentionItem, type MentionMcpItem } from "./MentionMenu"
-import { monaco } from "@/lib/monaco/setup"
 import { BranchPicker } from "./BranchPicker"
+import { ChecksBar } from "./ChecksBar"
+import { CommitBar } from "./CommitBar"
 import { filterCommands, filterMentions } from "@/lib/menu-filters"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
@@ -107,26 +109,6 @@ const MAX_TEXTAREA_PX = 400
 // lib module must not import from components). Re-exported for back-compat.
 import type { SendOverride } from "@/lib/stream/types"
 export type { SendOverride } from "@/lib/stream/types"
-
-function collectProblems(): { text: string; count: number } {
-  const markers = monaco.editor
-    .getModelMarkers({})
-    .filter((m) => m.severity >= monaco.MarkerSeverity.Warning)
-  if (markers.length === 0) return { text: "", count: 0 }
-  const byFile = new Map<string, string[]>()
-  for (const m of markers) {
-    const sev = m.severity === monaco.MarkerSeverity.Error ? "error" : "warning"
-    const arr = byFile.get(m.resource.path) ?? []
-    arr.push(`  ${sev} [${m.startLineNumber}:${m.startColumn}] ${m.message}`)
-    byFile.set(m.resource.path, arr)
-  }
-  const out: string[] = []
-  for (const [path, lines] of byFile) {
-    out.push(`${path}:`)
-    out.push(...lines.slice(0, 30))
-  }
-  return { text: out.join("\n"), count: markers.length }
-}
 
 // Parse a command's `model:` frontmatter. "provider/id" splits into both;
 // a bare id keeps the session's provider.
@@ -279,7 +261,50 @@ export function Composer({
   const model = useSessionsStore((s) => sess(s)?.model)
   const msgCount = useSessionsStore((s) => sess(s)?.messages.length ?? 0)
   const effectiveTok = useSessionsStore((s) => sess(s)?.usage?.effectiveContextTokens)
+  const ctxBreakdown = useSessionsStore((s) => sess(s)?.usage?.contextBreakdown)
+  // Each session keeps its own half-typed draft (text + pasted images/pdfs/
+  // refs). The Composer is a single instance that survives session switches,
+  // so without this the same input leaked into every chat. `composerId` is the
+  // identity we key drafts by; when it changes we save the outgoing draft and
+  // load the incoming one into local state (adjusting state during render — a
+  // supported React pattern — keeps the swap synchronous so the textarea never
+  // flashes another session's text).
+  const composerId = sessionId ?? activeId
+  const prevComposerId = useRef<string | null | undefined>(null)
+  if (prevComposerId.current !== composerId) {
+    const from = prevComposerId.current
+    if (from != null) {
+      useComposerDraftStore.getState().set(from, { text, images, pdfs, fileRefs })
+    }
+    const draft = useComposerDraftStore.getState().get(composerId)
+    setText(draft?.text ?? "")
+    setImages(draft?.images ?? [])
+    setPdfs(draft?.pdfs ?? [])
+    setFileRefs(draft?.fileRefs ?? [])
+    undoStack.current = [""]
+    undoIdx.current = 0
+    prevComposerId.current = composerId
+  }
+  const [ctxOpen, setCtxOpen] = useState(false)
+  const [ctxHover, setCtxHover] = useState(false)
+  const ctxRef = useRef<HTMLDivElement | null>(null)
+  // Close the Context Usage popover on outside click.
+  useEffect(() => {
+    if (!ctxOpen) return
+    function onDoc(e: MouseEvent) {
+      if (ctxRef.current && !ctxRef.current.contains(e.target as Node)) setCtxOpen(false)
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [ctxOpen])
+  // Persist the current draft for this composer identity on every change so a
+  // later switch back to this session restores it.
+  useEffect(() => {
+    if (composerId == null) return
+    useComposerDraftStore.getState().set(composerId, { text, images, pdfs, fileRefs })
+  }, [text, images, pdfs, fileRefs, composerId])
   const lastInputTok = useSessionsStore((s) => sess(s)?.usage?.lastInputTokens)
+  const costUsd = useSessionsStore((s) => sess(s)?.usage?.costUsd)
   const settings = useSettingsStore((s) => s.settings)
   const updateSettings = useSettingsStore((s) => s.update)
   const approvalMode = settings.approvalMode
@@ -453,8 +478,6 @@ export function Composer({
         items.push({ kind: "mcp", server: c.server, name: r.name, uri: r.uri, description: r.description })
       }
     }
-    const problemCount = collectProblems().count
-    if (problemCount > 0) items.push({ kind: "problems", count: problemCount })
     return items
   }, [mentionState.open, workspacePath, mentionFiles, mentionBranches, mentionSkills])
   const mentionFilteredCount = useMemo(
@@ -567,16 +590,6 @@ export function Composer({
     if (item.kind === "skill") {
       const before = mentionState.start >= 0 ? text.slice(0, mentionState.start) : text
       const nv = `${before}/${item.name} `
-      setText(nv)
-      pushUndo(nv)
-      setMentionIdx(0)
-      ref.current?.focus()
-      return
-    }
-    if (item.kind === "problems") {
-      const before = mentionState.start >= 0 ? text.slice(0, mentionState.start) : text
-      const { text: probs } = collectProblems()
-      const nv = `${before}Mevcut tanılar (LSP):\n\`\`\`\n${probs.slice(0, 6000)}\n\`\`\`\n`
       setText(nv)
       pushUndo(nv)
       setMentionIdx(0)
@@ -862,12 +875,6 @@ export function Composer({
           setImages([])
           return
         }
-        if (cmd.scope === "workflow" && cmd.path) {
-          onSlashAction?.("workflow-run", JSON.stringify({ path: cmd.path, args: slash.args }))
-          setText("")
-          setImages([])
-          return
-        }
         if (cmd.template !== undefined) {
           dispatchTemplateCommand(cmd, slash.args)
           setText("")
@@ -985,6 +992,26 @@ export function Composer({
     localEff && localEff > 0 ? Math.min(localEff, localWin) : localWin,
     settings.customProviders,
   )
+  // Composer'ın altındaki meta şeridi (eski global alt-barın taşınmış hâli).
+  const metaWs = hasActive ? workspacePath : settings.defaultWorkspacePath
+  const metaPct =
+    contextCapValue > 0 ? Math.min(100, Math.round((tokenCount / contextCapValue) * 100)) : 0
+  // Footer + popover show the full context picture (tool definitions included),
+  // matching the per-category breakdown; fall back to the message-only estimate
+  // until a stream has produced a breakdown.
+  const ctxTotal = ctxBreakdown
+    ? ctxBreakdown.system + ctxBreakdown.tools + ctxBreakdown.conversation
+    : tokenCount
+  const ctxPct =
+    contextCapValue > 0 ? Math.min(100, Math.round((ctxTotal / contextCapValue) * 100)) : metaPct
+  const metaDeprecated =
+    provider && model
+      ? modelDetail(
+          settings.providerCatalog?.data as ProvidersCatalog | undefined,
+          provider,
+          model,
+        )?.deprecated === true
+      : false
 
   const acListboxId =
     slashOpen && filteredCount > 0
@@ -1012,6 +1039,7 @@ export function Composer({
           selectedIndex={slashIdx}
           onSelectIndex={setSlashIdx}
           onPick={pickSlash}
+          inCard={inCard}
         />
         <MentionMenu
           open={mentionState.open}
@@ -1020,9 +1048,15 @@ export function Composer({
           selectedIndex={mentionIdx}
           onSelectIndex={setMentionIdx}
           onPick={handlePickMention}
+          inCard={inCard}
         />
         {hashState.open && (
-          <div className="absolute bottom-full left-0 right-0 mb-1 flex items-center gap-2 rounded-md border border-codezal bg-codezal-panel px-3 py-2 shadow-xl">
+          <div
+            className={cn(
+              "absolute bottom-full mb-1 flex items-center gap-2 rounded-md border border-codezal bg-codezal-panel px-3 py-2 shadow-xl",
+              inCard ? "left-3 right-3" : "left-6 right-6",
+            )}
+          >
             <span className="text-sm text-codezal-mute">{t("composer.rememberLabel")}</span>
             <button
               type="button"
@@ -1044,7 +1078,10 @@ export function Composer({
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent("codezal:open-suggestions"))}
-            className="absolute bottom-full left-0 right-0 mb-1 flex items-center gap-2 rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-sm text-codezal-mute shadow-xl hover:bg-codezal-panel-2 hover:text-codezal-text"
+            className={cn(
+              "absolute bottom-full mb-1 flex items-center gap-2 rounded-md border border-codezal bg-codezal-panel px-3 py-1.5 text-sm text-codezal-mute shadow-xl hover:bg-codezal-panel-2 hover:text-codezal-text",
+              inCard ? "left-3 right-3" : "left-6 right-6",
+            )}
           >
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-codezal-accent" />
             <span className="truncate">{t("composer.suggestionsNudge", { count: suggestionCount })}</span>
@@ -1487,32 +1524,102 @@ export function Composer({
       </div>
 
       {showMetaBar && (
-        <div className="mt-1.5 flex items-center gap-2 px-1 text-xs text-codezal-mute">
-          {msgCount === 0 && (
-            <WorkspacePicker
-              current={hasActive ? workspacePath : settings.defaultWorkspacePath}
-              onPick={(p) => {
-                if (hasActive) applyMeta({ workspacePath: p })
-                void updateSettings({ defaultWorkspacePath: p })
-              }}
-              onPickNew={pickWorkspace}
-              onClear={() => {
-                if (hasActive) applyMeta({ workspacePath: undefined })
-                void updateSettings({ defaultWorkspacePath: undefined })
-              }}
+        <div className="mt-2 flex items-center gap-1.5 px-1 pt-1.5 text-xs text-codezal-mute">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {msgCount === 0 && (
+              <WorkspacePicker
+                current={metaWs}
+                onPick={(p) => {
+                  if (hasActive) applyMeta({ workspacePath: p })
+                  void updateSettings({ defaultWorkspacePath: p })
+                }}
+                onPickNew={pickWorkspace}
+                onClear={() => {
+                  if (hasActive) applyMeta({ workspacePath: undefined })
+                  void updateSettings({ defaultWorkspacePath: undefined })
+                }}
+              />
+            )}
+            {metaWs && <BranchPicker workspace={metaWs} />}
+            <ApprovalModeMenu
+              mode={approvalMode}
+              onChange={(m) => void updateSettings({ approvalMode: m })}
             />
-          )}
-          {(hasActive ? workspacePath : settings.defaultWorkspacePath) && (
-            <BranchPicker workspace={hasActive ? workspacePath : settings.defaultWorkspacePath} />
-          )}
-          <ApprovalModeMenu
-            mode={approvalMode}
-            onChange={(m) => void updateSettings({ approvalMode: m })}
-          />
-          <span className="ml-auto" title={t("composer.contextUsedTitle")}>
-            {tokenCount > 0 ? "≈" : ""}{formatK(tokenCount)} / {formatK(contextCapValue)}
-          </span>
-          <span className="flex items-center gap-1">{fmtKbd("⌘⏎")}</span>
+            {metaWs && (
+              <CommitBar workspace={metaWs} providerId={provider} modelId={model || undefined} />
+            )}
+            {metaWs && <ChecksBar workspace={metaWs} />}
+          </div>
+          <div className="ml-auto flex items-center gap-2 tabular-nums">
+            {metaDeprecated && (
+              <span
+                className="rounded bg-destructive/15 px-1 py-0.5 text-destructive"
+                title={t("statusBar.deprecatedTitle")}
+                role="status"
+                aria-label={t("statusBar.deprecatedLabel")}
+              >
+                <span aria-hidden>⚠</span>
+              </span>
+            )}
+            <div ref={ctxRef} className="relative">
+              {ctxHover && !ctxOpen && (
+                <div className="pointer-events-none absolute bottom-[30px] right-0 z-50 w-max rounded-lg border border-codezal-strong bg-codezal-panel px-2.5 py-1.5 text-right shadow-lg">
+                  <div className="text-sm font-medium text-codezal-text">
+                    {ctxPct}% {t("composer.ctxUsed")}
+                  </div>
+                  <div className="tabular-nums text-xs text-codezal-mute">
+                    ≈{formatK(ctxTotal)} / {formatK(contextCapValue)} {t("composer.tokens")}
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setCtxOpen((v) => !v)}
+                onMouseEnter={() => setCtxHover(true)}
+                onMouseLeave={() => setCtxHover(false)}
+                aria-haspopup="dialog"
+                aria-expanded={ctxOpen}
+                title={t("composer.contextUsedTitle")}
+                aria-label={`${ctxPct}% ${t("composer.ctxUsed")}`}
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-codezal-panel-2",
+                  ctxPct > 80
+                    ? "text-destructive"
+                    : ctxPct > 50
+                      ? "text-codezal-accent"
+                      : "text-codezal-mute",
+                )}
+              >
+                <svg viewBox="0 0 20 20" className="h-[18px] w-[18px] -rotate-90" aria-hidden>
+                  <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                  <circle
+                    cx="10"
+                    cy="10"
+                    r="8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(Math.min(100, Math.max(0, ctxPct)) / 100) * 50.2655} 50.2655`}
+                    className="transition-[stroke-dasharray] duration-300"
+                  />
+                </svg>
+              </button>
+              {ctxOpen && (
+                <ContextUsagePopover
+                  pct={ctxPct}
+                  used={ctxTotal}
+                  cap={contextCapValue}
+                  breakdown={ctxBreakdown}
+                  onClose={() => setCtxOpen(false)}
+                />
+              )}
+            </div>
+            {costUsd != null && costUsd > 0 && (
+              <span className="hidden text-codezal-mute md:inline">${costUsd.toFixed(4)}</span>
+            )}
+            <span className="flex items-center gap-1 text-codezal-mute/70">{fmtKbd("⌘⏎")}</span>
+          </div>
         </div>
       )}
       </div>
@@ -1590,10 +1697,10 @@ export function ApprovalModeMenu({
         {...triggerProps}
         title={current.hint}
         className={cn(
-          "flex h-[26px] items-center gap-1.5 rounded-md px-1.5 text-sm font-medium text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text",
+          "flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-xs font-medium transition-colors",
           danger
-            ? "border border-amber-500/20 bg-amber-500/5"
-            : "border border-transparent",
+            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15"
+            : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
         )}
       >
         <Icon
@@ -2112,9 +2219,13 @@ export function WorkspacePicker({
 
   return (
     <div ref={wrapRef} className="relative">
-      <Chip {...triggerProps} title={current ?? t("composer.pickProject")}>
+      <Chip
+        {...triggerProps}
+        title={current ?? t("composer.pickProject")}
+        className="h-6 rounded-md border-0 px-1.5 text-xs hover:bg-codezal-panel-2 hover:text-codezal-text"
+      >
         <Folder className="h-3.5 w-3.5" />
-        <span className="cz-meta-label">{basename(current) || t("composer.pickProject")}</span>
+        <span className="cz-meta-label max-w-[160px] truncate">{basename(current) || t("composer.pickProject")}</span>
         <ChevronDown className="h-2 w-2" />
       </Chip>
       {open && (
@@ -2491,4 +2602,80 @@ function formatK(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + "M"
   if (n >= 1000) return (n / 1000).toFixed(1) + "K"
   return String(n)
+}
+
+// Cursor-style "Context Usage" popover: a stacked segment bar plus a per-category
+// list, all from the real per-stream breakdown (system prompt / tool definitions
+// / conversation). Segment widths are relative to the model context cap so the
+// filled portion of the bar equals the used percentage.
+function ContextUsagePopover({
+  pct,
+  used,
+  cap,
+  breakdown,
+  onClose,
+}: {
+  pct: number
+  used: number
+  cap: number
+  breakdown: { system: number; tools: number; conversation: number } | undefined
+  onClose: () => void
+}) {
+  const t = useT()
+  const rows = [
+    { key: "system", color: "#a1a1aa", label: t("composer.ctxSystem"), value: breakdown?.system ?? 0 },
+    { key: "tools", color: "#a78bfa", label: t("composer.ctxTools"), value: breakdown?.tools ?? 0 },
+    {
+      key: "conversation",
+      color: "#fb7185",
+      label: t("composer.ctxConversation"),
+      value: breakdown?.conversation ?? 0,
+    },
+  ]
+  return (
+    <div className="absolute bottom-[30px] right-0 z-50 w-[420px] rounded-xl border border-codezal-strong bg-codezal-panel p-3 shadow-xl">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-medium text-codezal-text">{t("composer.contextUsage")}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("common.close")}
+          className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mb-1.5 flex items-center justify-between text-xs tabular-nums">
+        <span className="text-codezal-mute">
+          {pct}% {t("composer.ctxFull")}
+        </span>
+        <span className="text-codezal-mute">
+          ≈{formatK(used)} / {formatK(cap)} {t("composer.tokens")}
+        </span>
+      </div>
+      <div className="mb-3 flex h-1.5 w-full overflow-hidden rounded-full bg-codezal-hair">
+        {cap > 0 &&
+          rows.map((r) => (
+            <span
+              key={r.key}
+              className="h-full"
+              style={{ width: `${(r.value / cap) * 100}%`, backgroundColor: r.color }}
+            />
+          ))}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r) => (
+          <div key={r.key} className="flex items-center gap-2 text-sm">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: r.color }}
+              aria-hidden
+            />
+            <span className="flex-1 truncate text-codezal-dim">{r.label}</span>
+            <span className="tabular-nums text-codezal-text">{formatK(r.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

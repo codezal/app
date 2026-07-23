@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs"
 import { dirname } from "node:path"
 import { build } from "esbuild"
 
-const outfile = "src-tauri/resources/lsp/agent-runtime/index.js"
+const outfile = "src-tauri/resources/agent-runtime/index.js"
 
 mkdirSync(dirname(outfile), { recursive: true })
 

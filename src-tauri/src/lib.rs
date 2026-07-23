@@ -13,7 +13,6 @@ mod server;
 pub mod chat_render;
 // serde_json (no feature gate) so its unit tests run in a plain `cargo test`.
 pub mod chat_parse;
-mod lsp;
 mod pty;
 mod secrets;
 
@@ -94,7 +93,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .manage(pty::PtyManager::default())
-        .manage(lsp::LspManager::default())
         .manage(browser::BrowserManager::default())
         .manage(KeepAwakeState::default())
         .manage(inference::LlmManager::default())
@@ -157,30 +155,8 @@ pub fn run() {
             fs::fs_stat_size,
             fs::fs_copy_dir,
             fs::fs_remove_dir,
-            lsp::lsp_start,
-            lsp::lsp_stop,
-            lsp::lsp_open_file,
-            lsp::lsp_change_file,
-            lsp::lsp_close_file,
-            lsp::lsp_hover,
-            lsp::lsp_definition,
-            lsp::lsp_references,
-            lsp::lsp_implementation,
-            lsp::lsp_document_symbol,
-            lsp::lsp_workspace_symbol,
-            lsp::lsp_prepare_call_hierarchy,
-            lsp::lsp_incoming_calls,
-            lsp::lsp_outgoing_calls,
-            lsp::lsp_get_diagnostics,
-            lsp::lsp_code_action,
-            lsp::lsp_resolve_code_action,
-            lsp::lsp_execute_command,
-            lsp::lsp_platform,
-            lsp::lsp_server_installed,
-            lsp::lsp_check_command,
-            lsp::lsp_install_server,
-            lsp::lsp_resource_dir,
-            lsp::lsp_path_exists,
+            exec::agent_runtime_dir,
+            exec::path_exists,
             db::db_execute,
             db::db_select,
             db::db_batch,
@@ -204,11 +180,6 @@ pub fn run() {
             browser::browser_wait,
             browser::browser_eval,
         ])
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                lsp::shutdown_all(window.state::<lsp::LspManager>().inner());
-            }
-        })
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

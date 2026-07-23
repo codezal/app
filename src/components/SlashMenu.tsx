@@ -12,9 +12,11 @@ type Props = {
   selectedIndex: number
   onSelectIndex: (i: number) => void
   onPick: (cmd: SlashCommand) => void
+  // Composer'ın yatay padding'iyle aynı girintiyi uygular; menu composer kartıyla aynı genişlikte olur.
+  inCard?: boolean
 }
 
-export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex, onPick }: Props) {
+export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex, onPick, inCard = false }: Props) {
   const t = useT()
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query])
   const listRef = useRef<HTMLDivElement>(null)
@@ -27,7 +29,12 @@ export function SlashMenu({ open, query, commands, selectedIndex, onSelectIndex,
   if (!open) return null
 
   return (
-    <div className="absolute bottom-full left-8 right-8 mb-1 flex max-h-[340px] flex-col overflow-hidden cz-menu">
+    <div
+      className={cn(
+        "absolute bottom-full mb-1 flex max-h-[340px] flex-col overflow-hidden cz-menu",
+        inCard ? "left-3 right-3" : "left-6 right-6",
+      )}
+    >
       <div ref={listRef} role="listbox" id="composer-slash-listbox" className="min-h-0 flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="px-3 py-3 text-sm text-codezal-mute">{t("slashMenu.noMatchingCommands")}</div>

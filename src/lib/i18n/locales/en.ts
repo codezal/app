@@ -227,6 +227,12 @@ const en: Messages = {
     switchModel: "Switch model",
     contextUsed: "Context usage",
     contextUsedTitle: "Estimated composer input tokens / active model context capacity",
+    contextUsage: "Context Usage",
+    ctxUsed: "context used",
+    ctxFull: "Full",
+    ctxSystem: "System prompt",
+    ctxTools: "Tool definitions",
+    ctxConversation: "Conversation",
     tokens: "tokens",
     cost: "Cost",
     sessionCost: "Session cost",
@@ -380,7 +386,6 @@ const en: Messages = {
     agentCalled: "Agent called",
     toolWebfetch: "Page fetched",
     toolWebsearch: "Web searched",
-    toolLsp: "Code intel",
     toolPatch: "Patch applied",
     toolCode: "Code queried",
     toolWorktree: "Worktree",
@@ -435,7 +440,6 @@ const en: Messages = {
     toolBrowserWaitIng: "Waiting for element",
     toolBrowserEval: "JS evaluated",
     toolBrowserEvalIng: "Evaluating JS",
-    toolLspIng: "Analyzing code",
     toolPatchIng: "Applying patch",
     toolCodeIng: "Querying code",
     toolWorktreeIng: "Updating worktree",
@@ -454,10 +458,6 @@ const en: Messages = {
     launchOpenProjectDesc: "Connect to existing code",
     launchAutopilotDesc: "Run automatically",
     launchQuickChatDesc: "Just ask",
-    workflowRunning: "Workflow running",
-    workflowStarted: "Workflow started",
-    workflowWatching: "Watching workflow",
-    workflowStatus: "Workflow status",
     linesMore: "{count} more lines",
   },
 
@@ -1126,6 +1126,25 @@ const en: Messages = {
     ctxTitle: "{used} / {cap} estimated effective context",
     deprecatedTitle: "This model is deprecated. Picking a current model in Settings is recommended.",
     deprecatedLabel: "deprecated model",
+    commitChanges: "{n} changes",
+    commitAhead: "{n} to push",
+    changesLabel: "changes",
+    aheadLabel: "to push",
+    commitTitle: "Commit changes",
+    commitMessagePlaceholder: "Commit message…",
+    commitAi: "Write with AI",
+    commitAiWorking: "Writing…",
+    commitAiNeedsModel: "Pick a provider and model first to generate a message.",
+    commitAiEmpty: "Could not generate a commit message from the diff.",
+    commitEmptyMessage: "Commit message cannot be empty.",
+    commitBtn: "Commit",
+    commitAndPush: "Commit & push",
+    commitPush: "Push {n}",
+    commitCommitted: "Committed.",
+    commitPushed: "Committed and pushed.",
+    checksTitle: "CI checks — {state}",
+    checksOpen: "Open the pull request / checks panel",
+    checksLabel: "Checks",
   },
 
   // ---- Settings (büyük bölüm) ----
@@ -1970,6 +1989,10 @@ const en: Messages = {
     apiKeySaved: "API key saved",
     workspaceConnected: "Folder connected",
     startupLoadFailed: "Couldn't load saved settings or sessions — check folder permissions. Running with defaults.",
+    streamRetry: "Retrying stream ({attempt}/{max})…",
+    streamStalledFailed: "Stream timed out — no response from server",
+    streamWakeReconnect: "System woke from sleep — reconnecting stream…",
+    streamFailedBg: "\"{title}\" stream failed — no response from server",
   },
 
   // ---- Plugin install approval modal ----
@@ -2173,7 +2196,6 @@ const en: Messages = {
     folder: "folder",
     file: "file",
     currentBranch: "current branch",
-    diagnostics: "diagnostics",
   },
 
   // ---- Output Viewer ----
@@ -2182,18 +2204,6 @@ const en: Messages = {
     gone: "Output is no longer available.",
   },
 
-  // ---- Workflow Panel ----
-  workflowPanel: {
-    title: "Workflows",
-    empty: "No workflow has run yet. It appears here when the model calls `run_workflow`.",
-    starting: "Starting agents…",
-    result: "Result",
-    error: "Error",
-    stop: "Stop",
-    agents: "agents",
-    phases: "phases",
-    tools: "tools",
-  },
 
   // ---- Stats View ----
   statsView: {

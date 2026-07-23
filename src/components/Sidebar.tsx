@@ -24,6 +24,7 @@ import {
   Send,
   Settings,
   Sparkles,
+  Star,
   Trash2,
   X,
 } from "@/lib/icons"
@@ -40,7 +41,7 @@ import { resolveSessionDefaults } from "@/lib/session-defaults"
 import { cn } from "@/lib/utils"
 import { isMacOS, fmtKbd } from "@/lib/platform"
 import { useT, useLocale } from "@/lib/i18n/useT"
-import { formatRowTime } from "@/lib/format-time"
+import { formatRowTime, formatRowTimeAbsolute } from "@/lib/format-time"
 import { useApprovalsStore } from "@/store/approvals"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { NewWorktreeDialog } from "./NewWorktreeDialog"
@@ -64,8 +65,8 @@ const COLLAPSE_KEY = "codezal.collapsedProjects"
 
 function SectionLabel({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-2 pb-1.5 pt-4">
-      <span className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-codezal-dim">
+    <div className="flex items-center gap-2 px-2 pb-1 pt-3">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-codezal-dim">
         {children}
       </span>
       <div className="h-px flex-1 bg-codezal-hair" aria-hidden />
@@ -166,7 +167,14 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
     })
   }
 
-  const filtered = index.filter((m) => !m.routineId)
+  const filtered = useMemo(
+    () =>
+      index
+        .filter((m) => !m.routineId)
+        // Proje altındaki sohbetler kullanıcının son mesajına göre (yoksa updatedAt).
+        .sort((a, b) => sessionSortKey(b) - sessionSortKey(a)),
+    [index],
+  )
 
   // Collapsed project groups — persisted so the show/hide state survives reloads.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -563,7 +571,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
               isMacOS() ? "left-[89px]" : "left-[13px]",
             )}
           >
-            <PanelLeftClose className="h-4 w-4" />
+            <PanelLeftClose className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
@@ -572,9 +580,9 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         <button
           type="button"
           onClick={onNew}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-codezal-text transition-colors hover:bg-codezal-chip-soft"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-[13px] font-medium text-codezal-text transition-colors hover:bg-codezal-chip-soft"
         >
-          <Send className="h-4 w-4 shrink-0 text-codezal-mute" aria-hidden />
+          <Send className="h-3.5 w-3.5 shrink-0 text-codezal-mute" aria-hidden />
           <span className="truncate">{t("sidebar.newSession")}</span>
           <span className="ml-auto shrink-0 text-xs font-normal text-codezal-mute">
             {fmtKbd("⌘N")}
@@ -585,9 +593,9 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             type="button"
             onClick={onOpenRoutines}
             title={t("routinesOverlay.subtitle")}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-codezal-text transition-colors hover:bg-codezal-chip-soft"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-[13px] text-codezal-text transition-colors hover:bg-codezal-chip-soft"
           >
-            <ClockClockwise className="h-4 w-4 shrink-0 text-codezal-mute" aria-hidden />
+            <ClockClockwise className="h-3.5 w-3.5 shrink-0 text-codezal-mute" aria-hidden />
             <span className="truncate">{t("sidebar.routines")}</span>
           </button>
         )}
@@ -595,14 +603,14 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
 
       {liveSelected.length > 0 && (
         <div className="mx-2 mb-1 flex items-center gap-1 rounded-lg border border-codezal-accent/40 bg-codezal-accent/10 px-2.5 py-1.5">
-          <span className="flex-1 text-sm font-normal tabular-nums text-codezal-text">
+          <span className="flex-1 text-[13px] font-normal tabular-nums text-codezal-text">
             {liveSelected.length}
           </span>
           <button
             type="button"
             onClick={() => setBulkDeleteOpen(true)}
             title={t("common.delete")}
-            className="flex h-6 items-center gap-1.5 rounded-md px-2 text-sm font-normal text-destructive transition-colors hover:bg-destructive/10"
+            className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[13px] font-normal text-destructive transition-colors hover:bg-destructive/10"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span>{t("common.delete")}</span>
@@ -613,7 +621,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             title={t("common.cancel")}
             className="flex h-6 w-6 items-center justify-center rounded-md text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
@@ -636,13 +644,13 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             >
               {t("sidebar.projects")}
             </SectionLabel>
-            <div className="px-2 py-5 text-sm text-codezal-mute">{t("sidebar.noSessions")}</div>
+            <div className="px-2 py-5 text-[13px] text-codezal-mute">{t("sidebar.noSessions")}</div>
           </>
         ) : (
           <>
             {pinnedItems.length > 0 && (
               <SidebarSection
-                icon={<Pin className="h-4 w-4" />}
+                icon={<Pin className="h-3.5 w-3.5" />}
                 label="Sabitlenenler"
                 collapsed={collapsed.has("__pinned__")}
                 onToggle={() => toggleCollapse("__pinned__")}
@@ -695,7 +703,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             )}
             {archivedItems.length > 0 && (
               <SidebarSection
-                icon={<Archive className="h-4 w-4" />}
+                icon={<Archive className="h-3.5 w-3.5" />}
                 label={t("sidebar.archived")}
                 collapsed={!archivedOpen}
                 onToggle={() => setArchivedOpen((v) => !v)}
@@ -713,9 +721,9 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         <button
           type="button"
           onClick={onOpenSettings}
-          className="flex h-7 flex-1 items-center gap-2 rounded-md px-2 text-sm text-codezal-text transition-colors hover:bg-codezal-panel-2"
+          className="flex h-7 flex-1 items-center gap-2 rounded-md px-2 text-[13px] text-codezal-text transition-colors hover:bg-codezal-panel-2"
         >
-          <Settings className="h-4 w-4 text-codezal-mute" />
+          <Settings className="h-3.5 w-3.5 text-codezal-mute" />
           <span>{t("sidebar.settings")}</span>
         </button>
       </div>
@@ -723,7 +731,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
     {dragKey && dragPos &&
       createPortal(
         <div
-          className="pointer-events-none fixed z-[9999] flex max-w-[220px] items-center gap-1.5 rounded-md border border-codezal-strong bg-codezal-panel px-2 py-1 text-sm text-codezal-text shadow-lg"
+          className="pointer-events-none fixed z-[9999] flex max-w-[220px] items-center gap-1.5 rounded-md border border-codezal-strong bg-codezal-panel px-2 py-1 text-[13px] text-codezal-text shadow-lg"
           style={{
             left: dragPos.x + 12,
             top: dragPos.y + 8,
@@ -731,7 +739,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
           }}
         >
           <Folder
-            className="h-4 w-4 shrink-0 text-codezal-mute"
+            className="h-3.5 w-3.5 shrink-0 text-codezal-mute"
             style={projectMeta[dragKey]?.color ? { color: projectMeta[dragKey]?.color } : undefined}
           />
           <span className="truncate">
@@ -763,16 +771,16 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
             }}
             className="z-50 min-w-[180px] cz-menu p-1 text-base"
           >
-            <MenuItem icon={<Circle className="h-4 w-4 shrink-0" />} onClick={bulkMarkUnread}>
+            <MenuItem icon={<Circle className="h-3.5 w-3.5 shrink-0" />} onClick={bulkMarkUnread}>
               {t("sidebar.markUnread")} ({liveSelected.length})
             </MenuItem>
-            <MenuItem icon={<Archive className="h-4 w-4 shrink-0" />} onClick={bulkArchive}>
+            <MenuItem icon={<Archive className="h-3.5 w-3.5 shrink-0" />} onClick={bulkArchive}>
               {t("sidebar.archive")} ({liveSelected.length})
             </MenuItem>
             <div className="my-1 h-px bg-codezal-hair" />
             <MenuItem
               danger
-              icon={<Trash2 className="h-4 w-4 shrink-0" />}
+              icon={<Trash2 className="h-3.5 w-3.5 shrink-0" />}
               onClick={() => {
                 setBulkMenu(null)
                 setBulkDeleteOpen(true)
@@ -902,7 +910,7 @@ function ProjectGroup({
   const FolderIcon = collapsed ? Folder : FolderOpen
 
   return (
-    <div className="group/proj relative mb-1.5" data-proj-group={projKey}>
+    <div className="group/proj relative mb-1" data-proj-group={projKey}>
       {isDragOver && !dropBelow && (
         <div className="drop-ind pointer-events-none absolute inset-x-1 -top-[3px] z-10 flex items-center gap-1.5">
           <span className="h-2 w-2 shrink-0 rounded-full bg-codezal-accent ring-accent-glow" />
@@ -922,7 +930,7 @@ function ProjectGroup({
         {renaming ? (
           <div className="flex min-w-0 flex-1 items-center gap-1.5 px-0.5 py-0.5">
             <FolderIcon
-              className="h-4 w-4 shrink-0 text-codezal-mute"
+              className="h-3.5 w-3.5 shrink-0 text-codezal-mute"
               style={color ? { color } : undefined}
             />
             <input
@@ -939,7 +947,7 @@ function ProjectGroup({
               }}
               onBlur={() => setRenaming(false)}
               placeholder={name}
-              className="min-w-0 flex-1 rounded bg-codezal-panel-2 px-1 py-0.5 text-sm text-codezal-text outline-none"
+              className="min-w-0 flex-1 rounded bg-codezal-panel-2 px-1 py-0.5 text-[13px] text-codezal-text outline-none"
             />
           </div>
         ) : (
@@ -952,14 +960,14 @@ function ProjectGroup({
             className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left hover:bg-codezal-chip-soft"
           >
             {isLoose ? (
-              <MessageSquare className="h-4 w-4 shrink-0 text-codezal-mute" />
+              <MessageSquare className="h-3.5 w-3.5 shrink-0 text-codezal-mute" />
             ) : (
               <FolderIcon
-                className="h-4 w-4 shrink-0 text-codezal-mute"
+                className="h-3.5 w-3.5 shrink-0 text-codezal-mute"
                 style={color ? { color } : undefined}
               />
             )}
-            <span className="min-w-0 truncate text-sm font-medium text-codezal-text">
+            <span className="min-w-0 truncate text-[13px] font-medium text-codezal-text">
               {name}
             </span>
             <span className="flex-1" />
@@ -987,7 +995,7 @@ function ProjectGroup({
                 aria-label={t("sidebar.newChat")}
                 className="flex h-6 w-6 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
               </button>
             )}
             {!isLoose && (
@@ -1000,13 +1008,13 @@ function ProjectGroup({
                 aria-label={t("sidebar.projectOptions")}
                 className="flex h-6 w-6 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
               >
-                <MoreVertical className="h-4 w-4" />
+                <MoreVertical className="h-3.5 w-3.5" />
               </button>
               {menuOpen && (
                 <div style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }} className="z-50 max-h-[70vh] min-w-[220px] overflow-y-auto cz-menu p-1 text-base">
                   {onNewInWorkspace && (
                     <MenuItem
-                      icon={<Plus className="h-4 w-4 shrink-0" />}
+                      icon={<Plus className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         onNewInWorkspace()
@@ -1017,7 +1025,7 @@ function ProjectGroup({
                   )}
                   {onNewWorktreeInWorkspace && workspacePath && (
                     <MenuItem
-                      icon={<GitBranch className="h-4 w-4 shrink-0" />}
+                      icon={<GitBranch className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         onNewWorktreeInWorkspace()
@@ -1028,7 +1036,7 @@ function ProjectGroup({
                   )}
                   {onOpenInFinder && workspacePath && (
                     <MenuItem
-                      icon={<ExternalLink className="h-4 w-4 shrink-0" />}
+                      icon={<ExternalLink className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         onOpenInFinder()
@@ -1039,7 +1047,7 @@ function ProjectGroup({
                   )}
                   {onRename && (
                     <MenuItem
-                      icon={<Pencil className="h-4 w-4 shrink-0" />}
+                      icon={<Pencil className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         setDraftName(name)
@@ -1051,7 +1059,7 @@ function ProjectGroup({
                   )}
                   {onRelink && (
                     <MenuItem
-                      icon={<FolderPlus className="h-4 w-4 shrink-0" />}
+                      icon={<FolderPlus className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         onRelink()
@@ -1066,7 +1074,7 @@ function ProjectGroup({
                       <div className="px-2 pb-1 pt-0.5">
                         <div className="mb-2 flex items-center gap-1.5 px-0.5 text-codezal-mute">
                           <Palette className="h-3.5 w-3.5 shrink-0" />
-                          <span className="text-sm font-normal uppercase tracking-wider">
+                          <span className="text-[13px] font-normal uppercase tracking-wider">
                             {t("sidebar.colorHeading")}
                           </span>
                         </div>
@@ -1084,7 +1092,7 @@ function ProjectGroup({
                                   setMenuOpen(false)
                                 }}
                                 className={cn(
-                                  "relative h-4 w-4 rounded-full outline-none transition-transform duration-100 hover:scale-110 focus-visible:scale-110",
+                                  "relative h-3.5 w-3.5 rounded-full outline-none transition-transform duration-100 hover:scale-110 focus-visible:scale-110",
                                   selected
                                     ? "ring-2 ring-offset-1 ring-offset-codezal-panel"
                                     : "ring-1 ring-inset ring-black/20",
@@ -1116,7 +1124,7 @@ function ProjectGroup({
                               setMenuOpen(false)
                             }}
                             className={cn(
-                              "flex h-4 w-4 items-center justify-center rounded-full border border-dashed transition-colors",
+                              "flex h-3.5 w-3.5 items-center justify-center rounded-full border border-dashed transition-colors",
                               color
                                 ? "border-codezal-hair text-codezal-mute hover:border-codezal-text/40 hover:text-codezal-text"
                                 : "border-solid border-codezal-accent text-codezal-accent",
@@ -1130,7 +1138,7 @@ function ProjectGroup({
                   )}
                   {onArchiveAllInWorkspace && (
                     <MenuItem
-                      icon={<Archive className="h-4 w-4 shrink-0" />}
+                      icon={<Archive className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         onArchiveAllInWorkspace()
@@ -1145,7 +1153,7 @@ function ProjectGroup({
                   {onDeleteAllInWorkspace && (
                     <MenuItem
                       danger
-                      icon={<Trash2 className="h-4 w-4 shrink-0" />}
+                      icon={<Trash2 className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         setConfirmKind("deleteAll")
@@ -1157,7 +1165,7 @@ function ProjectGroup({
                   {onRemoveProject && (
                     <MenuItem
                       danger
-                      icon={<X className="h-4 w-4 shrink-0" />}
+                      icon={<X className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         setMenuOpen(false)
                         setConfirmKind("removeProject")
@@ -1248,7 +1256,7 @@ function SidebarSection({
   children: React.ReactNode
 }) {
   return (
-    <div className="group/sec mb-1.5">
+    <div className="group/sec mb-1">
       <button
         type="button"
         onClick={onToggle}
@@ -1263,7 +1271,7 @@ function SidebarSection({
           aria-hidden
         />
         <span className="shrink-0 text-codezal-dim">{icon}</span>
-        <span className="min-w-0 truncate text-sm font-medium text-codezal-dim">{label}</span>
+        <span className="min-w-0 truncate text-[13px] font-medium text-codezal-dim">{label}</span>
         <span className="flex-1" />
       </button>
       {!collapsed && <ul className="flex flex-col gap-0.5">{children}</ul>}
@@ -1401,12 +1409,12 @@ function SessionItem({
         }
         onContextMenu={onContextMenu}
         className={cn(
-          "group relative flex items-center rounded-md py-1.5 pl-7 pr-1 text-sm transition-colors",
+          "group relative flex items-center rounded-md py-1 pl-7 pr-1 text-[13px] transition-colors",
           selected
-              ? "bg-codezal-panel-2 text-codezal-text"
+              ? "bg-codezal-accent/20 text-codezal-text ring-1 ring-inset ring-codezal-accent/40 before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-codezal-accent/70"
               : active
               ? "bg-codezal-chip font-medium text-codezal-text shadow-sm ring-1 ring-inset ring-codezal-text/10 before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-codezal-text/70"
-              : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
+              : "text-codezal-text/75 hover:bg-codezal-chip-soft hover:text-codezal-text",
         )}
       >
         {(waiting || streaming || meta.unread) && (
@@ -1436,7 +1444,7 @@ function SessionItem({
               }
             }}
             onBlur={() => setRenaming(false)}
-            className="min-w-0 flex-1 rounded bg-codezal-panel-2 px-1 py-0.5 text-sm text-codezal-text outline-none"
+            className="min-w-0 flex-1 rounded bg-codezal-panel-2 px-1 py-0.5 text-[13px] text-codezal-text outline-none"
           />
         ) : editExtra ? (
           <input
@@ -1486,7 +1494,7 @@ function SessionItem({
               setEditExtra(null)
               setDraftExtra("")
             }}
-            className="min-w-0 flex-1 rounded bg-codezal-panel-2 px-1 py-0.5 text-sm text-codezal-text outline-none"
+            className="min-w-0 flex-1 rounded bg-codezal-panel-2 px-1 py-0.5 text-[13px] text-codezal-text outline-none"
           />
         ) : (
           <button
@@ -1513,12 +1521,22 @@ function SessionItem({
                 @{meta.handle}
               </span>
             )}
+            {meta.pinned && (
+              <Star
+                className="h-3 w-3 shrink-0 text-codezal-accent"
+                fill="currentColor"
+                aria-label={t("sidebar.pin")}
+              />
+            )}
             <span className="truncate">{title}</span>
           </button>
         )}
         {!renaming && !editExtra && (
-          <span className="ml-1 shrink-0 text-xs tabular-nums text-codezal-mute transition-opacity group-hover:opacity-0">
-            {formatRowTime(meta.updatedAt, locale)}
+          <span
+            className="ml-1 shrink-0 text-[11px] tabular-nums text-codezal-mute transition-opacity group-hover:opacity-0"
+            title={formatRowTimeAbsolute(meta.lastUserMessageAt ?? meta.updatedAt, locale)}
+          >
+            {formatRowTime(meta.lastUserMessageAt ?? meta.updatedAt, locale)}
           </span>
         )}
         <div className="ml-1 shrink-0" ref={menuRef}>
@@ -1533,7 +1551,7 @@ function SessionItem({
               menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
             )}
           >
-            <MoreVertical className="h-4 w-4" />
+            <MoreVertical className="h-3.5 w-3.5" />
           </button>
           {menuOpen && menuPos && (
             <div
@@ -1545,9 +1563,9 @@ function SessionItem({
                   <MenuItem
                     icon={
                       meta.pinned ? (
-                        <PinOff className="h-4 w-4 shrink-0" />
+                        <PinOff className="h-3.5 w-3.5 shrink-0" />
                       ) : (
-                        <Pin className="h-4 w-4 shrink-0" />
+                        <Pin className="h-3.5 w-3.5 shrink-0" />
                       )
                     }
                     onClick={() => {
@@ -1559,7 +1577,7 @@ function SessionItem({
                   </MenuItem>
                   {!meta.unread && (
                     <MenuItem
-                      icon={<Circle className="h-4 w-4 shrink-0" />}
+                      icon={<Circle className="h-3.5 w-3.5 shrink-0" />}
                       onClick={() => {
                         closeMenu()
                         onMarkUnread()
@@ -1569,7 +1587,7 @@ function SessionItem({
                     </MenuItem>
                   )}
                   <MenuItem
-                    icon={<Pencil className="h-4 w-4 shrink-0" />}
+                    icon={<Pencil className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       setMenuOpen(false)
                       setMoveOpen(false)
@@ -1580,7 +1598,7 @@ function SessionItem({
                     {t("sidebar.rename")}
                   </MenuItem>
                   <MenuItem
-                    icon={<AtSign className="h-4 w-4 shrink-0" />}
+                    icon={<AtSign className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       setMenuOpen(false)
                       setMoveOpen(false)
@@ -1591,7 +1609,7 @@ function SessionItem({
                     {meta.handle ? t("sidebar.editHandle") : t("sidebar.setHandle")}
                   </MenuItem>
                   <MenuItem
-                    icon={<Send className="h-4 w-4 shrink-0" />}
+                    icon={<Send className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       setMenuOpen(false)
                       setMoveOpen(false)
@@ -1602,7 +1620,7 @@ function SessionItem({
                     {t("sidebar.quickSend")}
                   </MenuItem>
                   <MenuItem
-                    icon={<GitBranch className="h-4 w-4 shrink-0" />}
+                    icon={<GitBranch className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       closeMenu()
                       onFork()
@@ -1611,7 +1629,7 @@ function SessionItem({
                     {t("sidebar.fork")}
                   </MenuItem>
                   <MenuItem
-                    icon={<FolderOpen className="h-4 w-4 shrink-0" />}
+                    icon={<FolderOpen className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => setMoveOpen((v) => !v)}
                   >
                     {t("sidebar.moveToGroup")}
@@ -1625,9 +1643,9 @@ function SessionItem({
                             key={tgt.path}
                             icon={
                               cur ? (
-                                <Check className="h-4 w-4 shrink-0" />
+                                <Check className="h-3.5 w-3.5 shrink-0" />
                               ) : (
-                                <Folder className="h-4 w-4 shrink-0" />
+                                <Folder className="h-3.5 w-3.5 shrink-0" />
                               )
                             }
                             onClick={() => {
@@ -1643,9 +1661,9 @@ function SessionItem({
                       <MenuItem
                         icon={
                           meta.workspacePath == null ? (
-                            <Check className="h-4 w-4 shrink-0" />
+                            <Check className="h-3.5 w-3.5 shrink-0" />
                           ) : (
-                            <MessageSquare className="h-4 w-4 shrink-0" />
+                            <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                           )
                         }
                         onClick={() => {
@@ -1660,7 +1678,7 @@ function SessionItem({
                   )}
                   <div className="my-1 h-px bg-codezal-hair" />
                   <MenuItem
-                    icon={<Archive className="h-4 w-4 shrink-0" />}
+                    icon={<Archive className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       closeMenu()
                       onArchive()
@@ -1671,7 +1689,7 @@ function SessionItem({
                   <div className="my-1 h-px bg-codezal-hair" />
                   <MenuItem
                     danger
-                    icon={<Trash2 className="h-4 w-4 shrink-0" />}
+                    icon={<Trash2 className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       closeMenu()
                       setConfirmDelete(true)
@@ -1683,7 +1701,7 @@ function SessionItem({
               ) : (
                 <>
                   <MenuItem
-                    icon={<Archive className="h-4 w-4 shrink-0" />}
+                    icon={<Archive className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       closeMenu()
                       onUnarchive()
@@ -1694,7 +1712,7 @@ function SessionItem({
                   <div className="my-1 h-px bg-codezal-hair" />
                   <MenuItem
                     danger
-                    icon={<Trash2 className="h-4 w-4 shrink-0" />}
+                    icon={<Trash2 className="h-3.5 w-3.5 shrink-0" />}
                     onClick={() => {
                       closeMenu()
                       setConfirmDelete(true)
@@ -1735,6 +1753,12 @@ async function openPathInFinder(path: string): Promise<void> {
   }
 }
 
+// Sidebar ordering + the per-row time track the user's last message, falling
+// back to updatedAt for legacy sessions that predate lastUserMessageAt.
+function sessionSortKey(m: SessionMeta): number {
+  return m.lastUserMessageAt ?? m.updatedAt
+}
+
 function groupByWorkspace(items: SessionMeta[]): Array<[string, SessionMeta[]]> {
   const map = new Map<string, SessionMeta[]>()
   for (const it of items) {
@@ -1746,8 +1770,8 @@ function groupByWorkspace(items: SessionMeta[]): Array<[string, SessionMeta[]]> 
   entries.sort(([ak, av], [bk, bv]) => {
     if (ak === "" && bk !== "") return -1
     if (bk === "" && ak !== "") return 1
-    const am = Math.max(...av.map((x) => x.updatedAt))
-    const bm = Math.max(...bv.map((x) => x.updatedAt))
+    const am = Math.max(...av.map((x) => sessionSortKey(x)))
+    const bm = Math.max(...bv.map((x) => sessionSortKey(x)))
     return bm - am
   })
   return entries

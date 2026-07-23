@@ -259,7 +259,7 @@ function ModelAdvisor({ name }: { name: string }): React.ReactElement | null {
     tone === "ok" ? "text-green-500" : tone === "warn" ? "text-yellow-500" : "text-red-500"
 
   return (
-    <div className="mx-3 mb-2 flex flex-col gap-1 rounded-md border border-codezal bg-codezal-input/40 px-3 py-2 text-md">
+    <div className="mx-3 mb-2 flex flex-col gap-1 rounded-md border border-codezal bg-codezal-input/40 px-3 py-2 text-base">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-codezal-mute">
         <span>
           Model <strong className="text-codezal-dim">{fmtGb(info.weights)} GB</strong>
@@ -298,7 +298,7 @@ function ProfileControls({
   return (
     <div className="flex flex-col gap-4">
       {/* Agent modu */}
-      <label className="flex items-start gap-2 text-md text-codezal-mute">
+      <label className="flex items-start gap-2 text-base text-codezal-mute">
         <input
           type="checkbox"
           checked={value.agentMode}
@@ -314,7 +314,7 @@ function ProfileControls({
 
       {/* Flash attention */}
       <label className="flex flex-col gap-1">
-        <span className="text-md font-medium text-codezal-dim">Flash attention</span>
+        <span className="text-base font-medium text-codezal-dim">Flash attention</span>
         <select
           value={value.flashAttention}
           onChange={(e) =>
@@ -330,7 +330,7 @@ function ProfileControls({
 
       {/* Context penceresi */}
       <label className="flex flex-col gap-1">
-        <span className="text-md font-medium text-codezal-dim">Context penceresi</span>
+        <span className="text-base font-medium text-codezal-dim">Context penceresi</span>
         <select
           value={String(value.contextWindow)}
           onChange={(e) => onChange({ contextWindow: Number(e.target.value) })}
@@ -342,7 +342,7 @@ function ProfileControls({
           <option value="65536">65536</option>
           <option value="131072">131072</option>
         </select>
-        <span className="text-md text-codezal-mute">
+        <span className="text-base text-codezal-mute">
           Modelin bir oturumda hatırlayabileceği token sayısı. Büyük pencere daha çok bellek
           (KV) kullanır; modelin train ctx'ini aşarsa otomatik YaRN, bellek yetmezse otomatik
           kısma + bildirim devreye girer. Değişiklik bir sonraki model yüklemesinde geçerli olur.
@@ -351,7 +351,7 @@ function ProfileControls({
 
       {/* Speculative / MTP */}
       <label className="flex flex-col gap-1">
-        <span className="text-md font-medium text-codezal-dim">Speculative / MTP</span>
+        <span className="text-base font-medium text-codezal-dim">Speculative / MTP</span>
         <select
           value={value.speculativeMode}
           onChange={(e) =>
@@ -362,14 +362,14 @@ function ProfileControls({
           <option value="off">kapalı</option>
           <option value="mtp">MTP açık</option>
         </select>
-        <span className="text-md text-codezal-mute">
+        <span className="text-base text-codezal-mute">
           MTP için ana modelin yanında <code className="rounded bg-codezal-input px-1">mtp-*.gguf</code>{" "}
           dosyası olmalı. Değişiklik bir sonraki model yüklemesinde geçerli olur.
         </span>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-md font-medium text-codezal-dim">Draft token</span>
+        <span className="text-base font-medium text-codezal-dim">Draft token</span>
         <select
           value={String(value.draftTokens)}
           onChange={(e) => onChange({ draftTokens: Number(e.target.value) })}
@@ -646,26 +646,26 @@ export function LocalModelsPage(): React.ReactElement {
   const mlxUnavailable = isMac && mlxStatus?.available === false
 
   return (
-    <div className="flex flex-col gap-6 text-md text-codezal-text">
+    <div className="flex flex-col gap-6 text-base text-codezal-text">
       <LocalServerTab />
 
       <section className="flex flex-col gap-2">
         <h3 className="text-md font-semibold text-codezal-dim">Model indir</h3>
         {isMac ? (
           <>
-            <p className="text-md text-codezal-mute">
+            <p className="text-base text-codezal-mute">
               Apple Silicon üzerinde yerel modeller MLX olarak indirilir. MLX modelleri Apple
               cache'ine iner; Codezal kurulu bilgisini aşağıdaki listeden takip eder.
             </p>
             {mlxUnavailable && (
-              <p className="text-md text-amber-500">
+              <p className="text-base text-amber-500">
                 MLX bu derlemede kapalı — {mlxStatus.reason ?? "llm-mlx feature gerekli"}.
               </p>
             )}
           </>
         ) : (
           <>
-            <p className="text-md text-codezal-mute">
+            <p className="text-base text-codezal-mute">
               Hugging Face repo linki (
               <code className="rounded bg-codezal-input px-1">org/model</code>), model adı ya da
               tam <code className="rounded bg-codezal-input px-1">.gguf</code> linki yapıştır →
@@ -683,7 +683,7 @@ export function LocalModelsPage(): React.ReactElement {
               <button
                 onClick={onDownload}
                 disabled={downloading || listing}
-                className="inline-flex items-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1.5 text-md font-medium text-white hover:bg-codezal-accent/90 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md bg-codezal-accent px-3 py-1.5 text-base font-medium text-white hover:bg-codezal-accent/90 disabled:opacity-40"
               >
                 <Download className="size-3.5" />
                 {downloading ? `İndiriliyor ${pct}%` : listing ? "Aranıyor…" : "İndir"}
@@ -691,7 +691,7 @@ export function LocalModelsPage(): React.ReactElement {
               {downloading && (
                 <button
                   onClick={onCancelDownload}
-                  className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
+                  className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
                 >
                   İptal
                 </button>
@@ -703,7 +703,7 @@ export function LocalModelsPage(): React.ReactElement {
           <div className="flex items-center gap-2">
             <button
               onClick={onCancelDownload}
-              className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
+              className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
             >
               İptal
             </button>
@@ -718,7 +718,7 @@ export function LocalModelsPage(): React.ReactElement {
           </div>
         )}
         {downloading && download ? (
-          <div className="text-md text-codezal-mute">
+          <div className="text-base text-codezal-mute">
             indiriliyor: {download.label}
             {download.partsTotal > 1
               ? ` (parça ${download.partIndex + 1}/${download.partsTotal})`
@@ -726,12 +726,12 @@ export function LocalModelsPage(): React.ReactElement {
             …
           </div>
         ) : (
-          status && <div className="text-md text-codezal-mute">{status}</div>
+          status && <div className="text-base text-codezal-mute">{status}</div>
         )}
         {showGguf && ggufList && (
           <div className="flex flex-col gap-1">
             {ggufList.params != null && (
-              <div className="text-md text-codezal-mute">{fmtParams(ggufList.params)}</div>
+              <div className="text-base text-codezal-mute">{fmtParams(ggufList.params)}</div>
             )}
             <ul className="flex flex-col divide-y divide-codezal/60 overflow-hidden rounded-md border border-codezal bg-codezal-panel">
               {ggufList.groups.map((g) => {
@@ -743,7 +743,7 @@ export function LocalModelsPage(): React.ReactElement {
                     <button
                       onClick={() => void startDownload(ggufList.repo, g)}
                       disabled={downloading}
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-md hover:bg-codezal-input disabled:opacity-40"
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-base hover:bg-codezal-input disabled:opacity-40"
                     >
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate font-medium text-codezal-text" title={g.label}>
@@ -751,11 +751,11 @@ export function LocalModelsPage(): React.ReactElement {
                           {modelParts > 1 ? ` · ${modelParts} parça` : ""}
                           {companionCount > 0 ? " · + MTP" : ""}
                         </span>
-                        {g.tier && <span className="text-md text-codezal-mute">{g.tier}</span>}
+                        {g.tier && <span className="text-base text-codezal-mute">{g.tier}</span>}
                       </span>
                       <span className="flex shrink-0 items-center gap-2">
                         {fit && (
-                          <span className={`text-md ${fit.cls}`}>
+                          <span className={`text-base ${fit.cls}`}>
                             {fit.icon} {fit.text}
                           </span>
                         )}
@@ -774,7 +774,7 @@ export function LocalModelsPage(): React.ReactElement {
               <li key={h.id}>
                 <button
                   onClick={() => void pickRepo(h.id)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-md hover:bg-codezal-input"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-base hover:bg-codezal-input"
                 >
                   <span className="min-w-0 truncate" title={h.id}>
                     {h.id}
@@ -801,26 +801,26 @@ export function LocalModelsPage(): React.ReactElement {
                         <span className="truncate font-medium text-codezal-text" title={m.label}>
                           {m.label}
                         </span>
-                        <span className="shrink-0 rounded bg-codezal-input px-1.5 text-md text-codezal-mute">
+                        <span className="shrink-0 rounded bg-codezal-input px-1.5 text-base text-codezal-mute">
                           {m.category}
                         </span>
                       </span>
-                      <span className="truncate text-md text-codezal-mute">{m.blurb}</span>
+                      <span className="truncate text-base text-codezal-mute">{m.blurb}</span>
                     </span>
-                    <span className="shrink-0 text-md text-codezal-mute">{m.approxGB} GB</span>
+                    <span className="shrink-0 text-base text-codezal-mute">{m.approxGB} GB</span>
                     {fit && (
-                      <span className={`shrink-0 text-md ${fit.cls}`}>
+                      <span className={`shrink-0 text-base ${fit.cls}`}>
                         {fit.icon} {fit.text}
                       </span>
                     )}
                     {installed ? (
-                      <span className="shrink-0 text-md text-emerald-500">✓ kurulu</span>
+                      <span className="shrink-0 text-base text-emerald-500">✓ kurulu</span>
                     ) : (
                       <button
                         onClick={() => startMlxDownload(m.id, m.label)}
                         disabled={downloading || listing || !mlxAvailable}
                         title={!mlxAvailable ? (mlxStatus?.reason ?? "MLX hazır değil") : undefined}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-codezal px-2.5 py-1 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-codezal px-2.5 py-1 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
                       >
                         <Download className="size-3.5" />
                         Kur
@@ -842,25 +842,25 @@ export function LocalModelsPage(): React.ReactElement {
                         <span className="truncate font-medium text-codezal-text" title={m.label}>
                           {m.label}
                         </span>
-                        <span className="shrink-0 rounded bg-codezal-input px-1.5 text-md text-codezal-mute">
+                        <span className="shrink-0 rounded bg-codezal-input px-1.5 text-base text-codezal-mute">
                           {m.category}
                         </span>
                       </span>
-                      <span className="truncate text-md text-codezal-mute">{m.blurb}</span>
+                      <span className="truncate text-base text-codezal-mute">{m.blurb}</span>
                     </span>
-                    <span className="shrink-0 text-md text-codezal-mute">{m.approxGB} GB</span>
+                    <span className="shrink-0 text-base text-codezal-mute">{m.approxGB} GB</span>
                     {fit && (
-                      <span className={`shrink-0 text-md ${fit.cls}`}>
+                      <span className={`shrink-0 text-base ${fit.cls}`}>
                         {fit.icon} {fit.text}
                       </span>
                     )}
                     {installed ? (
-                      <span className="shrink-0 text-md text-emerald-500">✓ kurulu</span>
+                      <span className="shrink-0 text-base text-emerald-500">✓ kurulu</span>
                     ) : (
                       <button
                         onClick={() => void installCurated(m)}
                         disabled={downloading || listing}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-codezal px-2.5 py-1 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-codezal px-2.5 py-1 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
                       >
                         <Download className="size-3.5" />
                         Kur
@@ -876,7 +876,7 @@ export function LocalModelsPage(): React.ReactElement {
         <h3 className="text-md font-semibold text-codezal-dim">Kurulu modeller</h3>
         {isMac ? (
           mlxModels.length === 0 ? (
-            <p className="text-md text-codezal-mute">Henüz MLX model yok — yukarıdan indir.</p>
+            <p className="text-base text-codezal-mute">Henüz MLX model yok — yukarıdan indir.</p>
           ) : (
             <ul className="flex flex-col divide-y divide-codezal/60 overflow-hidden rounded-md border border-codezal bg-codezal-panel">
               {mlxModels.map((m) => {
@@ -887,14 +887,14 @@ export function LocalModelsPage(): React.ReactElement {
                       <span className="truncate font-medium text-codezal-text" title={m.id}>
                         {meta?.label ?? m.id}
                       </span>
-                      <span className="truncate text-md text-codezal-mute">{m.id}</span>
+                      <span className="truncate text-base text-codezal-mute">{m.id}</span>
                     </span>
-                    <span className="shrink-0 text-md text-codezal-mute">
+                    <span className="shrink-0 text-base text-codezal-mute">
                       {m.size > 0 ? fmtSize(m.size) : meta ? `${meta.approxGB} GB` : ""}
                     </span>
                     <button
                       onClick={() => void onDeleteMlx(m.id)}
-                      className="shrink-0 rounded-md border border-codezal px-2 py-0.5 text-md text-codezal-dim hover:bg-red-600 hover:text-white"
+                      className="shrink-0 rounded-md border border-codezal px-2 py-0.5 text-base text-codezal-dim hover:bg-red-600 hover:text-white"
                     >
                       Sil
                     </button>
@@ -904,7 +904,7 @@ export function LocalModelsPage(): React.ReactElement {
             </ul>
           )
         ) : models.length === 0 ? (
-          <p className="text-md text-codezal-mute">Henüz model yok — yukarıdan indir.</p>
+          <p className="text-base text-codezal-mute">Henüz model yok — yukarıdan indir.</p>
         ) : (
           <ul className="flex flex-col divide-y divide-codezal/60 overflow-hidden rounded-md border border-codezal bg-codezal-panel">
             {models.map((m) => {
@@ -923,15 +923,15 @@ export function LocalModelsPage(): React.ReactElement {
                         {displayModelName(m.name)}
                       </span>
                       {custom && (
-                        <span className="shrink-0 rounded bg-codezal-accent/20 px-1.5 py-0.5 text-md text-codezal-accent">
+                        <span className="shrink-0 rounded bg-codezal-accent/20 px-1.5 py-0.5 text-base text-codezal-accent">
                           özel profil
                         </span>
                       )}
                     </button>
-                    <span className="shrink-0 text-md text-codezal-mute">{fmtSize(m.size)}</span>
+                    <span className="shrink-0 text-base text-codezal-mute">{fmtSize(m.size)}</span>
                     <button
                       onClick={() => onDelete(m.name)}
-                      className="shrink-0 rounded-md border border-codezal px-2 py-0.5 text-md text-codezal-dim hover:bg-red-600 hover:text-white"
+                      className="shrink-0 rounded-md border border-codezal px-2 py-0.5 text-base text-codezal-dim hover:bg-red-600 hover:text-white"
                     >
                       Sil
                     </button>
@@ -939,7 +939,7 @@ export function LocalModelsPage(): React.ReactElement {
                   <ModelAdvisor name={m.name} />
                   {isOpen && (
                     <div className="flex flex-col gap-3 border-t border-codezal/60 bg-codezal-input/30 px-4 py-3">
-                      <label className="flex items-center gap-2 text-md text-codezal-mute">
+                      <label className="flex items-center gap-2 text-base text-codezal-mute">
                         <input
                           type="checkbox"
                           checked={custom}
@@ -969,7 +969,7 @@ export function LocalModelsPage(): React.ReactElement {
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <h3 className="text-md font-semibold text-codezal-dim">Varsayılan GGUF profili</h3>
-            <p className="text-md text-codezal-mute">
+            <p className="text-base text-codezal-mute">
               Kendi profili olmayan tüm yerel modeller bu ayarları kullanır. Bir modele özel ayar
               vermek için yukarıdaki listede modeli aç.
             </p>

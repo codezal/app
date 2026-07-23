@@ -1,7 +1,0 @@
-Read the progress and, once complete, the final result of a workflow run. Call it with the runId returned by run_workflow.
-
-- With runId: return that run's status, including phase/agent summary, tokens, and final result when complete.
-- Without runId: list all workflow runs.
-- wait:true -> block until the run finishes (bounded to ~30s); if it is still running, return a running snapshot and call again.
-
-Poll periodically until the run finishes (prefer wait:true). Once the final result returns, synthesize it for the user.

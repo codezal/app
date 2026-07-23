@@ -1,3 +1,4 @@
+// file:// URI ↔ path helpers (cross-platform: POSIX + Windows drive letters).
 
 export function uriToPath(uri: string): string {
   if (!uri.startsWith("file:")) return uri

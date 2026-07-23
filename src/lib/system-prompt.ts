@@ -38,6 +38,7 @@ Guidelines:
 - On a new project you may call repo_overview ONCE to orient — but do not reprint its output; acknowledge it in one sentence ("Checked the project overview.") and continue.
 - If something is ambiguous or a critical decision is needed, don't assume — ask the user with the question tool (1-2 questions max, pick the critical ones).
 - For multi-step tasks (3+ steps) write the plan up front with todo_write: send the full list (replace), keep exactly one item in_progress, mark items done as you finish them. Don't use it for simple single-step work.
+- Delegate self-contained subtasks (code review, test writing, debugging, multi-file refactoring, research) to agents via spawn_agent when available — a focused agent produces better results than doing everything inline. See the agent catalog for available types.
 - Finish the whole task before ending your turn. After a tool result, keep going with the next step — do NOT stop with the plan half-done. End your turn only when the task is fully complete (then give a one-line summary) or you genuinely need the user's input. Never end right after a tool result while work remains; if you announced a next step ("Now adding X"), actually perform it before stopping.`
 
 // Progress-narration policy — appended only when the user keeps narration on
@@ -307,15 +308,6 @@ function buildPeerCatalog(
   return lines.join("\n")
 }
 
-function buildWorkflowBlock(): string {
-  return [
-    "## DYNAMIC WORKFLOWS",
-    "For a task that needs more agents than one conversation can coordinate — a codebase-wide audit/sweep, a large migration, research cross-checked across sources, or a hard plan worth drafting from several angles — you can author a JS orchestration script and run it with `run_workflow`.",
-    "- The script's hooks (`agent`, `parallel`, `pipeline`, `log`, `phase`, `args`, `budget`, `workflow`) fan out subagents deterministically; intermediate results stay in script variables, not your context.",
-    "- It runs in the BACKGROUND: `run_workflow` returns a runId immediately; poll `workflow_status({ runId, wait: true })` until it finishes, then synthesize the final result for the user.",
-    "- Reach for it ONLY when the user explicitly asks for a workflow, OR when scale genuinely exceeds one conversation (codebase-wide sweep, large migration, multi-source cross-check). DEFAULT to `spawn_agent` or inline work. Do NOT spin up a workflow for an ordinary multi-step task just because the user said 'workflow' / 'batch' / 'pipeline' in passing — a single delegated subtask is `spawn_agent`'s job.",
-  ].join("\n")
-}
 
 // MCP server-provided usage instructions (each server's initialize
 // result.instructions). Servers use this to tell the model how to use their
@@ -457,11 +449,6 @@ export async function buildSystemPrompt({
 
   if (sddStage && sddRequirementPath) {
     parts.push("\n" + sddAssistantPreamble(sddStage, sddRequirementPath))
-  }
-
-  // Opt-out: settings.disableWorkflows.
-  if (mode !== "plan" && useSettingsStore.getState().settings.disableWorkflows !== true) {
-    parts.push("\n" + buildWorkflowBlock())
   }
 
   parts.push(...(await buildMemoryPromptSections({ workspacePath, memory, recentText, mode: "full" })))

@@ -298,18 +298,18 @@ export function PluginsTab() {
             placeholder={t("pluginsTab.marketplaceUrlPlaceholder")}
             value={newUrl}
             onChange={(e) => setNewUrl(e.target.value)}
-            className="flex-1 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-accent"
+            className="flex-1 rounded-md border border-codezal bg-codezal-panel-2 px-2.5 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-accent"
           />
           <button
             type="button"
             disabled={busy || !newUrl.trim()}
             onClick={() => void handleAdd()}
-            className="flex shrink-0 items-center gap-1 rounded-md bg-codezal-text px-3 py-1.5 text-md font-medium text-codezal-bg transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="flex shrink-0 items-center gap-1 rounded-md bg-codezal-text px-3 py-1.5 text-base font-medium text-codezal-bg transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             <Plus className="h-4 w-4" /> {t("common.add")}
           </button>
         </div>
-        <p className="mt-1.5 text-md text-codezal-mute">
+        <p className="mt-1.5 text-base text-codezal-mute">
           {t("pluginsTab.marketplaceAddHint")}
         </p>
       </Section>
@@ -334,8 +334,8 @@ export function PluginsTab() {
                   onClick={() => setSelectedMpId(mp.id)}
                   className="min-w-0 flex-1 text-left"
                 >
-                  <div className="truncate text-md font-medium text-codezal-text">{mp.name}</div>
-                  <div className="truncate font-mono text-md text-codezal-mute">{mp.url}</div>
+                  <div className="truncate text-base font-medium text-codezal-text">{mp.name}</div>
+                  <div className="truncate font-mono text-base text-codezal-mute">{mp.url}</div>
                 </button>
                 <button
                   type="button"
@@ -373,7 +373,7 @@ export function PluginsTab() {
                 : t("pluginsTab.installedSection", { count: installed.length })}
             </h3>
             {index && (
-              <div className="inline-flex items-center gap-1 rounded-md bg-codezal-panel-2 p-0.5 text-md">
+              <div className="inline-flex items-center gap-1 rounded-md bg-codezal-panel-2 p-0.5 text-base">
                 {(["all", "codezal-curated", "community"] as const).map((c) => (
                   <button
                     key={c}
@@ -393,7 +393,7 @@ export function PluginsTab() {
             )}
           </div>
           {mergedPlugins.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-codezal px-3 py-8 text-center text-md text-codezal-mute">
+            <div className="rounded-lg border border-dashed border-codezal px-3 py-8 text-center text-base text-codezal-mute">
               {t("pluginsTab.noInstalled")}
             </div>
           ) : (
@@ -405,7 +405,7 @@ export function PluginsTab() {
                   <li key={m.id} className="flex items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-md font-medium text-codezal-text">{m.name}</span>
+                        <span className="truncate text-base font-medium text-codezal-text">{m.name}</span>
                         {m.verified ? (
                           <span title={t("pluginsTab.verifiedTitle")} className="inline-flex shrink-0">
                             <Shield className="h-4 w-4 text-codezal-accent" />
@@ -416,10 +416,10 @@ export function PluginsTab() {
                           </span>
                         )}
                         {p && (
-                          <span className="shrink-0 text-md text-codezal-mute">v{p.version}</span>
+                          <span className="shrink-0 text-base text-codezal-mute">v{p.version}</span>
                         )}
                       </div>
-                      <div className="mt-0.5 truncate text-md text-codezal-mute">
+                      <div className="mt-0.5 truncate text-base text-codezal-mute">
                         {p ? (
                           <>
                             {t("pluginsTab.author", { name: p.manifest.author.name })}
@@ -470,7 +470,7 @@ export function PluginsTab() {
                         type="button"
                         disabled={busy}
                         onClick={() => void handleInstallClick(e)}
-                        className="shrink-0 rounded-md bg-codezal-text px-3 py-1.5 text-md font-medium text-codezal-bg transition-opacity hover:opacity-90 disabled:opacity-40"
+                        className="shrink-0 rounded-md bg-codezal-text px-3 py-1.5 text-base font-medium text-codezal-bg transition-opacity hover:opacity-90 disabled:opacity-40"
                       >
                         {t("pluginInstall.installBtn")}
                       </button>
@@ -488,11 +488,11 @@ export function PluginsTab() {
           <button
             type="button"
             onClick={() => void toggleAudit()}
-            className="flex items-center gap-1.5 text-md font-medium text-codezal-text hover:text-codezal-accent"
+            className="flex items-center gap-1.5 text-base font-medium text-codezal-text hover:text-codezal-accent"
           >
             <ScrollText className="h-4 w-4" />
             {t("pluginsTab.auditLog")}
-            <span className="text-md text-codezal-mute">
+            <span className="text-base text-codezal-mute">
               {auditOpen ? t("pluginsTab.auditHide") : t("pluginsTab.auditShow")}
             </span>
           </button>
@@ -500,7 +500,7 @@ export function PluginsTab() {
             <button
               type="button"
               onClick={() => void handleClearAudit()}
-              className="text-md text-codezal-mute hover:text-destructive"
+              className="text-base text-codezal-mute hover:text-destructive"
             >
               {t("common.clear")}
             </button>
@@ -509,7 +509,7 @@ export function PluginsTab() {
         {auditOpen && (
           <div className="mt-2">
             {audit.length === 0 ? (
-              <p className="text-md text-codezal-mute">{t("pluginsTab.noAudit")}</p>
+              <p className="text-base text-codezal-mute">{t("pluginsTab.noAudit")}</p>
             ) : (
               <div className="max-h-64 space-y-0.5 overflow-y-auto rounded-md border border-codezal bg-codezal-panel-2/30 p-2">
                 {audit.map((a, i) => {
@@ -517,7 +517,7 @@ export function PluginsTab() {
                   return (
                     <div
                       key={i}
-                      className="flex items-baseline gap-2 text-md leading-relaxed"
+                      className="flex items-baseline gap-2 text-base leading-relaxed"
                     >
                       <span className="shrink-0 font-mono text-codezal-mute">
                         {fmtTs(a.ts)}
@@ -536,7 +536,7 @@ export function PluginsTab() {
                 })}
               </div>
             )}
-            <p className="mt-2 text-md text-codezal-mute">
+            <p className="mt-2 text-base text-codezal-mute">
               {t("pluginsTab.auditFooter")}
             </p>
           </div>

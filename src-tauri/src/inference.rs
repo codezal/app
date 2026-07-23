@@ -1038,7 +1038,7 @@ mod imp {
             "https://huggingface.co/{}/resolve/{}/{}",
             args.repo, rev, args.path
         );
-        // https-only — same stance as lsp.rs (no plaintext binary fetch → RCE).
+        // https-only — no plaintext binary fetch (prevents MITM → RCE).
         if !url.starts_with("https://") {
             return Err(format!("insecure download rejected, https required: {url}"));
         }

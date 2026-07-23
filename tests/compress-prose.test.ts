@@ -11,10 +11,10 @@ describe("compressProse", () => {
     expect(out).toMatch(/build/i)
   })
 
-  it("article (a/an/the) düşürür", () => {
+  it("article (a/an/the) korunur — anlamsal belirsizlik yaratmamak için", () => {
     const out = compressProse("Read the file and open a folder.")
-    expect(out).not.toMatch(/\bthe\b/i)
-    expect(out).not.toMatch(/\ba\b/i)
+    expect(out).toMatch(/\bthe\b/i)
+    expect(out).toMatch(/\ba\b/i)
   })
 
   it("hedge (perhaps/maybe/I think) düşürür", () => {

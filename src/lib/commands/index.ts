@@ -1,6 +1,5 @@
 import { BUILTINS } from "./builtin"
 import { readWorkspaceCommands, readUserCommands } from "./user"
-import { readWorkspaceWorkflows, readUserWorkflows } from "./workflow"
 import { listPluginCommands } from "./plugin"
 import { listAllSkills } from "../skills"
 import { useSettingsStore } from "@/store/settings"
@@ -39,20 +38,16 @@ async function skillCommands(
 export async function listAllCommands(
   workspace: string | undefined,
 ): Promise<SlashCommand[]> {
-  const [proj, user, wfProj, wfUser, skills] = await Promise.all([
+  const [proj, user, skills] = await Promise.all([
     readWorkspaceCommands(workspace),
     readUserCommands(),
-    readWorkspaceWorkflows(workspace),
-    readUserWorkflows(),
     skillCommands(workspace),
   ])
-  // Precedence: builtin > project > global > workflow > plugin > skill.
+  // Precedence: builtin > project > global > plugin > skill.
   return dedupeCommands([
     ...BUILTINS,
     ...proj,
     ...user,
-    ...wfProj,
-    ...wfUser,
     ...listPluginCommands(),
     ...skills,
   ])

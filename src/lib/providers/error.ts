@@ -187,3 +187,13 @@ export function retryDelayMs(attempt: number, retryAfterMs?: number): number {
   const backoff = RETRY_INITIAL_DELAY * RETRY_BACKOFF_FACTOR ** Math.max(0, attempt - 1)
   return Math.min(backoff, RETRY_MAX_DELAY_NO_HEADERS)
 }
+
+// Stall retries need a longer runway — the network may still be recovering
+// (e.g. after system sleep). Linear ramp: 5 s, 10 s, 20 s, 30 s, 30 s …
+const STALL_RETRY_INITIAL = 5_000
+const STALL_RETRY_MAX = 30_000
+
+export function stallRetryDelayMs(attempt: number): number {
+  const delay = STALL_RETRY_INITIAL * Math.pow(2, Math.max(0, attempt - 1))
+  return Math.min(delay, STALL_RETRY_MAX)
+}

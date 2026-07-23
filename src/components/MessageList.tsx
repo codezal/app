@@ -397,7 +397,7 @@ export function MessageList({
     >
       <div
         ref={contentRef}
-        className={cn("mx-auto w-full max-w-[800px] pt-2", inCard ? "px-3" : "px-6")}
+        className={cn("mx-auto w-full max-w-[860px] pt-2", inCard ? "px-3" : "px-6")}
         onMouseUp={onContentMouseUp}
         onMouseDown={() => setAskSel(null)}
         onContextMenu={onContentContextMenu}
@@ -1205,7 +1205,7 @@ function toolIcon(toolName: string): typeof Wrench {
   if (FILE_EDIT_TOOLS.has(toolName)) return Pencil
   if (toolName === "bash") return Terminal
   if (toolName === "grep" || toolName === "glob" || toolName === "tool_search") return Search
-  if (toolName.startsWith("code_") || toolName === "lsp") return Network
+  if (toolName.startsWith("code_")) return Network
   if (toolName === "todo_write" || toolName === "propose_plan" || toolName === "propose_build")
     return ListChecks
   if (toolName === "webfetch") return Download
@@ -1504,7 +1504,6 @@ function ToolRow({
         : null,
     [call.toolName, writeOld, writeContent],
   )
-  if (call.toolName === "workflow_status") return null
   const { label, name, added, removed } = describeCall(call, !result, t, writeHunks)
   if (call.toolName === "dispatch_workers") {
     const txt =
@@ -1540,7 +1539,6 @@ function ToolRow({
   // spawn_agent: the full live card lives in the right panel (ContextPanel
   // "agents"). Clicking the row opens that panel instead of an inline body.
   const isAgent = call.toolName === "spawn_agent"
-  const isWorkflow = call.toolName === "run_workflow" || call.toolName === "workflow_status"
 
   const labelColor =
     status === "error"
@@ -1552,15 +1550,14 @@ function ToolRow({
   // Collapsed = quiet row (chip hover); open = detail indented below — no box,
   // border or panel, so expanding never snaps into a table.
   return (
-    <div className={cn("text-md", !grouped && "my-1 border-l-2 border-codezal-hair pl-2")}>
+    <div className={cn("text-md", !grouped && "my-1")}>
       <button
         type="button"
         onClick={() => {
           if (isAgent) onOpenAgentPanel?.()
-          else if (isWorkflow) window.dispatchEvent(new CustomEvent("codezal:open-workflows"))
           else if (!noExpand) setOpen((v) => !v)
         }}
-        aria-expanded={!isAgent && !isWorkflow && !noExpand ? open : undefined}
+        aria-expanded={!isAgent && !noExpand ? open : undefined}
         className="group flex w-full items-center gap-2 rounded-r-lg px-2 py-1.5 text-left hover:bg-codezal-chip/40"
       >
         {createElement(toolIcon(call.toolName), { className: cn("h-3.5 w-3.5 shrink-0", labelColor) })}
@@ -1603,13 +1600,13 @@ function ToolRow({
           <ChevronRight
             className={cn(
               "h-3 w-3 shrink-0 text-codezal-mute transition-transform",
-              !isAgent && !isWorkflow && open && "rotate-90",
+              !isAgent && open && "rotate-90",
               status === "error" && "text-destructive",
             )}
           />
         )}
       </button>
-      {!isAgent && !isWorkflow && !noExpand && open && (
+      {!isAgent && !noExpand && open && (
         <div className="mt-1 space-y-2.5">
           <ToolBody call={call} result={result} writeHunks={writeHunks} />
         </div>
@@ -1714,7 +1711,7 @@ function BashBody({
   )
 }
 
-// (lsp, webfetch). SearchBody CSS'i uppercase uygular → "CONTEXT7", "LSP", "CODE QUERY".
+// (webfetch). SearchBody CSS'i uppercase uygular → "CONTEXT7", "CODE QUERY".
 function genericBoxLabel(toolName: string): string {
   if (toolName.includes("__")) return toolName.slice(0, toolName.indexOf("__"))
   if (toolName.startsWith("browser_")) {
@@ -2406,17 +2403,6 @@ function describeCall(
   if (tool === "websearch" || tool === "code_query" || tool === "code_search") {
     return { label, name: String(input.query ?? "") }
   }
-  if (tool === "lsp") {
-    const op = String(input.operation ?? "")
-    if (op === "workspaceSymbol") {
-      const q = String(input.query ?? "")
-      return { label, name: [op, q ? `"${q}"` : ""].filter(Boolean).join(" ") }
-    }
-    const p = input.path ? basename(String(input.path)) : ""
-    const hasPos = input.line != null && input.character != null
-    const loc = hasPos ? `${p}:${input.line}:${input.character}` : p
-    return { label, name: [op, loc].filter(Boolean).join(" ") }
-  }
   if (tool === "apply_patch") {
     const m = String(input.patch ?? "").match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/m)
     return { label, name: m ? basename(m[1].trim()) : "" }
@@ -2481,7 +2467,6 @@ const TOOL_VERB_KEYS: Record<string, { pastKey: string; ingKey: string }> = {
   todo_write: { pastKey: "messageList.toolTodo", ingKey: "messageList.toolTodoIng" },
   webfetch: { pastKey: "messageList.toolWebfetch", ingKey: "messageList.toolWebfetchIng" },
   websearch: { pastKey: "messageList.toolWebsearch", ingKey: "messageList.toolWebsearchIng" },
-  lsp: { pastKey: "messageList.toolLsp", ingKey: "messageList.toolLspIng" },
   apply_patch: { pastKey: "messageList.toolPatch", ingKey: "messageList.toolPatchIng" },
   code_query: { pastKey: "messageList.toolCode", ingKey: "messageList.toolCodeIng" },
   code_search: { pastKey: "messageList.toolCode", ingKey: "messageList.toolCodeIng" },
@@ -2516,8 +2501,6 @@ const TOOL_VERB_KEYS: Record<string, { pastKey: string; ingKey: string }> = {
 
 function verbLabel(tool: string, running: boolean, tFn: (k: MessageKey) => string): string {
   if (!tool.trim()) return tFn("messageList.toolCall" as MessageKey)
-  if (tool === "run_workflow") return tFn(running ? "messageList.workflowRunning" : "messageList.workflowStarted")
-  if (tool === "workflow_status") return tFn(running ? "messageList.workflowWatching" : "messageList.workflowStatus")
   const v = TOOL_VERB_KEYS[tool]
   if (!v) return tool
   return tFn((running ? v.ingKey : v.pastKey) as MessageKey)
@@ -2528,8 +2511,6 @@ function verbLabel(tool: string, running: boolean, tFn: (k: MessageKey) => strin
 // "25 Directory Read file" / "1 Directory Directory" (noun key was wrong/redundant).
 function summarizeTool(tool: string, n: number, running: boolean, tFn: (k: MessageKey) => string): string {
   if (!tool.trim()) return `${n} ${tFn("messageList.toolCall" as MessageKey)}`
-  if (tool === "run_workflow") return `${n} ${tFn(running ? "messageList.workflowRunning" : "messageList.workflowStarted")}`
-  if (tool === "workflow_status") return `${n} ${tFn(running ? "messageList.workflowWatching" : "messageList.workflowStatus")}`
   const v = TOOL_VERB_KEYS[tool]
   if (!v) return `${n} ${tool}`
   return `${n} ${tFn((running ? v.ingKey : v.pastKey) as MessageKey)}`

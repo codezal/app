@@ -112,8 +112,60 @@ describe("checkSubagentPolicy", () => {
     expect(r.allowed).toBe(false)
   })
 
-  it("planMode → bash reddedilir", () => {
+  it("planMode → bash reddedilir (bashAllow yok)", () => {
     const r = checkSubagentPolicy({ planMode: true }, "bash", {})
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/bash_allow/)
+  })
+
+  it("planMode + boş bashAllow → bash yine reddedilir", () => {
+    const r = checkSubagentPolicy({ planMode: true, bashAllow: [] }, "bash", { command: "git diff" })
+    expect(r.allowed).toBe(false)
+  })
+
+  it("planMode + bashAllow → izinli komut çalışır", () => {
+    const r = checkSubagentPolicy(
+      { planMode: true, bashAllow: ["git diff", "git log"] },
+      "bash",
+      { command: "git diff --cached" },
+    )
+    expect(r.allowed).toBe(true)
+  })
+
+  it("planMode + bashAllow → izinli olmayan komut reddedilir", () => {
+    const r = checkSubagentPolicy(
+      { planMode: true, bashAllow: ["git diff"] },
+      "bash",
+      { command: "rm -rf /tmp" },
+    )
+    expect(r.allowed).toBe(false)
+  })
+
+  it("planMode + bashAllow → metacharacter bypass reddedilir", () => {
+    const r = checkSubagentPolicy(
+      { planMode: true, bashAllow: ["git diff"] },
+      "bash",
+      { command: "git diff; rm -rf /" },
+    )
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/metacharacters/)
+  })
+
+  it("planMode + bashAllow → write_file hâlâ reddedilir", () => {
+    const r = checkSubagentPolicy(
+      { planMode: true, bashAllow: ["git diff"] },
+      "write_file",
+      {},
+    )
+    expect(r.allowed).toBe(false)
+  })
+
+  it("planMode + bashAllow → apply_patch hâlâ reddedilir", () => {
+    const r = checkSubagentPolicy(
+      { planMode: true, bashAllow: ["git diff"] },
+      "apply_patch",
+      {},
+    )
     expect(r.allowed).toBe(false)
   })
 

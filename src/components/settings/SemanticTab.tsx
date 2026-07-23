@@ -80,11 +80,11 @@ export function SemanticTab() {
   return (
     <div className="space-y-6">
       <Section title={t("settings.drawer.semanticTitle")}>
-        <p className="mb-3 text-md leading-relaxed text-codezal-mute">
+        <p className="mb-3 text-base leading-relaxed text-codezal-mute">
           {t("settings.drawer.semanticHint")}
         </p>
 
-        <label className="mb-3 flex items-center gap-2 text-md">
+        <label className="mb-3 flex items-center gap-2 text-base">
           <input
             type="checkbox"
             checked={cfg.enabled}
@@ -95,7 +95,7 @@ export function SemanticTab() {
 
         <div className="mb-3 grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-md font-medium text-codezal-dim">{t("settings.drawer.semanticProviderLabel")}</span>
+            <span className="text-base font-medium text-codezal-dim">{t("settings.drawer.semanticProviderLabel")}</span>
             <Select
               value={cfg.provider}
               onChange={(v) => patch({ provider: v as "openai" | "ollama" | "custom" })}
@@ -107,17 +107,17 @@ export function SemanticTab() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-md font-medium text-codezal-dim">{t("settings.drawer.semanticModelLabel")}</span>
+            <span className="text-base font-medium text-codezal-dim">{t("settings.drawer.semanticModelLabel")}</span>
             <input
               value={cfg.model}
               onChange={(e) => patch({ model: e.target.value })}
               placeholder={t("settings.drawer.semanticModelPlaceholder")}
-              className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+              className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
             />
           </label>
           {(cfg.provider === "custom" || cfg.provider === "ollama") && (
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">{t("settings.drawer.semanticBaseUrlLabel")}</span>
+              <span className="text-base font-medium text-codezal-dim">{t("settings.drawer.semanticBaseUrlLabel")}</span>
               <input
                 value={cfg.baseUrl ?? ""}
                 onChange={(e) => patch({ baseUrl: e.target.value })}
@@ -126,36 +126,36 @@ export function SemanticTab() {
                     ? t("settings.drawer.semanticBaseUrlOllamaPh")
                     : t("settings.drawer.semanticBaseUrlCustomPh")
                 }
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </label>
           )}
           {cfg.provider !== "ollama" && (
             <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-md font-medium text-codezal-dim">{t("settings.drawer.semanticApiKeyLabel")}</span>
+              <span className="text-base font-medium text-codezal-dim">{t("settings.drawer.semanticApiKeyLabel")}</span>
               <input
                 type="password"
                 value={cfg.apiKey ?? ""}
                 onChange={(e) => patch({ apiKey: e.target.value })}
-                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
             </label>
           )}
           <label className="flex flex-col gap-1">
-            <span className="text-md font-medium text-codezal-dim">{t("settings.drawer.semanticTopKLabel")}</span>
+            <span className="text-base font-medium text-codezal-dim">{t("settings.drawer.semanticTopKLabel")}</span>
             <input
               type="number"
               min={1}
               max={20}
               value={cfg.topK ?? 5}
               onChange={(e) => patch({ topK: Math.max(1, Math.min(20, Number(e.target.value) || 5)) })}
-              className="rounded-md border border-codezal bg-codezal-input px-3 py-2 text-md text-codezal-text outline-none focus:border-codezal-accent"
+              className="rounded-md border border-codezal bg-codezal-input px-3 py-2 text-base text-codezal-text outline-none focus:border-codezal-accent"
             />
           </label>
         </div>
 
         {cfg.enabled && (
-          <label className="flex items-start gap-2 text-md">
+          <label className="flex items-start gap-2 text-base">
             <input
               type="checkbox"
               checked={cfg.autoContext ?? false}
@@ -173,7 +173,7 @@ export function SemanticTab() {
       </Section>
 
       <Section title={t("settings.drawer.semanticWsTitle")}>
-        <div className="mb-2 rounded-lg border border-codezal bg-codezal-panel-2 px-3 py-2.5 text-md">
+        <div className="mb-2 rounded-lg border border-codezal bg-codezal-panel-2 px-3 py-2.5 text-base">
           {!workspace ? (
             <span className="text-codezal-mute">{t("settings.drawer.semanticWsNotConnected")}</span>
           ) : stats ? (
@@ -192,19 +192,19 @@ export function SemanticTab() {
         </div>
 
         {progress && (
-          <div className="mb-2 text-md text-codezal-dim">
+          <div className="mb-2 text-base text-codezal-dim">
             {progress.phase}: {progress.done}/{progress.total}
             {progress.current ? ` · ${progress.current}` : ""}
           </div>
         )}
 
-        {error && <div className="mb-2 text-md text-destructive">{error}</div>}
+        {error && <div className="mb-2 text-base text-destructive">{error}</div>}
 
         <button
           type="button"
           disabled={!workspace || building}
           onClick={() => void onBuild()}
-          className="flex h-8 items-center gap-1.5 rounded-md border border-codezal px-3 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
+          className="flex h-8 items-center gap-1.5 rounded-md border border-codezal px-3 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
         >
           <RefreshCcw className={cn("h-4 w-4", building && "animate-spin")} />
           {stats ? t("settings.drawer.semanticRebuildBtn") : t("settings.drawer.semanticBuildBtn")}

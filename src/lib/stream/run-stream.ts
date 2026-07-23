@@ -13,6 +13,7 @@ import {
   isRetryableError,
   isContentFilterError,
   retryDelayMs,
+  stallRetryDelayMs,
   type ProviderId,
   type ReasoningEffort,
 } from "@/lib/providers"
@@ -57,7 +58,7 @@ import { compactToolDescriptionsInPlace, applyHistoryHygiene } from "@/lib/token
 import { recordSavings } from "@/store/token-savings"
 import { costUsd } from "@/lib/pricing"
 import { compactMessages, pruneToolOutputs, RECENT_TOOL_PROTECT_TOKENS } from "@/lib/compact"
-import { estimateMessagesTokens } from "@/lib/tokens"
+import { estimateMessagesTokens, estimateTextTokens } from "@/lib/tokens"
 import { runHooks } from "@/lib/hooks"
 import { makeToolCallRepair, looksLikeQuotedSyntax } from "@/lib/tool-repair"
 import { setStreamAbort, clearStreamAbort } from "@/lib/run-registry"
@@ -67,7 +68,7 @@ import { useSessionsStore } from "@/store/sessions"
 import { useQuestionsStore } from "@/store/questions"
 import { useSettingsStore } from "@/store/settings"
 import { resolveEffectiveSettings, getEffectiveSettings } from "@/lib/config"
-import type { Message, Part } from "@/store/types"
+import type { ContextBreakdown, Message, Part } from "@/store/types"
 import { t as tStatic } from "@/lib/i18n"
 import { createId } from "@/lib/id"
 import { hasInbox, takeInbox, framePeerMessage, listPeers } from "@/lib/session-inbox"
@@ -75,7 +76,7 @@ import { errorMessage } from "@/lib/errors"
 import { isCliAgentProvider } from "@/lib/agent-providers"
 import { runNativeAgentStream } from "@/lib/agent-providers/native-stream"
 
-const MAX_API_RETRIES = 3
+const MAX_API_RETRIES = 5
 
 export interface RunStreamDeps {
   setError: (e: string | null) => void
@@ -458,9 +459,14 @@ export function makeRunStream(deps: RunStreamDeps) {
       const guardReserve = outputLimit && outputLimit > 0 ? outputLimit : 20_000
       const guardTrigger = Math.floor(Math.max(0, effCtxWindow - guardReserve) * 0.7)
 
+      const preCtxTokens = estimateMessagesTokens(outboundMessages)
       useSessionsStore
         .getState()
-        .setEffectiveContextTokensFor(sid, estimateMessagesTokens(outboundMessages))
+        .setEffectiveContextTokensFor(
+          sid,
+          preCtxTokens,
+          buildContextBreakdown(system, tools, preCtxTokens),
+        )
 
       const result = streamText({
         model,
@@ -547,15 +553,41 @@ export function makeRunStream(deps: RunStreamDeps) {
         ? createVisibleToolProtocolFilter()
         : null
 
-      const STALL_TIMEOUT_MS = 180_000
+      // Reasoning models can "think" for minutes before emitting the first
+      // token — give them a longer leash so the watchdog doesn't kill a
+      // perfectly healthy generation.
+      const STALL_TIMEOUT_MS = reasoningActive ? 600_000 : 180_000
       const TOOL_STALL_TIMEOUT_MS = 600_000
       const STALL_CHECK_MS = 5_000
+      // After the system wakes from sleep the TCP/SSE connection is almost
+      // certainly dead.  Give the stream a short grace period to recover;
+      // if no chunk arrives within this window, abort and let the retry loop
+      // open a fresh connection.
+      const POST_WAKE_STALL_MS = 30_000
       let lastChunkAt = Date.now()
+      let lastTickAt = Date.now()
+      let postWake = false
       let pendingTools = 0
       let toolRunStartedAt = 0
       const suppressedCalls = new Set<string>()
       stallWatchdog = setInterval(() => {
         const now = Date.now()
+        const tickGap = now - lastTickAt
+        lastTickAt = now
+
+        // Sleep / wake detection: a gap much larger than the check interval
+        // means the JS event loop was suspended (system sleep / hibernate).
+        if (tickGap > STALL_CHECK_MS * 4) {
+          // Reset the stall timer so we don't abort on stale timestamps, but
+          // switch to a short post-wake timeout — the connection is likely
+          // dead and we want to retry quickly rather than wait the full
+          // stall window.
+          lastChunkAt = now
+          postWake = true
+          toast.info(tStatic("toast.streamWakeReconnect"))
+          return
+        }
+
         if (pendingTools > 0) {
           // (d) spawn_agent gibi ilerleme sinyali veren tool'lar lastToolBeat'i bumplar;
           const beat = lastToolBeat(sid)
@@ -566,7 +598,8 @@ export function makeRunStream(deps: RunStreamDeps) {
           }
           return
         }
-        if (now - lastChunkAt > STALL_TIMEOUT_MS) {
+        const effectiveTimeout = postWake ? POST_WAKE_STALL_MS : STALL_TIMEOUT_MS
+        if (now - lastChunkAt > effectiveTimeout) {
           streamStalled = true
           stallController.abort()
         }
@@ -574,6 +607,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       let finalFinishReason: string | undefined
       for await (const chunk of result.fullStream) {
         lastChunkAt = Date.now()
+        postWake = false // connection is alive — leave post-wake mode
         switch (chunk.type) {
           case "text-delta":
             if (thinkSplitter) {
@@ -682,11 +716,22 @@ export function makeRunStream(deps: RunStreamDeps) {
       // max-steps reminder. Only runs in the rare empty case.
       if (!collapseText(parts).trim()) {
         try {
+          // Prune before summarizing — the combined history may already be near
+          // the context limit, and an overflow here would silently fail.
+          let summaryInput: ModelMessage[] = [...history, ...cleanMessages]
+          const summaryTokens = estimateMessagesTokens(summaryInput)
+          if (summaryTokens > guardTrigger) {
+            const { messages: pruned } = pruneToolOutputs(summaryInput, {
+              tailTurns: 2,
+              protectTokens: protectBudget,
+              minGain: 1,
+            })
+            summaryInput = pruned
+          }
           const wrap = await generateText({
             model,
             messages: [
-              ...history,
-              ...cleanMessages,
+              ...summaryInput,
               { role: "user", content: "Summarize what you did and the result as your final answer." },
             ],
             abortSignal: ac.signal,
@@ -718,6 +763,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       const effectiveTokens = updatedSnap
         ? estimateMessagesTokens(updatedSnap.modelMessages ?? [], system)
         : 0
+      const contextBreakdown = buildContextBreakdown(system, tools, effectiveTokens)
 
       try {
         const usage = await result.usage
@@ -746,9 +792,10 @@ export function makeRunStream(deps: RunStreamDeps) {
             ),
             lastInputTokens: input,
             effectiveContextTokens: effectiveTokens,
+            contextBreakdown,
           })
         } else {
-          useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens)
+          useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens, contextBreakdown)
         }
       } catch {
         useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens)
@@ -789,11 +836,11 @@ export function makeRunStream(deps: RunStreamDeps) {
       await useSessionsStore.getState().persistSession(sid).catch(() => {})
       if (streamStalled) {
         if (apiRetryCount < MAX_API_RETRIES) {
-          retryDelay = retryDelayMs(apiRetryCount + 1)
-          retryMessage = "Akış yanıt vermedi (stall) — yeniden deneniyor…"
+          retryDelay = stallRetryDelayMs(apiRetryCount + 1)
+          retryMessage = tStatic("toast.streamStalledFailed")
           retryPending = true
         } else {
-          deps.setError("Akış zaman aşımına uğradı — sunucudan yanıt gelmedi.")
+          deps.setError(tStatic("toast.streamStalledFailed"))
         }
       } else if (!ac.signal.aborted) {
         const parsed = parseStreamError(e)
@@ -837,7 +884,11 @@ export function makeRunStream(deps: RunStreamDeps) {
       clearStreamAbort(sid, ac)
       if (!aborted && sid !== useSessionsStore.getState().activeId) {
         const title = useSessionsStore.getState().sessions[sid]?.title ?? "Sohbet"
-        toast.success(`"${title}" tamamlandı`)
+        if (streamSucceeded) {
+          toast.success(`"${title}" tamamlandı`)
+        } else if (streamStalled) {
+          toast.error(tStatic("toast.streamFailedBg", { title }))
+        }
       }
     }
 
@@ -916,7 +967,7 @@ export function makeRunStream(deps: RunStreamDeps) {
 
     if (retryPending && !ac.signal.aborted) {
       useSessionsStore.getState().setStreamingFor(sid, true)
-      toast.info(`Yeniden deneniyor (${apiRetryCount + 1}/${MAX_API_RETRIES})…`)
+      toast.info(tStatic("toast.streamRetry", { attempt: String(apiRetryCount + 1), max: String(MAX_API_RETRIES) }))
       const completed = await new Promise<boolean>((resolve) => {
         if (ac.signal.aborted) return resolve(false)
         const onAbort = () => {
@@ -1070,4 +1121,30 @@ export function makeRunStream(deps: RunStreamDeps) {
   }
 
   return runStream
+}
+
+// Snapshot what currently fills the context window so the composer popover can
+// render a real per-category bar (system prompt / tool definitions /
+// conversation). `promptPlusConv` is `estimateMessagesTokens(...)` which already
+// folds the system prompt in, so the conversation slice is the remainder. Tools
+// are sent alongside the prompt but live outside the message list, so they are
+// measured separately from their JSON schema (execute fns are dropped by
+// stringify, which matches what the provider actually receives).
+function buildContextBreakdown(
+  system: string,
+  tools: unknown,
+  promptPlusConv: number,
+): ContextBreakdown {
+  const systemTokens = estimateTextTokens(system)
+  let toolsTokens = 0
+  try {
+    toolsTokens = estimateTextTokens(JSON.stringify(tools ?? {}))
+  } catch {
+    // Non-serializable tool bag — leave the slice at 0 rather than crash.
+  }
+  return {
+    system: systemTokens,
+    tools: toolsTokens,
+    conversation: Math.max(0, promptPlusConv - systemTokens),
+  }
 }

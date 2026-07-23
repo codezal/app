@@ -74,6 +74,16 @@ export type Message = {
   stopReason?: "length" | "halted"
 }
 
+// Per-category snapshot of what currently fills the context window. Powers the
+// composer "Context Usage" popover (system prompt / tool defs / conversation).
+// All values are estimated token counts; they sum to ~effectiveContextTokens
+// (tools are sent alongside the prompt but counted separately here).
+export type ContextBreakdown = {
+  system: number
+  tools: number
+  conversation: number
+}
+
 export type SessionUsage = {
   inputTokens: number
   outputTokens: number
@@ -82,6 +92,7 @@ export type SessionUsage = {
   reasoningTokens?: number
   lastInputTokens?: number
   effectiveContextTokens?: number
+  contextBreakdown?: ContextBreakdown
   costUsd: number
   turns: number
 }
@@ -192,6 +203,10 @@ export type Session = {
   archived?: boolean
   routineId?: string
   sideChats?: SideChatThread[]
+  // Timestamp (ms) of the user's most recent message — drives sidebar ordering
+  // and the per-row time. Falls back to updatedAt when absent (legacy sessions).
+  // Persisted via the data blob (sessionToRow rest).
+  lastUserMessageAt?: number
 }
 
 export type ApprovalDecision = "allow" | "deny"
@@ -386,7 +401,6 @@ export type Settings = {
   toolOutput?: ToolOutputSettings
   // Auto-check for app updates on launch (Tauri updater). Default on.
   autoUpdate?: boolean
-  disableWorkflows?: boolean
   disabledSkills?: string[]
   // edilebilir. Default: "respond".
   monitorAction?: "respond" | "chat" | "notify"
@@ -402,7 +416,7 @@ export type Settings = {
 
 export type SessionMeta = Pick<
   Session,
-  "id" | "title" | "updatedAt" | "workspacePath" | "pinned" | "unread" | "archived" | "forkParentId" | "routineId" | "handle"
+  "id" | "title" | "updatedAt" | "workspacePath" | "pinned" | "unread" | "archived" | "forkParentId" | "routineId" | "handle" | "lastUserMessageAt"
 >
 
 export type ProjectMeta = {

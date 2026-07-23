@@ -123,14 +123,14 @@ function MemoryInstructions({
 
   return (
     <div className="space-y-2 px-1 pb-1">
-      <div className="text-md leading-relaxed text-codezal-mute">{t("settings.memory.instructionsDesc")}</div>
+      <div className="text-base leading-relaxed text-codezal-mute">{t("settings.memory.instructionsDesc")}</div>
       {value.length === 0 ? (
-        <div className="text-md text-codezal-mute">{t("settings.memory.instructionsEmpty")}</div>
+        <div className="text-base text-codezal-mute">{t("settings.memory.instructionsEmpty")}</div>
       ) : (
         <ul className="space-y-1.5">
           {value.map((item, i) => (
             <li key={`${item}-${i}`} className="flex items-center gap-2">
-              <code className="flex-1 truncate rounded-md bg-codezal-panel-2 px-2.5 py-1.5 text-md text-codezal-text">
+              <code className="flex-1 truncate rounded-md bg-codezal-panel-2 px-2.5 py-1.5 text-base text-codezal-text">
                 {item}
               </code>
               <button
@@ -156,12 +156,12 @@ function MemoryInstructions({
             }
           }}
           placeholder={t("settings.memory.instructionsPlaceholder")}
-          className="flex-1 rounded-md border border-codezal bg-codezal-panel-2 px-3 py-2 text-md text-codezal-text outline-none focus:border-codezal-accent"
+          className="flex-1 rounded-md border border-codezal bg-codezal-panel-2 px-3 py-2 text-base text-codezal-text outline-none focus:border-codezal-accent"
         />
         <button
           type="button"
           onClick={add}
-          className="shrink-0 rounded-md bg-codezal-chip px-3 py-2 text-md text-codezal-text hover:bg-codezal-panel-2"
+          className="shrink-0 rounded-md bg-codezal-chip px-3 py-2 text-base text-codezal-text hover:bg-codezal-panel-2"
         >
           {t("settings.memory.instructionsAdd")}
         </button>

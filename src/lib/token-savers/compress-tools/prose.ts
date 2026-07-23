@@ -11,7 +11,10 @@ const HEDGES_RE =
   /\b(?:perhaps|maybe|might|could potentially|would like to|i think|in my opinion|it seems|it appears)\b\s*/gi
 const LEADERS_RE =
   /^(?:i'?ll|i will|i can|i'?d|you can|we will|we can|let me|let'?s)\s+/gim
-const ARTICLES_RE = /\b(?:a|an|the)\s+(?=[a-z])/gi
+// Articles are NOT stripped: they save ~1-2 tokens per description but cause
+// semantic ambiguity ("edit file" vs "edit the file") that confuses smaller
+// models and degrades tool-calling accuracy. The token savings are negligible
+// compared to the other compression passes.
 
 const PROTECTED_SEGMENT_PREFIX = "__CZ_PROTECTED_"
 const PROTECTED_SEGMENT_SUFFIX = "__"
@@ -50,7 +53,6 @@ export function compressProse(text: string): string {
     out = out.replace(PLEASANTRIES_RE, "")
     out = out.replace(HEDGES_RE, "")
     out = out.replace(FILLERS_RE, "")
-    out = out.replace(ARTICLES_RE, "")
     out = out.replace(/[ \t]{2,}/g, " ")
     out = out.replace(/\s+([,.;:!?])/g, "$1")
     out = out.replace(/\n{3,}/g, "\n\n")

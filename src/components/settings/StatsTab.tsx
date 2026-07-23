@@ -67,13 +67,13 @@ export function StatsTab() {
   }, [])
 
   if (loading) {
-    return <div className="py-16 text-center text-md text-codezal-mute">{t("common.loading")}</div>
+    return <div className="py-16 text-center text-base text-codezal-mute">{t("common.loading")}</div>
   }
   if (!stats || stats.sessionCount === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-center">
         <BarChart3 className="h-8 w-8 text-codezal-mute" />
-        <div className="text-md text-codezal-mute">{t("settings.stats.empty")}</div>
+        <div className="text-base text-codezal-mute">{t("settings.stats.empty")}</div>
       </div>
     )
   }
@@ -111,7 +111,7 @@ export function StatsTab() {
         <div className="mb-2 flex items-center gap-2">
           <Activity className="h-4 w-4 text-codezal-accent" />
           <h3 className="text-md font-semibold text-codezal-text">{t("settings.stats.heatmapTitle")}</h3>
-          <span className="ml-auto text-md text-codezal-mute">
+          <span className="ml-auto text-base text-codezal-mute">
             {t("settings.stats.activeDays", { n: stats.activeDays })}
           </span>
         </div>
@@ -171,7 +171,7 @@ export function StatsTab() {
           </div>
           <div className="rounded-xl border border-codezal bg-codezal-panel p-4 shadow-sm">
             {stats.topProjects.length === 0 ? (
-              <div className="py-6 text-center text-md text-codezal-mute">
+              <div className="py-6 text-center text-base text-codezal-mute">
                 {t("settings.stats.noProjects")}
               </div>
             ) : (
@@ -198,7 +198,7 @@ function StatBox({
 }) {
   return (
     <div className="border-b border-r border-codezal-hair px-4 py-3.5 last:border-r-0 [&:nth-child(2n)]:border-r-0 sm:[&:nth-child(2n)]:border-r sm:[&:nth-child(3n)]:border-r-0">
-      <div className="flex items-center gap-1.5 text-md text-codezal-mute">
+      <div className="flex items-center gap-1.5 text-base text-codezal-mute">
         <Icon className="h-3.5 w-3.5" />
         <span className="truncate">{label}</span>
       </div>
@@ -223,12 +223,12 @@ function Insight({
   return (
     <div className="flex items-center gap-3 border-b border-codezal-hair py-3 last:border-b-0">
       <Icon className="h-4 w-4 shrink-0 text-codezal-mute" />
-      <span className="text-md text-codezal-dim">{label}</span>
+      <span className="text-base text-codezal-dim">{label}</span>
       <span className="ml-auto flex min-w-0 items-baseline gap-1.5">
-        <span className="truncate text-md font-medium text-codezal-text" title={value}>
+        <span className="truncate text-base font-medium text-codezal-text" title={value}>
           {value}
         </span>
-        {sub && <span className="shrink-0 text-md tabular-nums text-codezal-mute">{sub}</span>}
+        {sub && <span className="shrink-0 text-base tabular-nums text-codezal-mute">{sub}</span>}
       </span>
     </div>
   )
@@ -239,11 +239,11 @@ function ProjectBars({ projects, max }: { projects: { key: string; tokens: numbe
     <div className="space-y-2.5">
       {projects.map((p) => (
         <div key={p.key}>
-          <div className="mb-1 flex items-baseline justify-between gap-2 text-md">
+          <div className="mb-1 flex items-baseline justify-between gap-2 text-base">
             <span className="truncate text-codezal-text" title={p.key}>
               {basename(p.key) || p.key}
             </span>
-            <span className="shrink-0 tabular-nums text-md text-codezal-mute">{formatCount(p.tokens)}</span>
+            <span className="shrink-0 tabular-nums text-base text-codezal-mute">{formatCount(p.tokens)}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-codezal-panel-2">
             <div

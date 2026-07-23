@@ -208,7 +208,7 @@ export function CustomProviderModal({
         </div>
 
         <div className="flex flex-col gap-4 overflow-y-auto px-4 py-4">
-          <p className="text-md text-codezal-mute">
+          <p className="text-base text-codezal-mute">
             {t("settings.customProvider.description")}
           </p>
 
@@ -243,7 +243,7 @@ export function CustomProviderModal({
 
           <div className="-mt-2 flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-md text-codezal-mute">
+              <span className="text-base text-codezal-mute">
                 {t("settings.customProvider.presetsLabel")}
               </span>
               {LOCAL_PRESETS.map((p) => (
@@ -252,7 +252,7 @@ export function CustomProviderModal({
                   type="button"
                   onClick={() => applyPreset(p)}
                   disabled={scanning}
-                  className="rounded-md border border-codezal px-2 py-0.5 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
+                  className="rounded-md border border-codezal px-2 py-0.5 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
                 >
                   {p.name}
                 </button>
@@ -261,7 +261,7 @@ export function CustomProviderModal({
                 type="button"
                 onClick={() => void handleScan()}
                 disabled={scanning || !baseURL.trim()}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-codezal px-2 py-0.5 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-codezal px-2 py-0.5 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text disabled:opacity-40"
               >
                 {scanning ? (
                   <Loader2 className="size-3 animate-spin" />
@@ -272,7 +272,7 @@ export function CustomProviderModal({
               </button>
             </div>
             {scanMsg && (
-              <p className={scanMsg.kind === "ok" ? "text-md text-emerald-500" : "text-md text-red-500"}>
+              <p className={scanMsg.kind === "ok" ? "text-base text-emerald-500" : "text-base text-red-500"}>
                 {scanMsg.text}
               </p>
             )}
@@ -325,7 +325,7 @@ export function CustomProviderModal({
                 />
               </div>
             ))}
-            {showErrors && modelsError && <p className="text-md text-red-500">{modelsError}</p>}
+            {showErrors && modelsError && <p className="text-base text-red-500">{modelsError}</p>}
             <AddRowBtn
               onClick={() =>
                 setModels((prev) => [
@@ -362,26 +362,26 @@ export function CustomProviderModal({
                 />
               </div>
             ))}
-            {showErrors && headersError && <p className="text-md text-red-500">{headersError}</p>}
+            {showErrors && headersError && <p className="text-base text-red-500">{headersError}</p>}
             <AddRowBtn
               onClick={() => setHeaders((prev) => [...prev, { rid: nextRowId(), key: "", value: "" }])}
               label={t("settings.customProvider.addHeader")}
             />
           </div>
 
-          {saveError && <p className="text-md text-red-500">{saveError}</p>}
+          {saveError && <p className="text-base text-red-500">{saveError}</p>}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-codezal px-4 py-3">
           <button
             onClick={onClose}
-            className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-input"
+            className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-text hover:bg-codezal-input"
           >
             {t("common.cancel")}
           </button>
           <button
             onClick={() => void handleSave()}
-            className="rounded-md bg-codezal-accent px-3 py-1.5 text-md font-medium text-white hover:bg-codezal-accent/90"
+            className="rounded-md bg-codezal-accent px-3 py-1.5 text-base font-medium text-white hover:bg-codezal-accent/90"
           >
             {t("common.save")}
           </button>
@@ -393,7 +393,7 @@ export function CustomProviderModal({
 
 function inputCls(readOnly = false): string {
   return (
-    "rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-md text-codezal-text outline-none focus:border-codezal-accent" +
+    "rounded-md border border-codezal bg-codezal-input px-2 py-1.5 text-base text-codezal-text outline-none focus:border-codezal-accent" +
     (readOnly ? " opacity-60" : "")
   )
 }
@@ -415,8 +415,8 @@ function Field({
         {label}
       </label>
       <div className="flex flex-col">{children}</div>
-      {hint && !error && <p className="text-md text-codezal-mute">{hint}</p>}
-      {error && <p className="text-md text-red-500">{error}</p>}
+      {hint && !error && <p className="text-base text-codezal-mute">{hint}</p>}
+      {error && <p className="text-base text-red-500">{error}</p>}
     </div>
   )
 }
@@ -455,7 +455,7 @@ function AddRowBtn({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 self-start rounded-md border border-codezal px-2 py-1 text-md text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
+      className="inline-flex items-center gap-1.5 self-start rounded-md border border-codezal px-2 py-1 text-base text-codezal-dim hover:bg-codezal-input hover:text-codezal-text"
     >
       <Plus className="size-3.5" />
       {label}

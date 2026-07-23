@@ -65,7 +65,7 @@ export function SupervisorSettingsSection() {
             />
           ))
         )}
-        <button type="button" onClick={addEntry} className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-text hover:bg-codezal-panel-2">
+        <button type="button" onClick={addEntry} className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-text hover:bg-codezal-panel-2">
           {t("settings.cliAgents.supervisorAdd")}
         </button>
       </div>
@@ -82,7 +82,7 @@ function LimitRow({ label, value, onChange }: { label: string; value: number; on
         max={5}
         value={value}
         onChange={(event) => onChange(Math.max(1, Math.min(5, Number(event.target.value) || 1)))}
-        className="w-20 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text"
+        className="w-20 rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text"
       />
     </Row>
   )
@@ -108,18 +108,18 @@ function SupervisorPoolRow({ entry, onPatch, onRemove, defaultProvider, defaultM
   return (
     <div className="rounded-md border border-codezal p-3">
       <div className="grid gap-2 md:grid-cols-4">
-        <input aria-label={t("settings.cliAgents.supervisorAgent")} value={entry.agentName} onChange={(event) => onPatch({ agentName: event.target.value })} placeholder="general" className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text" />
-        <select aria-label={t("settings.cliAgents.supervisorEngine")} value={entry.engine.kind} onChange={(event) => changeKind(event.target.value as AgentEngineRef["kind"])} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text">
+        <input aria-label={t("settings.cliAgents.supervisorAgent")} value={entry.agentName} onChange={(event) => onPatch({ agentName: event.target.value })} placeholder="general" className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
+        <select aria-label={t("settings.cliAgents.supervisorEngine")} value={entry.engine.kind} onChange={(event) => changeKind(event.target.value as AgentEngineRef["kind"])} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text">
           <option value="sdk">SDK</option><option value="native-cli">Native CLI</option><option value="acp">ACP</option>
         </select>
         {entry.engine.kind === "native-cli" ? (
-          <select aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value as "codex-cli" | "claude-cli" })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text">
+          <select aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value as "codex-cli" | "claude-cli" })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text">
             <option value="codex-cli">Codex CLI</option><option value="claude-cli">Claude CLI</option>
           </select>
         ) : (
-          <input aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text" />
+          <input aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
         )}
-        <input aria-label={t("settings.cliAgents.supervisorModel")} value={entry.engine.modelId ?? ""} onChange={(event) => patchEngine({ modelId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-md text-codezal-text" />
+        <input aria-label={t("settings.cliAgents.supervisorModel")} value={entry.engine.modelId ?? ""} onChange={(event) => patchEngine({ modelId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
       </div>
       <div className="mt-2 flex items-center justify-between">
         <Toggle label={entry.label ?? entry.agentName} checked={entry.enabled} onChange={(enabled) => onPatch({ enabled })} />

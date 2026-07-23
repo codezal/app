@@ -57,7 +57,7 @@ function RowMenu({
                 it.onClick()
               }}
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-md",
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-base",
                 it.danger
                   ? "text-destructive hover:bg-destructive/10"
                   : "text-codezal-text hover:bg-codezal-panel-2",
@@ -281,14 +281,14 @@ export function McpTab() {
           <h3 className="text-md font-semibold tracking-tight text-codezal-text">
             {t("settings.drawer.mcpServersTitle")}
           </h3>
-          <p className="mt-0.5 text-md leading-relaxed text-codezal-mute">
+          <p className="mt-0.5 text-base leading-relaxed text-codezal-mute">
             {t("settings.drawer.mcpHint")}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setAddSheetOpen(true)}
-          className="flex shrink-0 items-center gap-1.5 rounded-md bg-codezal-text px-3 py-1.5 text-md font-medium text-codezal-bg hover:opacity-90"
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-codezal-text px-3 py-1.5 text-base font-medium text-codezal-bg hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> Sunucu ekle
         </button>
@@ -296,7 +296,7 @@ export function McpTab() {
 
       {/* Sunucu listesi — native macOS gruplu inset liste */}
       {servers.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-codezal px-3 py-10 text-center text-md text-codezal-mute">
+        <div className="rounded-lg border border-dashed border-codezal px-3 py-10 text-center text-base text-codezal-mute">
           {t("settings.drawer.mcpNoServers")}
         </div>
       ) : (
@@ -348,7 +348,7 @@ export function McpTab() {
                         <div className="flex items-center gap-2">
                           <span
                             className={cn(
-                              "truncate text-md font-medium",
+                              "truncate text-base font-medium",
                               !s.name || nameCounts[s.name] > 1
                                 ? "text-destructive"
                                 : "text-codezal-text",
@@ -363,12 +363,12 @@ export function McpTab() {
                           >
                             {s.name || "—"}
                           </span>
-                          <span className="shrink-0 rounded bg-codezal-chip px-1.5 py-0.5 text-md font-medium uppercase tracking-wide text-codezal-dim">
+                          <span className="shrink-0 rounded bg-codezal-chip px-1.5 py-0.5 text-base font-medium uppercase tracking-wide text-codezal-dim">
                             {s.transport ?? "http"}
                           </span>
                         </div>
                         <div
-                          className="mt-0.5 truncate font-mono text-md text-codezal-mute"
+                          className="mt-0.5 truncate font-mono text-base text-codezal-mute"
                           title={
                             stdio
                               ? `${s.command ?? ""} ${(s.args ?? []).join(" ")}`.trim()
@@ -386,7 +386,7 @@ export function McpTab() {
                           onClick={() => st.ok && toggleExpand(s.name)}
                           disabled={!st.ok}
                           className={cn(
-                            "flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-md",
+                            "flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-base",
                             st.ok
                               ? "bg-codezal-accent-dim text-codezal-text hover:opacity-80"
                               : "cursor-default bg-destructive/15 text-destructive",
@@ -407,7 +407,7 @@ export function McpTab() {
                           type="button"
                           onClick={() => void handleAuthenticate(s)}
                           disabled={authBusy === s.name}
-                          className="flex shrink-0 items-center gap-1 rounded bg-codezal-text px-2.5 py-1 text-md font-medium text-codezal-bg hover:opacity-90 disabled:opacity-50"
+                          className="flex shrink-0 items-center gap-1 rounded bg-codezal-text px-2.5 py-1 text-base font-medium text-codezal-bg hover:opacity-90 disabled:opacity-50"
                         >
                           {authBusy === s.name
                             ? t("settings.drawer.mcpAuthOpening")
@@ -422,10 +422,10 @@ export function McpTab() {
                       <RowMenu items={menuItems} />
                     </div>
                   {st?.error && !st.needsAuth && (
-                    <div className="mt-1 text-md text-destructive">{st.error}</div>
+                    <div className="mt-1 text-base text-destructive">{st.error}</div>
                   )}
                   {st?.ok && expanded[s.name] && st.tools && st.tools.length > 0 && (
-                    <ul className="mt-2 space-y-1 rounded-md border border-codezal/60 bg-codezal-panel-2/60 p-2 text-md">
+                    <ul className="mt-2 space-y-1 rounded-md border border-codezal/60 bg-codezal-panel-2/60 p-2 text-base">
                       {st.tools.map((ti) => (
                         <li key={ti.name} className="flex flex-col">
                           <code className="text-codezal-accent">
@@ -441,7 +441,7 @@ export function McpTab() {
                     </ul>
                   )}
                   {st?.ok && (!!st.promptCount || !!st.resourceCount) && (
-                    <div className="mt-1 text-md text-codezal-mute">
+                    <div className="mt-1 text-base text-codezal-mute">
                       {t("settings.drawer.mcpCapsCounts", {
                         prompts: st.promptCount ?? 0,
                         resources: st.resourceCount ?? 0,
@@ -450,17 +450,17 @@ export function McpTab() {
                   )}
                   {authFor === s.name && (
                     <div className="mt-2 rounded border border-codezal-accent/40 bg-codezal-panel-2/60 p-2">
-                      <div className="mb-1 text-md font-medium text-codezal-text">
+                      <div className="mb-1 text-base font-medium text-codezal-text">
                         {t("settings.drawer.mcpAuthPasteTitle")}
                       </div>
-                      <p className="mb-1.5 text-md leading-relaxed text-codezal-mute">
+                      <p className="mb-1.5 text-base leading-relaxed text-codezal-mute">
                         {t("settings.drawer.mcpAuthPasteHint")}
                       </p>
                       {pendingAuthUrl[s.name] && (
                         <button
                           type="button"
                           onClick={() => void openUrl(pendingAuthUrl[s.name]).catch(() => {})}
-                          className="mb-1.5 block max-w-full truncate text-left font-mono text-md text-codezal-accent hover:underline"
+                          className="mb-1.5 block max-w-full truncate text-left font-mono text-base text-codezal-accent hover:underline"
                           title={pendingAuthUrl[s.name]}
                         >
                           {pendingAuthUrl[s.name]}
@@ -470,14 +470,14 @@ export function McpTab() {
                         value={authUrl}
                         onChange={(e) => setAuthUrl(e.target.value)}
                         placeholder={t("settings.drawer.mcpAuthPastePlaceholder")}
-                        className="mb-1.5 w-full rounded-md border border-codezal bg-transparent px-2.5 py-1.5 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                        className="mb-1.5 w-full rounded-md border border-codezal bg-transparent px-2.5 py-1.5 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
                       />
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => void handleFinishAuth(s)}
                           disabled={authBusy === s.name || !authUrl.trim()}
-                          className="rounded bg-codezal-accent px-2.5 py-1 text-md font-medium text-codezal-bg hover:opacity-90 disabled:opacity-50"
+                          className="rounded bg-codezal-accent px-2.5 py-1 text-base font-medium text-codezal-bg hover:opacity-90 disabled:opacity-50"
                         >
                           {t("settings.drawer.mcpAuthFinishBtn")}
                         </button>
@@ -487,7 +487,7 @@ export function McpTab() {
                             setAuthFor(null)
                             setAuthUrl("")
                           }}
-                          className="rounded border border-codezal px-2.5 py-1 text-md text-codezal-dim hover:text-codezal-text"
+                          className="rounded border border-codezal px-2.5 py-1 text-base text-codezal-dim hover:text-codezal-text"
                         >
                           {t("common.cancel")}
                         </button>
@@ -495,7 +495,7 @@ export function McpTab() {
                     </div>
                   )}
                   {authErr[s.name] && (
-                    <div className="mt-1 text-md text-destructive">
+                    <div className="mt-1 text-base text-destructive">
                       {t("settings.drawer.mcpAuthFailed")}: {authErr[s.name]}
                     </div>
                   )}
@@ -511,13 +511,13 @@ export function McpTab() {
           type="button"
           onClick={() => void testAll()}
           disabled={testing || servers.length === 0}
-          className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text disabled:opacity-50"
         >
           <RefreshCcw className={cn("h-4 w-4", testing && "animate-spin")} />
           {t("settings.drawer.mcpTestConnection")}
         </button>
         {statuses.length > 0 && !testing && (
-          <span className="flex items-center gap-1 text-md text-codezal-dim">
+          <span className="flex items-center gap-1 text-base text-codezal-dim">
             <Check className="h-4 w-4 text-codezal-accent" />
             {statuses.filter((s) => s.ok).length}/{statuses.length} ok
           </span>
@@ -544,7 +544,7 @@ export function McpTab() {
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto px-5 py-4">
               <div>
-                <div className="mb-2 text-md font-medium text-codezal-text">Hazır sunucular</div>
+                <div className="mb-2 text-base font-medium text-codezal-text">Hazır sunucular</div>
                 <ul className="divide-y divide-codezal-hair overflow-hidden rounded-lg border border-codezal">
                   {MCP_CATALOG.map((e) => {
                     const installed = catalogInstalled.has(e.url)
@@ -561,12 +561,12 @@ export function McpTab() {
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-md font-medium text-codezal-text">{e.name}</span>
-                              <span className="rounded bg-codezal-chip px-1.5 py-0.5 text-md font-medium uppercase tracking-wide text-codezal-dim">
+                              <span className="text-base font-medium text-codezal-text">{e.name}</span>
+                              <span className="rounded bg-codezal-chip px-1.5 py-0.5 text-base font-medium uppercase tracking-wide text-codezal-dim">
                                 {e.category}
                               </span>
                             </div>
-                            <p className="truncate text-md text-codezal-mute">{e.description}</p>
+                            <p className="truncate text-base text-codezal-mute">{e.description}</p>
                           </div>
                           {installed ? (
                             <Check className="h-4 w-4 shrink-0 text-codezal-accent" />
@@ -580,7 +580,7 @@ export function McpTab() {
                 </ul>
               </div>
               <div>
-                <div className="mb-2 text-md font-medium text-codezal-text">Özel</div>
+                <div className="mb-2 text-base font-medium text-codezal-text">Özel</div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -588,7 +588,7 @@ export function McpTab() {
                       setAddSheetOpen(false)
                       addNew()
                     }}
-                    className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
+                    className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
                   >
                     <Plus className="h-4 w-4" /> {t("settings.drawer.mcpHttpAdd")}
                   </button>
@@ -598,7 +598,7 @@ export function McpTab() {
                       setAddSheetOpen(false)
                       addStdio()
                     }}
-                    className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
+                    className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
                   >
                     <Plus className="h-4 w-4" /> {t("settings.drawer.mcpStdioAdd")}
                   </button>
@@ -608,7 +608,7 @@ export function McpTab() {
                       setAddSheetOpen(false)
                       setImportOpen(true)
                     }}
-                    className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
+                    className="flex items-center gap-1.5 rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
                   >
                     <Plus className="h-4 w-4" /> {t("settings.drawer.mcpImportTitle")}
                   </button>
@@ -708,7 +708,7 @@ function McpImportModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="text-md text-codezal-mute">
+        <p className="text-base text-codezal-mute">
           {t("settings.drawer.mcpImportHint")}
         </p>
         <textarea
@@ -717,15 +717,15 @@ function McpImportModal({
           onChange={(e) => tryParse(e.target.value)}
           placeholder={MCP_IMPORT_TEMPLATE}
           rows={12}
-          className="w-full rounded-md border border-codezal bg-codezal-input px-2 py-1.5 font-mono text-md text-codezal-text outline-none focus:border-codezal-strong"
+          className="w-full rounded-md border border-codezal bg-codezal-input px-2 py-1.5 font-mono text-base text-codezal-text outline-none focus:border-codezal-strong"
         />
         {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-md text-destructive">
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-base text-destructive">
             {error}
           </div>
         )}
         {preview.length > 0 && (
-          <div className="rounded-md border border-codezal bg-codezal-panel-2/60 px-2 py-1.5 text-md">
+          <div className="rounded-md border border-codezal bg-codezal-panel-2/60 px-2 py-1.5 text-base">
             <div className="mb-1 text-codezal-dim">
               {t("settings.drawer.mcpImportServerCount").replace("{count}", String(preview.length))}
             </div>
@@ -742,7 +742,7 @@ function McpImportModal({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-md text-codezal-dim">
+          <label className="flex items-center gap-1.5 text-base text-codezal-dim">
             <input
               type="radio"
               name="import-mode"
@@ -751,7 +751,7 @@ function McpImportModal({
             />
             {t("settings.drawer.mcpImportModeMerge")}
           </label>
-          <label className="flex items-center gap-1.5 text-md text-codezal-dim">
+          <label className="flex items-center gap-1.5 text-base text-codezal-dim">
             <input
               type="radio"
               name="import-mode"
@@ -764,7 +764,7 @@ function McpImportModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-codezal px-2.5 py-1 text-md text-codezal-dim hover:text-codezal-text"
+            className="rounded-md border border-codezal px-2.5 py-1 text-base text-codezal-dim hover:text-codezal-text"
           >
             {t("settings.drawer.mcpImportCancelBtn")}
           </button>
@@ -772,7 +772,7 @@ function McpImportModal({
             type="button"
             disabled={preview.length === 0}
             onClick={() => onApply(preview, mode)}
-            className="rounded-md border border-codezal-accent bg-codezal-accent-dim px-2.5 py-1 text-md text-codezal-accent disabled:opacity-50"
+            className="rounded-md border border-codezal-accent bg-codezal-accent-dim px-2.5 py-1 text-base text-codezal-accent disabled:opacity-50"
           >
             {t("settings.drawer.mcpImportApplyBtn").replace("{count}", String(preview.length))}
           </button>
@@ -842,12 +842,12 @@ function McpEditModal({
               onChange={(e) => patch({ name: e.target.value })}
               placeholder={t("settings.drawer.mcpNamePlaceholder")}
               className={cn(
-                "w-full rounded-lg border bg-codezal-input px-3 py-2 text-md text-codezal-text outline-none focus:border-codezal-accent",
+                "w-full rounded-lg border bg-codezal-input px-3 py-2 text-base text-codezal-text outline-none focus:border-codezal-accent",
                 !nameTrim || dup ? "border-destructive" : "border-codezal",
               )}
             />
             {dup && (
-              <div className="text-md text-destructive">
+              <div className="text-base text-destructive">
                 {t("settings.drawer.mcpNameDuplicateTitle")}
               </div>
             )}
@@ -861,7 +861,7 @@ function McpEditModal({
                 ]}
                 onChange={(v) => patch({ transport: v as "http" | "sse" | "stdio" })}
               />
-              <div className="flex items-center gap-2 text-md text-codezal-dim">
+              <div className="flex items-center gap-2 text-base text-codezal-dim">
                 <span>{t("settings.drawer.mcpEnabledLabel")}</span>
                 <Toggle
                   label={t("settings.drawer.mcpEnabledLabel")}
@@ -879,13 +879,13 @@ function McpEditModal({
                   value={draft.command ?? ""}
                   onChange={(e) => patch({ command: e.target.value })}
                   placeholder="npx | uvx | node | …"
-                  className="w-[120px] rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                  className="w-[120px] rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
                 />
                 <input
                   value={(draft.args ?? []).join(" ")}
                   onChange={(e) => patch({ args: e.target.value.split(/\s+/).filter(Boolean) })}
                   placeholder="-y @modelcontextprotocol/server-filesystem $HOME"
-                  className="flex-1 rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                  className="flex-1 rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
                 />
               </div>
               <textarea
@@ -902,7 +902,7 @@ function McpEditModal({
                 }}
                 placeholder={t("settings.drawer.mcpEnvPlaceholder")}
                 rows={3}
-                className="w-full resize-none rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-dim outline-none focus:border-codezal-accent"
+                className="w-full resize-none rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-dim outline-none focus:border-codezal-accent"
               />
             </>
           ) : (
@@ -911,7 +911,7 @@ function McpEditModal({
                 value={draft.url}
                 onChange={(e) => patch({ url: e.target.value })}
                 placeholder={t("settings.drawer.mcpUrlPlaceholder")}
-                className="w-full rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-text outline-none focus:border-codezal-accent"
+                className="w-full rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
               />
               <textarea
                 value={JSON.stringify(draft.headers ?? {}, null, 0)}
@@ -927,7 +927,7 @@ function McpEditModal({
                 }}
                 placeholder={t("settings.drawer.mcpHeadersPlaceholder")}
                 rows={3}
-                className="w-full resize-none rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-dim outline-none focus:border-codezal-accent"
+                className="w-full resize-none rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-dim outline-none focus:border-codezal-accent"
               />
               <input
                 type="number"
@@ -938,7 +938,7 @@ function McpEditModal({
                   patch({ timeout: Number.isFinite(n) && n > 0 ? n : undefined })
                 }}
                 placeholder={t("settings.drawer.mcpTimeoutPlaceholder")}
-                className="w-[180px] rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-md text-codezal-dim outline-none focus:border-codezal-accent"
+                className="w-[180px] rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-dim outline-none focus:border-codezal-accent"
               />
             </>
           )}
@@ -949,7 +949,7 @@ function McpEditModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-codezal px-3 py-1.5 text-md text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
+            className="rounded-md border border-codezal px-3 py-1.5 text-base text-codezal-dim hover:border-codezal-strong hover:text-codezal-text"
           >
             {t("common.cancel")}
           </button>
@@ -957,7 +957,7 @@ function McpEditModal({
             type="button"
             disabled={invalid}
             onClick={() => onSave({ ...draft, name: nameTrim })}
-            className="rounded-md bg-codezal-text px-3.5 py-1.5 text-md font-medium text-codezal-bg hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-codezal-text px-3.5 py-1.5 text-base font-medium text-codezal-bg hover:opacity-90 disabled:opacity-50"
           >
             {t("common.save")}
           </button>
