@@ -358,6 +358,63 @@
         },
         "apiKey": {
           "type": "string"
+        },
+        "customProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "searchUrl": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "GET",
+                  "POST"
+                ]
+              },
+              "headers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "bodyTemplate": {
+                "type": "string"
+              },
+              "responseMapping": {
+                "type": "object",
+                "properties": {
+                  "resultsPath": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "snippet": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "id",
+              "searchUrl"
+            ]
+          }
         }
       },
       "required": [
@@ -1016,6 +1073,18 @@
       "type": "boolean"
     },
     "securityScan": {
+      "default": true,
+      "type": "boolean"
+    },
+    "reviewBeforeCommit": {
+      "default": false,
+      "type": "boolean"
+    },
+    "reviewBeforePush": {
+      "default": false,
+      "type": "boolean"
+    },
+    "reviewBlockOnCritical": {
       "default": true,
       "type": "boolean"
     },
