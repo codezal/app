@@ -89,7 +89,7 @@ export type WorkerEvent =
   | { type: "log"; line: string }
   | { type: "text-delta"; delta: string }
   | { type: "tool-call"; name: string; id?: string }
-  | { type: "tool-result"; name: string; id?: string; isError?: boolean }
+  | { type: "tool-result"; name: string; id?: string; isError?: boolean; error?: string }
   | { type: "usage"; tokensIn?: number; tokensOut?: number }
   | { type: "waiting-approval"; toolName: string }
   | { type: "complete"; text: string }

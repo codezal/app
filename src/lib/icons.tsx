@@ -14,6 +14,8 @@ export {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Clock3 as ClockClockwise,
   Cog,
   Coins,

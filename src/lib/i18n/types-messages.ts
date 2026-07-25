@@ -118,6 +118,7 @@ export type Messages = {
     removeProjectConfirmMsg?: string
     irreversible?: string
     forkAria?: string
+    forkGoToParent?: string
     sessionOptions?: string
     pin?: string
     unpin?: string
@@ -330,6 +331,8 @@ export type Messages = {
     revertFilesTitle: string
     turnEditsSummary?: string
     turnRevert?: string
+    diffExpandAll?: string
+    diffCollapseAll?: string
     // Per-file revert in the turn-diff viewer — optional (new keys); other
     // locales fall back to en via BASE_MESSAGES.
     fileRevert?: string
@@ -404,6 +407,13 @@ export type Messages = {
     fileCreatedIng?: string
     toolDirIng?: string
     toolBashIng?: string
+    toolOpenPath?: string
+    toolOpenPathIng?: string
+    openPathOpen?: string
+    openPathReveal?: string
+    openPathCopy?: string
+    openPathCopied?: string
+    openPathNotFound?: string
     toolTodoIng?: string
     toolWebfetchIng?: string
     toolWebsearchIng?: string
@@ -631,6 +641,10 @@ export type Messages = {
     noIssuesTitle?: string
     issueAgentStarted?: string
     issueAgentFailed?: string
+    reviewPlaceholder?: string
+    approve?: string
+    requestChanges?: string
+    comment?: string
   }
   prConversation?: {
     unavailable: string
@@ -794,6 +808,29 @@ export type Messages = {
     opFailed?: string
     commitFailed?: string
     showOutput?: string
+  }
+
+  // Pre-commit / pre-push code review dialog (see git-review.ts). Optional so
+  // locales without these keys fall back to English at runtime.
+  codeReview?: {
+    titleCommit?: string
+    titlePush?: string
+    reviewing?: string
+    noIssues?: string
+    summaryLabel?: string
+    commitAnyway?: string
+    pushAnyway?: string
+    continue?: string
+    cancel?: string
+    blockedHint?: string
+    severityCritical?: string
+    severityWarning?: string
+    severityInfo?: string
+    categoryBug?: string
+    categorySecurity?: string
+    categoryPerformance?: string
+    categoryComplexity?: string
+    categoryStyle?: string
   }
 
   commandPalette: {
@@ -1121,6 +1158,9 @@ export type Messages = {
     commitEmptyMessage?: string
     commitBtn?: string
     commitAndPush?: string
+    pushOnly?: string
+    pushNoAhead?: string
+    pushOnlyDone?: string
     commitPush?: string
     commitCommitted?: string
     commitPushed?: string
@@ -1761,6 +1801,13 @@ export type Messages = {
       securityScanDesc?: string
       crashReportingLabel?: string
       crashReportingDesc?: string
+      errorLogLabel?: string
+      errorLogDesc?: string
+      errorLogOpen?: string
+      errorLogClear?: string
+      errorLogClearConfirm?: string
+      errorLogCleared?: string
+      errorLogEmpty?: string
       monitorActionLabel?: string
       monitorActionDesc?: string
       monitorActionRespond?: string
@@ -1770,6 +1817,12 @@ export type Messages = {
       mcpNameEmptyTitle?: string
       mcpNameDuplicateTitle?: string
       mcpToolListTitle?: string
+      reviewBeforeCommitLabel?: string
+      reviewBeforeCommitDesc?: string
+      reviewBeforePushLabel?: string
+      reviewBeforePushDesc?: string
+      reviewBlockOnCriticalLabel?: string
+      reviewBlockOnCriticalDesc?: string
       // Optional — appearance subview. Locales without these keys fall back to EN.
       appearance?: {
         displayTitle?: string

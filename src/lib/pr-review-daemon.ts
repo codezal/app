@@ -9,7 +9,7 @@
 // Anti-spam: on first enable for a repo a BASELINE is recorded (all current open
 // PRs marked seen without reviewing) so only PRs/pushes after you turn it on get
 // reviewed. A PR is re-reviewed when its head SHA changes (seen key = num@sha).
-import { streamText, tool, stepCountIs } from "ai"
+import { streamText, tool, isStepCount } from "ai"
 import { z } from "zod"
 import { buildLanguageModel } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
@@ -249,14 +249,14 @@ async function runReview(
     : undefined
   const result = streamText({
     model,
-    system: STRUCTURED_SYSTEM,
+    instructions: STRUCTURED_SYSTEM,
     prompt: `PR title: ${title}\n\nDiff:\n${diff}`,
     tools,
     toolChoice: gated ? "none" : undefined,
-    stopWhen: stepCountIs(1),
+    stopWhen: isStepCount(1),
   })
   let text = ""
-  for await (const chunk of result.fullStream) {
+  for await (const chunk of result.stream) {
     if (chunk.type === "text-delta") text += chunk.text ?? ""
   }
   return { parsed: parseStructured(text), raw: text.trim() }

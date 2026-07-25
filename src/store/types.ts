@@ -254,9 +254,30 @@ export type ToolOutputSettings = {
   maxBytes?: number
 }
 
+// A user-defined, declarative web-search provider. No code change is needed to
+// add a new source: the definition describes the request (URL/body templates
+// with {{query}} / {{max_results}} / {{api_key}} / {{time_range}} placeholders)
+// and the response mapping (where the hit array lives and which fields hold
+// title/url/snippet). Custom providers are tried first in the keyless cascade.
+export type CustomSearchProvider = {
+  id: string
+  name?: string
+  searchUrl: string
+  method?: "GET" | "POST"
+  headers?: Record<string, string>
+  bodyTemplate?: string
+  responseMapping?: {
+    resultsPath?: string
+    title?: string
+    url?: string
+    snippet?: string
+  }
+}
+
 export type WebSearchConfig = {
   provider: "tavily" | "brave" | "exa" | "duckduckgo"
   apiKey?: string
+  customProviders?: CustomSearchProvider[]
 }
 
 export type FirecrawlConfig = {
@@ -377,6 +398,17 @@ export type Settings = {
   // (credential-grade) findings escalate to the approval modal even in
   // bypass/auto-review mode. Default on. See src/lib/security/scan.ts.
   securityScan?: boolean
+  // Pre-commit code review — when on, the staged diff is reviewed by the model
+  // before a commit is created and findings are shown in a dialog. Default off
+  // (opt-in) because each commit incurs model cost + latency. See git-review.ts.
+  reviewBeforeCommit?: boolean
+  // Pre-push code review — same as above but reviews the commits about to be
+  // pushed (diff against upstream) before pushing. Default off.
+  reviewBeforePush?: boolean
+  // When a pre-commit/pre-push review surfaces critical findings, block the
+  // operation unless the user explicitly overrides ("commit anyway"). Only
+  // meaningful while reviewBeforeCommit / reviewBeforePush are on. Default on.
+  reviewBlockOnCritical?: boolean
   // Should the model write short progress notes between tool calls (fluid flow)?
   // When off, it works silently and reports at the end. Default on.
   narrateProgress?: boolean

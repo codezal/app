@@ -186,13 +186,22 @@ function FileSection({
   defaultOpen = true,
   onRevert,
   revertTitle,
+  forceOpen,
+  forceKey,
 }: {
   file: ParsedFile
   defaultOpen?: boolean
   onRevert?: () => void
   revertTitle?: string
+  forceOpen?: boolean
+  forceKey?: number
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [prevForceKey, setPrevForceKey] = useState(forceKey)
+  if (forceKey !== undefined && forceKey !== prevForceKey) {
+    setPrevForceKey(forceKey)
+    if (forceOpen !== undefined) setOpen(forceOpen)
+  }
 
   return (
     <div className="border-b border-codezal last:border-b-0 [contain-intrinsic-size:400px] [content-visibility:auto]">
@@ -289,11 +298,15 @@ export function DiffView({
   defaultOpen = true,
   onRevertFile,
   revertTitle,
+  forceOpen,
+  forceKey,
 }: {
   text: string
   defaultOpen?: boolean
   onRevertFile?: (path: string) => void
   revertTitle?: string
+  forceOpen?: boolean
+  forceKey?: number
 }) {
   const files = useMemo(() => parseUnifiedDiff(text), [text])
 
@@ -314,6 +327,8 @@ export function DiffView({
           defaultOpen={defaultOpen}
           onRevert={onRevertFile ? () => onRevertFile(file.path) : undefined}
           revertTitle={revertTitle}
+          forceOpen={forceOpen}
+          forceKey={forceKey}
         />
       ))}
     </div>

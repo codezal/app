@@ -3,15 +3,17 @@ import { invoke } from "@tauri-apps/api/core"
 import { create } from "zustand"
 import { createId } from "@/lib/id"
 import { spawnProgram, shellInvocation } from "@/lib/exec"
-import { toast } from "@/store/toast"
 import { sendDesktopNotification } from "@/lib/notify"
 
 function notifyJobFinished(job: BackgroundJob): void {
   if (job.status === "cancelled") return
   const label = job.command.length > 60 ? job.command.slice(0, 60) + "…" : job.command
   const msg = `${job.status === "done" ? "✓ bitti" : "✕ hata"}: ${label}`
-  if (job.status === "done") toast.success(msg)
-  else toast.error(msg)
+  // Professional agents (Codex, Claude Code) don't interrupt with a toast for
+  // every finished command — the result is already visible in the jobs panel
+  // and the agent reacts to the exit code in-stream. Only pull the user back
+  // with a desktop notification when the app is not focused; stay silent while
+  // they are actively working in the window.
   if (typeof document !== "undefined" && !document.hasFocus()) {
     void sendDesktopNotification("Codezal — arka plan işi", msg, job.ownerSessionId)
   }

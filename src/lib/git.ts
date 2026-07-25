@@ -629,3 +629,18 @@ export async function gitDiffAll(workspace: string): Promise<string> {
     return ""
   }
 }
+
+// Diff of the local commits that would be pushed — i.e. everything ahead of the
+// upstream tracking branch (`@{u}...HEAD`). Used by the pre-push code review.
+// Returns "" when there is no upstream (nothing to diff against) or on error.
+export async function gitDiffAhead(workspace: string): Promise<string> {
+  if (!workspace) return ""
+  try {
+    const status = await gitStatus(workspace)
+    if (!status.info.upstream) return ""
+    const out = await exec(workspace, ["diff", "@{u}...HEAD", "--no-color"])
+    return capDiff(out)
+  } catch {
+    return ""
+  }
+}

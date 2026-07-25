@@ -202,7 +202,7 @@ async function summarizeOldMessages(
 
   const result = await generateText({
     model: llm,
-    system: STRUCTURED_MEMORY_PROMPT,
+    instructions: STRUCTURED_MEMORY_PROMPT,
     prompt: `${anchor}\n\nConversation transcript:\n\n${transcript}\n\nFill the template above.`,
   })
   return { text: result.text, usage: result.usage, usedProvider: provider, usedModel: model }

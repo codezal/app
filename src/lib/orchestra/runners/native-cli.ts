@@ -44,7 +44,13 @@ export const startNativeCliWorker: RunnerStart = async (input) => {
       } else if (event.type === "tool_call") {
         emit({ type: "tool-call", name: event.name, id: event.id })
       } else if (event.type === "tool_result") {
-        emit({ type: "tool-result", name: event.name, id: event.id, isError: event.isError })
+        emit({
+          type: "tool-result",
+          name: event.name,
+          id: event.id,
+          isError: event.isError,
+          error: event.isError ? event.output : undefined,
+        })
       } else if (event.type === "permission_requested") {
         emit({ type: "waiting-approval", toolName: event.request.name })
         void useApprovalsStore.getState()

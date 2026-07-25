@@ -4,10 +4,15 @@ Searches the web and returns a concise list of the most relevant results.
 - Returns a short answer summary (when the provider supports it) followed by titled results with their URLs and snippets.
 - The number of results is configurable via max_results.
 
+Optional filters (use them to narrow results instead of stuffing the query):
+- time_range: recency window — "d" (past day), "w" (week), "m" (month), "y" (year). Use for "latest"/"recent"/"this week" type queries.
+- site: restrict to a domain, e.g. "github.com" or "docs.docker.com".
+- filetype: restrict to a file type, e.g. "pdf".
+
 Usage notes:
-- Requires a web search provider configured in Settings > Web Search (Tavily, Brave, or Exa). The tool is unavailable when no provider key is set.
+- Works keyless (DuckDuckGo with automatic fallback to Brave/Bing) or with an API key (Tavily/Brave/Exa) configured in Settings > Web Search.
 - Use clear, focused keywords for the best results.
-- This tool is read-only. To fetch the full content of a specific result, use webfetch on its URL.
+- This tool is read-only. To read the FULL content of results in one step, prefer search_and_extract; for a single known URL use webfetch.
 
 The current year is {{year}}. You MUST use this year when searching for recent information or current events.
 - Example: if the current year is 2026 and the user asks for "latest AI news", search for "AI news 2026", NOT "AI news 2025".

@@ -1,5 +1,5 @@
 // SDK worker runner — buildModel + streamText + buildAllTools reuse.
-import { streamText, stepCountIs, type ModelMessage } from "ai"
+import { streamText, isStepCount, type ModelMessage } from "ai"
 import { buildLanguageModel, transformHistory, buildProviderOptions } from "../../providers"
 import { buildAllTools } from "../../tools"
 import { findAgent } from "../../agents"
@@ -66,10 +66,7 @@ export const startSdkWorker: RunnerStart = async ({
         emit({ type: "started" })
 
         const messages = transformHistory(
-          [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: task },
-          ] as ModelMessage[],
+          [{ role: "user", content: task }] as ModelMessage[],
           provider,
           modelId,
         )
@@ -83,12 +80,13 @@ export const startSdkWorker: RunnerStart = async ({
 
         const result = streamText({
           model,
+          instructions: systemPrompt,
           messages,
           ...(Object.keys(providerOptions).length > 0
             ? { providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"] }
             : {}),
           tools,
-          stopWhen: stepCountIs(40),
+          stopWhen: isStepCount(40),
           abortSignal: signal,
           experimental_repairToolCall: makeToolCallRepair(),
           onError: ({ error }) => {
@@ -97,7 +95,7 @@ export const startSdkWorker: RunnerStart = async ({
         })
 
         let finalText = ""
-        for await (const chunk of result.fullStream) {
+        for await (const chunk of result.stream) {
           if (signal.aborted) break
           switch (chunk.type) {
             case "text-delta": {
@@ -122,14 +120,20 @@ export const startSdkWorker: RunnerStart = async ({
                 id: chunk.toolCallId,
               })
               break
-            case "tool-error":
+            case "tool-error": {
+              const toolErr = errorMessage(chunk.error)
+              // Surface the real error in the agent card's output log so it is
+              // visible in the UI without digging through ~/.codezal/error.log.
+              emit({ type: "log", line: `[tool-error] ${chunk.toolName}: ${toolErr}` })
               emit({
                 type: "tool-result",
                 name: chunk.toolName,
                 id: chunk.toolCallId,
                 isError: true,
+                error: toolErr,
               })
               break
+            }
             case "error": {
               const err = chunk.error
               const msg = errorMessage(err)

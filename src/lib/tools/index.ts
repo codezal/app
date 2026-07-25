@@ -1,4 +1,4 @@
-import { streamText, generateText, stepCountIs, tool, type ToolSet } from "ai"
+import { streamText, generateText, isStepCount, tool, type ToolSet } from "ai"
 import { z } from "zod"
 import { listDirAbs, readFileAbs, writeFileAbs, editFileAbs } from "./fs"
 import { runBash } from "./shell"
@@ -6,7 +6,7 @@ import { sliceCharsSafe } from "@/lib/text"
 import { isDoomRepeat, DOOM_REPEAT, DOOM_WINDOW } from "./doom-loop"
 import { runFormatters } from "./formatters"
 import { searchWorkspace, globWorkspace, type SearchHit } from "../search"
-import { webfetch as webfetchImpl, websearch as websearchImpl, firecrawlScrape as firecrawlImpl } from "./web"
+import { webfetch as webfetchImpl, websearch as websearchImpl, firecrawlScrape as firecrawlImpl, searchAndExtract as searchAndExtractImpl } from "./web"
 import { repoOverview as repoOverviewImpl } from "./repo-overview"
 import { applyPatch as applyPatchImpl, formatApplyResult } from "./patch"
 import { cloneRepo as cloneRepoImpl } from "./repo-clone"
@@ -147,7 +147,8 @@ import { buildMcpTools, listPluginMcps, listConnectedMcpResources, readMcpResour
 import { listPluginHooks } from "../hooks"
 import { createId } from "@/lib/id"
 import type { Message, Settings } from "@/store/types"
-import { isAbsolutePath, resolveInWorkspace, WorkspaceError } from "./paths"
+import { isAbsolutePath, resolveInWorkspace, resolveAny, WorkspaceError } from "./paths"
+import { humanSize } from "@/lib/open"
 import { withLock } from "../lock"
 import { listPluginAgents } from "../agents/plugin"
 import { checkpoint } from "../snapshots"
@@ -226,7 +227,10 @@ async function buildSubagentSystem(
       "- For edit_file, include enough surrounding context that old_string is unique.\n" +
       "- When calling bash, pass a short `description` (5-10 words) of what the command does.\n" +
       "- Keep bash commands inside the workspace.\n" +
-      "- Finish the task fully before your final summary. Verify with tests/typecheck when applicable.",
+      "- Finish the task fully before your final summary. Verify with tests/typecheck when applicable.\n" +
+      "- Your FINAL message MUST be a plain-text summary of the results. Never leave the answer " +
+      "only in internal reasoning/thinking: the caller reads only your text output, so an answer " +
+      "kept in thinking is lost and looks like an empty response.",
   )
 
   // Project + user memory/rules (AGENTS.md, memory.md, etc.) — lean budget.
@@ -506,6 +510,7 @@ export type ToolName =
   | "question"
   | "webfetch"
   | "websearch"
+  | "search_and_extract"
   | "firecrawl"
   | "repo_overview"
   | "apply_patch"
@@ -781,7 +786,7 @@ export const READONLY_ALLOW = new Set<string>([
   "read_file", "read_summary", "list_dir", "grep", "glob",
   "code_query", "code_search", "code_callers", "code_callees", "code_trace", "code_impact", "code_context",
   "repo_overview", "load_skill",
-  "webfetch", "websearch", "firecrawl",
+  "webfetch", "websearch", "search_and_extract", "firecrawl",
   "question", "notify", "todo_write", "propose_plan", "propose_build",
   // MCP plumbing
   "mcp_resource", "tool_search",
@@ -1216,11 +1221,37 @@ function buildWebTools(ownerSessionId: string): ToolSet {
       inputSchema: z.object({
         query: z.string().describe("Search query — clear, focused keywords"),
         max_results: z.number().int().min(1).max(10).optional().describe("Maximum number of results to return (1-10, default 5)"),
+        time_range: z.enum(["d", "w", "m", "y"]).optional().describe("Recency filter: d=past day, w=past week, m=past month, y=past year"),
+        site: z.string().optional().describe("Restrict results to a domain, e.g. \"github.com\""),
+        filetype: z.string().optional().describe("Restrict results to a file type, e.g. \"pdf\""),
       }),
-      execute: async ({ query, max_results }) => {
+      execute: async ({ query, max_results, time_range, site, filetype }) => {
         await gateFor("websearch", { query })
         const cfg = useSettingsStore.getState().settings.webSearch
-        return websearchImpl(query, cfg, max_results ?? 5)
+        return websearchImpl(query, cfg, max_results ?? 5, { timeRange: time_range, site, filetype })
+      },
+    }),
+
+    search_and_extract: tool({
+      description:
+        "Search the web AND fetch the full content of the top results in one call. " +
+        "Use when you need the actual page text, not just snippets — e.g. reading docs, " +
+        "articles, or reference pages behind a query. Returns the result list followed by " +
+        "the extracted markdown of each top page (wrapped as untrusted content). Prefer this " +
+        "over websearch + multiple webfetch calls when you know you will read the results. " +
+        "Supports the same filters as websearch (time_range, site, filetype).",
+      inputSchema: z.object({
+        query: z.string().describe("Search query — clear, focused keywords"),
+        max_results: z.number().int().min(1).max(10).optional().describe("Results to list (1-10, default 5)"),
+        extract_count: z.number().int().min(1).max(5).optional().describe("How many top results to fetch full content for (1-5, default 3)"),
+        time_range: z.enum(["d", "w", "m", "y"]).optional().describe("Recency filter: d=past day, w=past week, m=past month, y=past year"),
+        site: z.string().optional().describe("Restrict results to a domain, e.g. \"github.com\""),
+        filetype: z.string().optional().describe("Restrict results to a file type, e.g. \"pdf\""),
+      }),
+      execute: async ({ query, max_results, extract_count, time_range, site, filetype }) => {
+        await gateFor("search_and_extract", { query })
+        const cfg = useSettingsStore.getState().settings.webSearch
+        return searchAndExtractImpl(query, cfg, max_results ?? 5, { timeRange: time_range, site, filetype }, extract_count ?? 3)
       },
     }),
 
@@ -1378,7 +1409,56 @@ export function buildTools(
         }
         const abs = await resolvePathOrAsk(workspace, path, "read_summary")
         const head = await readFileAbs(abs, 1, 80, maxReadChars)
-        return `${rel} — no Code Map outline; first 80 lines (use read_file offset/limit for more):\n${head}`
+        return `${rel} — no Code Map outline; first 80 lines (use read_file with offset/limit for more):\n${head}`
+      },
+    }),
+
+    open_path: tool({
+      description:
+        "Present a file artifact to the user as a one-click card (Open / Show in folder) " +
+        "instead of pasting a long absolute path into your prose. Use it after producing " +
+        "something the user will want to open: a build output (.dmg/.app/.exe/.msi/.zip), a " +
+        "download, or a generated report/PDF/image/screenshot. The tool itself opens nothing " +
+        "— it only verifies the file and renders the card; the user triggers Open / Reveal by " +
+        "clicking, so it is safe to call freely. `path` may be workspace-relative or absolute; " +
+        "`label` is an optional short caption.",
+      inputSchema: z.object({
+        path: z.string().describe("Workspace-relative or absolute path to the file"),
+        label: z
+          .string()
+          .optional()
+          .describe("Optional short caption shown on the card"),
+      }),
+      execute: async ({ path, label }) => {
+        let abs: string
+        try {
+          abs = resolveAny(workspace, String(path ?? ""))
+        } catch (e) {
+          return `Error: ${e instanceof Error ? e.message : String(e)}`
+        }
+        const name = abs.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? abs
+        let exists = false
+        let size = -1
+        try {
+          exists = await invoke<boolean>("path_exists", { path: abs })
+          if (exists) {
+            size = await invoke<number>("fs_stat_size", { path: abs }).catch(() => -1)
+          }
+        } catch {
+          // Intentionally ignored — the card still renders; buttons reflect `exists`.
+        }
+        const sizeStr = size >= 0 ? ` (${humanSize(size)})` : ""
+        const caption = label ? ` "${label}"` : ""
+        if (!exists) {
+          return (
+            `Presented${caption} ${name} at ${abs} — but the file does not exist yet, ` +
+            `so the card's buttons are disabled.`
+          )
+        }
+        return (
+          `Presented${caption} ${name}${sizeStr} at ${abs}. ` +
+          `The user sees a card with Open / Show-in-folder buttons.`
+        )
       },
     }),
 
@@ -2202,6 +2282,12 @@ export function buildTools(
         const subagentSystem = await buildSubagentSystem(agent.systemPrompt, workspace)
 
         let finalText = ""
+        // Thinking models (e.g. Qwen3) can place the whole answer in reasoning
+        // chunks. The switch below does not forward reasoning as visible text, so
+        // capture it separately and use it as a fallback summary — otherwise a
+        // model that answers only inside its thinking block yields an empty
+        // response and the caller retries forever.
+        let reasoningText = ""
         let lastResult: ReturnType<typeof streamText> | undefined
         let lastErr: unknown
         let softStopped = false
@@ -2242,15 +2328,15 @@ export function buildTools(
             try {
               const result = streamText({
                 model,
-                system: subagentSystem,
+                instructions: subagentSystem,
                 messages: [{ role: "user", content: task }],
                 tools: policedTools,
-                stopWhen: stepCountIs(agent.maxSteps ?? 40),
+                stopWhen: isStepCount(agent.maxSteps ?? 40),
                 abortSignal: childAc.signal,
                 experimental_repairToolCall: makeToolCallRepair(),
               })
               lastResult = result
-              for await (const chunk of result.fullStream) {
+              for await (const chunk of result.stream) {
                 attemptBeat = Date.now()
                 beatTool(ownerSessionId)
                 switch (chunk.type) {
@@ -2262,6 +2348,13 @@ export function buildTools(
                     }
                     break
                   }
+                  case "reasoning-delta": {
+                    // Not surfaced to the card UI, but retained so a thinking-only
+                    // answer can be recovered as the final summary below.
+                    const d = (chunk as { text?: string }).text ?? ""
+                    if (d) reasoningText += d
+                    break
+                  }
                   case "tool-call":
                     subagentToolsPending++
                     emit({ type: "tool-call", name: chunk.toolName, id: chunk.toolCallId })
@@ -2270,10 +2363,19 @@ export function buildTools(
                     if (subagentToolsPending > 0) subagentToolsPending--
                     emit({ type: "tool-result", name: chunk.toolName, id: chunk.toolCallId })
                     break
-                  case "tool-error":
+                  case "tool-error": {
                     if (subagentToolsPending > 0) subagentToolsPending--
-                    emit({ type: "tool-result", name: chunk.toolName, id: chunk.toolCallId, isError: true })
+                    const subToolErr = errorMessage(chunk.error)
+                    emit({ type: "log", line: `[tool-error] ${chunk.toolName}: ${subToolErr}` })
+                    emit({
+                      type: "tool-result",
+                      name: chunk.toolName,
+                      id: chunk.toolCallId,
+                      isError: true,
+                      error: subToolErr,
+                    })
                     break
+                  }
                   case "error": {
                     const err = chunk.error
                     throw err instanceof Error ? err : new Error(String(err))
@@ -2333,6 +2435,7 @@ export function buildTools(
             const resp = await lastResult.response
             const wrap = await generateText({
               model,
+              allowSystemInMessages: true,
               messages: [
                 ...resp.messages,
                 { role: "user", content: "Summarize your findings so far as the final answer." },
@@ -2345,6 +2448,12 @@ export function buildTools(
           } finally {
             clearTimeout(sumTimer)
           }
+        }
+        if (!text && reasoningText.trim()) {
+          // The model answered inside its thinking block only. Use the reasoning
+          // as the summary so the caller gets the findings instead of an empty
+          // response (which previously triggered endless retries).
+          text = reasoningText.trim()
         }
         if (!text) text = "(agent returned an empty response)"
         if (softStopped || parentSignal?.aborted) {

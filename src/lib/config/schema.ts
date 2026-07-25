@@ -268,6 +268,27 @@ export function makeSchema(d: Settings) {
         .object({
           provider: z.enum(["tavily", "brave", "exa", "duckduckgo"]),
           apiKey: z.string().optional(),
+          customProviders: z
+            .array(
+              z.object({
+                id: z.string(),
+                name: z.string().optional(),
+                searchUrl: z.string(),
+                method: z.enum(["GET", "POST"]).optional(),
+                headers: z.record(z.string(), z.string()).optional(),
+                bodyTemplate: z.string().optional(),
+                responseMapping: z
+                  .object({
+                    resultsPath: z.string().optional(),
+                    title: z.string().optional(),
+                    url: z.string().optional(),
+                    snippet: z.string().optional(),
+                  })
+                  .optional(),
+              }),
+            )
+            .optional()
+            .catch(undefined),
         })
         .optional()
         .catch(undefined),
@@ -332,6 +353,9 @@ export function makeSchema(d: Settings) {
       suggestionsEnabled: z.boolean().optional().catch(d.suggestionsEnabled),
       autoLintOnEdit: z.boolean().optional().catch(d.autoLintOnEdit),
       securityScan: z.boolean().optional().catch(d.securityScan),
+      reviewBeforeCommit: z.boolean().optional().catch(d.reviewBeforeCommit),
+      reviewBeforePush: z.boolean().optional().catch(d.reviewBeforePush),
+      reviewBlockOnCritical: z.boolean().optional().catch(d.reviewBlockOnCritical),
       narrateProgress: z.boolean().optional().catch(d.narrateProgress),
       crashReporting: z.boolean().optional().catch(d.crashReporting),
       feedbackNoticeSeen: z.boolean().optional().catch(d.feedbackNoticeSeen),

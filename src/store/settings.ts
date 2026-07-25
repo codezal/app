@@ -250,6 +250,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       next = {
         ...cur,
         webSearch: {
+          ...cur.webSearch,
           provider: cur.webSearch?.provider ?? "duckduckgo",
           apiKey: trimmed || undefined,
         },

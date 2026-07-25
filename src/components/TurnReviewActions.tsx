@@ -17,6 +17,7 @@ import { useT } from "@/lib/i18n/useT"
 import { useMenu } from "@/lib/useMenu"
 import { toast } from "@/store/toast"
 import { Dialog } from "./Dialog"
+import { useCommitReview } from "@/lib/use-commit-review"
 
 type Action = "branch-commit-push" | "commit-push" | "commit" | "commit-pr"
 
@@ -46,6 +47,7 @@ export function TurnReviewActions({
   const [branchName, setBranchName] = useState("")
   const [prTitle, setPrTitle] = useState("")
   const [prBase, setPrBase] = useState("main")
+  const review = useCommitReview(workspacePath)
 
   const createLabel = upperFirst(t("branchPicker.createBtn"))
   const commitPushLabel = `${t("gitPanel.commit")} & ${t("gitPanel.push")}`
@@ -70,8 +72,9 @@ export function TurnReviewActions({
     }
   }
 
-  async function stageAndCommit() {
-    if (!workspacePath) return
+  // Returns false when the pre-commit review gate aborted the commit.
+  async function stageAndCommit(): Promise<boolean> {
+    if (!workspacePath) return false
     const status = await gitStatus(workspacePath)
     if (!status.isRepo) throw new Error(t("gitPanel.notARepoHint", { gitinit: "git init" }))
     if (status.entries.length === 0) throw new Error(t("gitPanel.noChanges"))
@@ -79,14 +82,19 @@ export function TurnReviewActions({
       (entry) => entry.index !== " " && entry.index !== "?" && entry.index !== "!",
     )
     if (!anyStaged) await gitStageAll(workspacePath)
+    if ((await review.gate("commit")) === "abort") return false
     await gitCommit(workspacePath, commitMessage.trim())
+    return true
   }
 
-  async function pushCurrentBranch() {
-    if (!workspacePath) return
+  // Returns false when the pre-push review gate aborted the push.
+  async function pushCurrentBranch(): Promise<boolean> {
+    if (!workspacePath) return false
+    if ((await review.gate("push")) === "abort") return false
     const status = await gitStatus(workspacePath)
     if (status.info.upstream) await gitPush(workspacePath)
     else await gitPublish(workspacePath)
+    return true
   }
 
   async function runAction() {
@@ -113,11 +121,14 @@ export function TurnReviewActions({
         await gitCreateBranch(workspacePath, branchName.trim())
       }
 
-      await stageAndCommit()
+      const committed = await stageAndCommit()
+      if (!committed) return // pre-commit review aborted
 
       if (action === "commit-push" || action === "branch-commit-push") {
-        await pushCurrentBranch()
+        const pushed = await pushCurrentBranch()
+        if (!pushed) return // pre-push review aborted
       } else if (action === "commit-pr" && prContext && token) {
+        if ((await review.gate("push")) === "abort") return
         await gitPublish(workspacePath)
         const status = await gitStatus(workspacePath)
         if (!status.info.branch) throw new Error(t("gitPanel.branchOnDefault"))
@@ -281,6 +292,7 @@ export function TurnReviewActions({
           </div>
         </Dialog>
       )}
+      {review.dialog}
     </>
   )
 }

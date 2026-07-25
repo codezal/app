@@ -3,6 +3,7 @@
 //
 import { isTransientNetworkError } from "./providers/error"
 import { RESOURCE_INVALID } from "./http-noise"
+import { logError } from "./error-log"
 
 const ENDPOINT = "https://www.codezal.com/api/report"
 const MAX_PROMPTS_PER_SESSION = 5
@@ -163,6 +164,14 @@ export async function captureError(err: unknown, _source: string): Promise<void>
   const message = messageOf(err)
   const stack = stackOf(err)
   const name = err instanceof Error ? err.name : undefined
+  // Persist to the local error.log independently of the crashReporting setting
+  // and the per-session prompt cap: this is on-device forensics, not telemetry.
+  // Noise (AbortError, stream teardown, transient network) is skipped so the
+  // log stays signal-rich; everything real is recorded whether or not the
+  // remote report prompt is shown.
+  if (!isNoiseError(message, name)) {
+    void logError({ source: _source, message, name, stack })
+  }
   const enabled = await promptsEnabled()
   if (!shouldSurface({ message, name, stack, enabled })) return
   await surfaceReportPrompt(message, stack)

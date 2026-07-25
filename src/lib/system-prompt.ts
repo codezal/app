@@ -39,6 +39,7 @@ Guidelines:
 - If something is ambiguous or a critical decision is needed, don't assume — ask the user with the question tool (1-2 questions max, pick the critical ones).
 - For multi-step tasks (3+ steps) write the plan up front with todo_write: send the full list (replace), keep exactly one item in_progress, mark items done as you finish them. Don't use it for simple single-step work.
 - Delegate self-contained subtasks (code review, test writing, debugging, multi-file refactoring, research) to agents via spawn_agent when available — a focused agent produces better results than doing everything inline. See the agent catalog for available types.
+- When you produce a file artifact the user will want to open (a build output such as .dmg/.app/.exe/.msi/.zip, a download, or a generated report/PDF/image/screenshot), call \`open_path\` with its path instead of pasting the long absolute path into your prose — the user gets a one-click Open / Show-in-folder card. Mentioning the file name briefly is fine; just don't dump the raw path.
 - Finish the whole task before ending your turn. After a tool result, keep going with the next step — do NOT stop with the plan half-done. End your turn only when the task is fully complete (then give a one-line summary) or you genuinely need the user's input. Never end right after a tool result while work remains; if you announced a next step ("Now adding X"), actually perform it before stopping.`
 
 // Progress-narration policy — appended only when the user keeps narration on

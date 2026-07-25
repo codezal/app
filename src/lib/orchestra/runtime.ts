@@ -23,6 +23,7 @@ import {
 } from "./isolation"
 import { createId } from "@/lib/id"
 import { errorMessage } from "@/lib/errors"
+import { logError } from "@/lib/error-log"
 import { codenameFor } from "./codenames"
 import { Semaphore } from "@/lib/async/semaphore"
 
@@ -221,6 +222,17 @@ async function runOneWorker(
       errorMessage: errorMessage(e),
       durationMs: Date.now() - startedAt,
     }
+    // Top-level worker throw (setup/runner/finalize blew up). A user abort is
+    // not an error, so it is excluded; everything else is recorded locally.
+    if (!signal.aborted) {
+      void logError({
+        source: `agent-crash:${workerId}`,
+        message: errorMessage(e),
+        name: e instanceof Error ? e.name : undefined,
+        stack: e instanceof Error ? e.stack : undefined,
+        context: { sessionId: ownerSessionId, workerId, kind: w.kind, task },
+      })
+    }
     return await finalizeIsolation(iso, errResult, task)
   } finally {
     if (iso?.worktreePath) activeWorktrees.delete(iso.worktreePath)
@@ -284,6 +296,26 @@ export function createCardEmitter(
           }
         }
         cur.patchAgentCardFor(sessionId, parentMessageId, workerId, { toolCalls: next })
+        // Record a failed tool call *inside* the agent. The worker event carries
+        // the tool name but not the error text, so the entry notes which tool
+        // failed in which agent — enough to correlate with the agent's own
+        // outputLog / model transcript when diagnosing.
+        if (ev.isError) {
+          void logError({
+            source: `agent-tool:${part?.displayName ?? part?.workerLabel ?? workerId}`,
+            // Use the real tool output/error text when the runner carried it
+            // (sdk + native-cli do; acp's protocol does not expose it).
+            message: ev.error || `tool "${ev.name}" returned an error (no error text captured)`,
+            context: {
+              sessionId,
+              workerId,
+              kind: part?.kind,
+              tool: ev.name,
+              workspace: sess?.workspacePath ?? null,
+              task: part?.task?.slice(0, 120) ?? null,
+            },
+          })
+        }
         break
       }
       case "waiting-approval":
@@ -303,13 +335,32 @@ export function createCardEmitter(
           finalText: ev.text,
         })
         break
-      case "error":
+      case "error": {
         cur.patchAgentCardFor(sessionId, parentMessageId, workerId, {
           status: "error",
           finishedAt: Date.now(),
           errorMessage: ev.message,
         })
+        // Persist the agent-reported failure to ~/.codezal/error.log so it
+        // survives the scroll and can be handed over for diagnosis.
+        const errSess = useSessionsStore.getState().sessions[sessionId]
+        const errCard = errSess?.messages
+          .find((m) => m.id === parentMessageId)
+          ?.parts?.find(
+            (p) => p.type === "agent-card" && p.workerId === workerId,
+          ) as AgentCardPart | undefined
+        void logError({
+          source: `agent:${errCard?.displayName ?? errCard?.workerLabel ?? workerId}`,
+          message: ev.message,
+          context: {
+            sessionId,
+            workerId,
+            kind: errCard?.kind,
+            workerLabel: errCard?.workerLabel,
+          },
+        })
         break
+      }
       case "aborted":
         cur.patchAgentCardFor(sessionId, parentMessageId, workerId, {
           status: "aborted",

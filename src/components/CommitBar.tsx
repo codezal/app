@@ -20,6 +20,7 @@ import { toast } from "@/store/toast"
 import { errorMessage } from "@/lib/errors"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
+import { useCommitReview } from "@/lib/use-commit-review"
 
 type Props = {
   workspace: string
@@ -30,6 +31,7 @@ type Props = {
 export function CommitBar({ workspace, providerId, modelId }: Props) {
   const t = useT()
   const settings = useSettingsStore((s) => s.settings)
+  const review = useCommitReview(workspace)
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState("")
@@ -86,19 +88,26 @@ export function CommitBar({ workspace, providerId, modelId }: Props) {
     }
   }
 
-  async function run(push: boolean) {
+  async function run(opts: { commit: boolean; push: boolean }) {
+    const doCommit = opts.commit && hasChanges
+    const doPush = opts.push
+    if (!doCommit && !doPush) return
     const msg = message.trim()
-    if (hasChanges && !msg) {
+    if (doCommit && !msg) {
       toast.error(t("statusBar.commitEmptyMessage"))
       return
     }
     setBusy(true)
     try {
-      if (hasChanges) {
+      if (doCommit) {
         await gitStageAll(workspace)
+        // Pre-commit review gate (opt-in); abort leaves staged changes intact.
+        if ((await review.gate("commit")) === "abort") return
         await gitCommit(workspace, msg)
       }
-      if (push || !hasChanges) {
+      if (doPush) {
+        // Pre-push review gate (opt-in) over the commits about to be pushed.
+        if ((await review.gate("push")) === "abort") return
         try {
           await gitPush(workspace)
         } catch {
@@ -108,7 +117,11 @@ export function CommitBar({ workspace, providerId, modelId }: Props) {
       setOpen(false)
       setMessage("")
       toast.success(
-        push || !hasChanges ? t("statusBar.commitPushed") : t("statusBar.commitCommitted"),
+        doCommit && doPush
+          ? t("statusBar.commitPushed")
+          : doPush
+            ? t("statusBar.pushOnlyDone")
+            : t("statusBar.commitCommitted"),
       )
       emitGitChanged()
       setStatus(await gitStatus(workspace))
@@ -180,7 +193,7 @@ export function CommitBar({ workspace, providerId, modelId }: Props) {
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => void run(false)}
+                  onClick={() => void run({ commit: true, push: false })}
                   disabled={busy || aiBusy}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-codezal-hair px-2 py-1.5 text-xs font-medium text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text disabled:opacity-50"
                 >
@@ -189,7 +202,7 @@ export function CommitBar({ workspace, providerId, modelId }: Props) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void run(true)}
+                  onClick={() => void run({ commit: true, push: true })}
                   disabled={busy || aiBusy}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-codezal-accent/40 bg-codezal-accent/10 px-2 py-1.5 text-xs font-semibold text-codezal-accent transition-colors hover:bg-codezal-accent/20 disabled:opacity-50"
                 >
@@ -197,11 +210,22 @@ export function CommitBar({ workspace, providerId, modelId }: Props) {
                   {t("statusBar.commitAndPush")}
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => void run({ commit: false, push: true })}
+                disabled={busy || aiBusy || ahead === 0}
+                title={ahead === 0 ? t("statusBar.pushNoAhead") : undefined}
+                aria-label={t("statusBar.pushOnly")}
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-codezal-hair px-2 py-1.5 text-xs font-medium text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {t("statusBar.pushOnly")}
+              </button>
             </>
           ) : (
             <button
               type="button"
-              onClick={() => void run(true)}
+              onClick={() => void run({ commit: false, push: true })}
               disabled={busy}
               className="flex w-full items-center justify-center gap-1.5 rounded-md border border-codezal-accent/40 bg-codezal-accent/10 px-2 py-1.5 text-xs font-semibold text-codezal-accent transition-colors hover:bg-codezal-accent/20 disabled:opacity-50"
             >
@@ -211,6 +235,7 @@ export function CommitBar({ workspace, providerId, modelId }: Props) {
           )}
         </div>
       )}
+      {review.dialog}
     </div>
   )
 }

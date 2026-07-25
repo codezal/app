@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { X } from "@/lib/icons"
 import { useSettingsStore } from "@/store/settings"
 import { useT } from "@/lib/i18n/useT"
@@ -10,10 +11,12 @@ export function WebSearchTab() {
   const settings = useSettingsStore((s) => s.settings)
   const update = useSettingsStore((s) => s.update)
   const cfg = settings.webSearch
+  const [customError, setCustomError] = useState<string | null>(null)
 
   const provider = cfg?.provider ?? "duckduckgo"
   const apiKey = cfg?.apiKey ?? ""
   const needsKey = provider !== "duckduckgo"
+  const customJson = JSON.stringify(cfg?.customProviders ?? [], null, 2)
 
   function patch(p: Partial<{ provider: "tavily" | "brave" | "exa" | "duckduckgo"; apiKey: string }>) {
     void update({ webSearch: { provider, apiKey, ...p } })
@@ -69,9 +72,15 @@ export function WebSearchTab() {
         {!needsKey && (
           <p className="mt-3 text-base leading-relaxed text-codezal-mute">
             DuckDuckGo anahtar gerektirmez (best-effort). IP itibarına göre ara sıra bot
-            doğrulamasıyla bloklanabilir; sağlam sonuç için anahtarlı bir provider seç.
+            doğrulamasıyla bloklanabilir — bu durumda otomatik olarak Brave/Bing HTML
+            kaynaklarına düşer. Sağlam sonuç için anahtarlı bir provider seç.
           </p>
         )}
+
+        <p className="mt-3 text-base leading-relaxed text-codezal-mute">
+          Aramalar <code>time_range</code> (gün/hafta/ay/yıl), <code>site</code> ve{" "}
+          <code>filetype</code> filtrelerini destekler; model bunları gerektiğinde kullanır.
+        </p>
 
         {link && (
           <p className="mt-3 text-base leading-relaxed text-codezal-mute">
@@ -95,6 +104,44 @@ export function WebSearchTab() {
             <X className="h-4 w-4" />
             Clear web search config
           </button>
+        )}
+      </Section>
+
+      <Section title="Custom search providers (advanced)">
+        <p className="mb-3 text-base leading-relaxed text-codezal-mute">
+          Kod değiştirmeden kendi arama kaynaklarını ekle. Her tanım bir JSON objesi:{" "}
+          <code>searchUrl</code> (ve isteğe bağlı <code>method</code>/<code>headers</code>/
+          <code>bodyTemplate</code>) içinde <code>{"{{query}}"}</code>, <code>{"{{max_results}}"}</code>,{" "}
+          <code>{"{{api_key}}"}</code>, <code>{"{{time_range}}"}</code> placeholder'ları kullanılabilir.{" "}
+          <code>responseMapping</code> sonuç dizisinin yolunu (<code>resultsPath</code>) ve{" "}
+          <code>title</code>/<code>url</code>/<code>snippet</code> alan adlarını belirtir. Özel
+          provider'lar anahtarsız aramada ilk denenir.
+        </p>
+        <textarea
+          key={customJson}
+          spellCheck={false}
+          defaultValue={customJson}
+          onBlur={(e) => {
+            const v = e.target.value.trim()
+            if (!v || v === "[]") {
+              setCustomError(null)
+              if (cfg?.customProviders) void update({ webSearch: { provider, apiKey, customProviders: undefined } })
+              return
+            }
+            try {
+              const parsed = JSON.parse(v)
+              if (!Array.isArray(parsed)) throw new Error("must be a JSON array")
+              setCustomError(null)
+              void update({ webSearch: { provider, apiKey, customProviders: parsed } })
+            } catch (err) {
+              setCustomError(err instanceof Error ? err.message : "invalid JSON")
+            }
+          }}
+          rows={8}
+          className="w-full rounded-md border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-text outline-none focus:border-codezal-accent"
+        />
+        {customError && (
+          <p className="mt-2 text-base text-destructive">Geçersiz JSON: {customError}</p>
         )}
       </Section>
 

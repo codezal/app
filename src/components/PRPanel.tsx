@@ -29,6 +29,7 @@ import {
   listPrFiles,
   listPrConversation,
   findPrForBranch,
+  createPullRequestReview,
   GithubApiError,
   type OwnerRepo,
   type PullRequestSummary,
@@ -372,6 +373,8 @@ function PrDetailView({
   const [checks, setChecks] = useState<CombinedChecks | null>(null)
   const [files, setFiles] = useState<PrFile[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [reviewBody, setReviewBody] = useState("")
+  const [reviewBusy, setReviewBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -402,6 +405,26 @@ function PrDetailView({
     }
   }, [token, repo, num, renderError])
 
+  const submitReview = async (event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT") => {
+    if (!reviewBody.trim() && event !== "APPROVE") return
+    setReviewBusy(true)
+    try {
+      await createPullRequestReview(token, repo, num, {
+        body: reviewBody.trim() || undefined,
+        comments: [],
+        event,
+      })
+      setReviewBody("")
+      toast.success(
+        event === "APPROVE" ? "Review approved" : event === "REQUEST_CHANGES" ? "Changes requested" : "Comment posted",
+      )
+    } catch (e) {
+      toast.error(renderError(e))
+    } finally {
+      setReviewBusy(false)
+    }
+  }
+
   if (err) {
     return <div className="rounded-md border border-codezal-hair px-2 py-2 text-sm text-codezal-dim">{err}</div>
   }
@@ -410,6 +433,7 @@ function PrDetailView({
   }
 
   const canReview = currentBranch != null && currentBranch === detail.summary.headRef
+
   const onAiReview = () => {
     window.dispatchEvent(
       new CustomEvent("codezal:run-review", { detail: { args: detail.summary.baseRef } }),
@@ -459,6 +483,46 @@ function PrDetailView({
           <ExternalLink className="h-3.5 w-3.5" />
           GitHub
         </button>
+      </div>
+
+      {/* Inline review submit */}
+      <div className="flex flex-col gap-2 rounded-lg border border-codezal-hair p-2">
+        <textarea
+          value={reviewBody}
+          onChange={(e) => setReviewBody(e.target.value)}
+          placeholder={t("prPanel.reviewPlaceholder")}
+          rows={3}
+          className="w-full resize-y rounded-md border border-codezal-hair bg-codezal-input px-2 py-1.5 text-sm text-codezal-text outline-none placeholder:text-codezal-mute focus:border-codezal-strong"
+        />
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            disabled={reviewBusy}
+            onClick={() => void submitReview("APPROVE")}
+            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {t("prPanel.approve")}
+          </button>
+          <button
+            type="button"
+            disabled={reviewBusy || !reviewBody.trim()}
+            onClick={() => void submitReview("REQUEST_CHANGES")}
+            className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            <XCircle className="h-3.5 w-3.5" />
+            {t("prPanel.requestChanges")}
+          </button>
+          <button
+            type="button"
+            disabled={reviewBusy || !reviewBody.trim()}
+            onClick={() => void submitReview("COMMENT")}
+            className={cn(btnGhost, "disabled:opacity-50")}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            {t("prPanel.comment")}
+          </button>
+        </div>
       </div>
 
       <Section label={t("prPanel.reviewers")}>

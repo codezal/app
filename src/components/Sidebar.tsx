@@ -167,14 +167,20 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
     })
   }
 
-  const filtered = useMemo(
-    () =>
-      index
-        .filter((m) => !m.routineId)
-        // Proje altındaki sohbetler kullanıcının son mesajına göre (yoksa updatedAt).
-        .sort((a, b) => sessionSortKey(b) - sessionSortKey(a)),
-    [index],
-  )
+  const filtered = useMemo(() => {
+    const seen = new Set<string>()
+    return index
+      .filter((m) => {
+        if (m.routineId) return false
+        if (seen.has(m.id)) {
+          console.warn(`[Sidebar] duplicate session id skipped: ${m.id}`)
+          return false
+        }
+        seen.add(m.id)
+        return true
+      })
+      .sort((a, b) => sessionSortKey(b) - sessionSortKey(a))
+  }, [index])
 
   // Collapsed project groups — persisted so the show/hide state survives reloads.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -1511,7 +1517,17 @@ function SessionItem({
             className="flex min-w-0 flex-1 items-center gap-1 truncate text-left"
           >
             {meta.forkParentId && (
-              <GitBranch className="h-3 w-3 shrink-0 text-codezal-mute" aria-label={t("sidebar.forkAria")} />
+              <button
+                type="button"
+                title={t("sidebar.forkGoToParent")}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  useSessionsStore.getState().open(meta.forkParentId!)
+                }}
+                className="shrink-0 rounded p-0.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-accent"
+              >
+                <GitBranch className="h-3 w-3" aria-label={t("sidebar.forkAria")} />
+              </button>
             )}
             {meta.handle && (
               <span

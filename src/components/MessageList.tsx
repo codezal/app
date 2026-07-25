@@ -35,6 +35,7 @@ import {
   X,
 } from "@/lib/icons"
 import { openUrl } from "@tauri-apps/plugin-opener"
+import { openWithDefault, revealInFinder } from "@/lib/open"
 import { Markdown } from "./Markdown"
 import { EditorContextMenu, type CtxMenuItem } from "./EditorContextMenu"
 import { CodeView } from "./CodeView"
@@ -234,9 +235,16 @@ export function MessageList({
     const content = contentRef.current
     if (!scroll || !content) return
 
-    const savedTop = active?.id ? getScrollPosition(active.id) : undefined
-    if (savedTop != null && savedTop > 0) {
-      scroll.scrollTop = savedTop
+    const saved = active?.id ? getScrollPosition(active.id) : undefined
+    if (saved != null && saved.atBottom) {
+      // User was following the bottom (e.g. left while streaming) — snap back
+      // to the latest content instead of restoring a stale pixel offset.
+      scroll.scrollTop = scroll.scrollHeight
+      autoFollowRef.current = true
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing scroll-restore logic, not introduced by this change
+      setShowJumpToBottom(false)
+    } else if (saved != null && saved.top > 0) {
+      scroll.scrollTop = saved.top
       const atBottom = isNearBottom(scroll)
       autoFollowRef.current = atBottom
       setShowJumpToBottom(!atBottom)
@@ -309,7 +317,7 @@ export function MessageList({
 
     let scrollTimer: number | null = null
     const onScroll = () => {
-      if (active?.id) setScrollPosition(active.id, scroll.scrollTop)
+      if (active?.id) setScrollPosition(active.id, scroll.scrollTop, isNearBottom(scroll))
       if (scrollTimer != null) window.clearTimeout(scrollTimer)
       scrollTimer = window.setTimeout(() => {
         const atBottom = isNearBottom(scroll)
@@ -1201,6 +1209,7 @@ const FILE_EDIT_TOOLS = new Set(["edit_file", "write_file", "apply_patch"])
 
 function toolIcon(toolName: string): typeof Wrench {
   if (toolName === "read_file") return FileText
+  if (toolName === "open_path") return ExternalLink
   if (toolName === "list_dir") return Folder
   if (FILE_EDIT_TOOLS.has(toolName)) return Pencil
   if (toolName === "bash") return Terminal
@@ -1799,6 +1808,109 @@ function SearchBody({
   )
 }
 
+// Card for the `open_path` tool: shows the produced artifact with one-click
+// Open / Show-in-folder buttons. The tool itself opens nothing — these buttons
+// are the only place the OS is asked to open/reveal a path, and the user always
+// sees the path first, so it's safe.
+function OpenPathBody({
+  path,
+  label,
+  notFound,
+}: {
+  path: string
+  label?: string
+  notFound: boolean
+}) {
+  const t = useT()
+  const name = basename(path) || path
+  const [copied, setCopied] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  async function copy(e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(path)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+  async function onReveal(e: React.MouseEvent) {
+    e.stopPropagation()
+    setErr(null)
+    try {
+      await revealInFinder(path)
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : String(ex))
+    }
+  }
+  async function onOpen(e: React.MouseEvent) {
+    e.stopPropagation()
+    setErr(null)
+    try {
+      await openWithDefault(path)
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : String(ex))
+    }
+  }
+  const btn =
+    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border bg-codezal-panel-2/40",
+        notFound ? "border-destructive/40" : "border-codezal-strong",
+      )}
+    >
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-codezal-panel-2 text-codezal-accent">
+          <ExternalLink className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-codezal-text">{label ?? name}</div>
+          <div className="truncate font-mono text-xs text-codezal-mute" title={path}>
+            {path}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={copy}
+            title={t("messageList.openPathCopy" as MessageKey)}
+            className={cn(btn, "border-codezal-strong text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text")}
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            disabled={notFound}
+            onClick={onReveal}
+            className={cn(btn, "border-codezal-strong text-codezal-text hover:bg-codezal-panel-2")}
+          >
+            {t("messageList.openPathReveal" as MessageKey)}
+          </button>
+          <button
+            type="button"
+            disabled={notFound}
+            onClick={onOpen}
+            className={cn(btn, "border-codezal-accent/40 bg-codezal-accent/15 text-codezal-accent hover:bg-codezal-accent/25")}
+          >
+            {t("messageList.openPathOpen" as MessageKey)}
+          </button>
+        </div>
+      </div>
+      {notFound && (
+        <div className="border-t border-destructive/30 px-3 py-1.5 text-xs text-destructive">
+          {t("messageList.openPathNotFound" as MessageKey)}
+        </div>
+      )}
+      {err && (
+        <div className="border-t border-destructive/30 px-3 py-1.5 text-xs text-destructive">{err}</div>
+      )}
+    </div>
+  )
+}
+
 function ToolBody({
   call,
   result,
@@ -1810,6 +1922,20 @@ function ToolBody({
 }) {
   const t = useT()
   const input = call.input as Record<string, unknown>
+
+  if (call.toolName === "open_path") {
+    const notFound = !!result && /does not exist|not found/i.test(result.output)
+    return (
+      <>
+        <OpenPathBody
+          path={String(input.path ?? "")}
+          label={input.label ? String(input.label) : undefined}
+          notFound={notFound}
+        />
+        {result?.isError && <ErrorBlock text={result.output} />}
+      </>
+    )
+  }
 
   if (call.toolName === "browser_screenshot") {
     return <ScreenshotBody toolCallId={call.toolCallId} fallback={result?.output} isError={result?.isError} />
@@ -2353,6 +2479,10 @@ function describeCall(
   if (tool === "read_file") {
     return { label, name: basename(String(input.path ?? "")) }
   }
+  if (tool === "open_path") {
+    const cap = input.label ? String(input.label) : ""
+    return { label, name: cap || basename(String(input.path ?? "")) }
+  }
   if (tool === "write_file") {
     const content = String(input.content ?? "")
     if (writeHunks) {
@@ -2456,6 +2586,7 @@ function describeCall(
 // Returns locale keys for the past-tense and present-participle labels.
 const TOOL_VERB_KEYS: Record<string, { pastKey: string; ingKey: string }> = {
   read_file: { pastKey: "messageList.toolReadFile", ingKey: "messageList.toolReadFileIng" },
+  open_path: { pastKey: "messageList.toolOpenPath", ingKey: "messageList.toolOpenPathIng" },
   write_file: { pastKey: "messageList.fileCreated", ingKey: "messageList.fileCreatedIng" },
   edit_file: { pastKey: "messageList.fileChanged", ingKey: "messageList.fileChangedIng" },
   list_dir: { pastKey: "messageList.toolDir", ingKey: "messageList.toolDirIng" },

@@ -163,6 +163,6 @@ export async function extractMemories(opts: {
     settings: opts.settings,
   })
   const { system, prompt } = buildLearnPrompt(transcript, opts.existingNotes)
-  const result = await generateText({ model: llm, system, prompt })
+  const result = await generateText({ model: llm, instructions: system, prompt })
   return parseLearnResponse(result.text)
 }

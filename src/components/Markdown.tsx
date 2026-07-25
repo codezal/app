@@ -11,6 +11,7 @@ import remend from "remend"
 import { captureError } from "@/lib/report"
 import { useSessionsStore } from "@/store/sessions"
 import { uriToPath } from "@/lib/uri"
+import { isBinaryPath, openWithDefault } from "@/lib/open"
 import "katex/dist/katex.min.css"
 import "@/styles/highlight.css"
 import { CodeBlock } from "./CodeBlock"
@@ -67,13 +68,21 @@ const MD_COMPONENTS: Components = {
   pre: ({ children, ...props }) => <CodeBlock {...(props as object)}>{children}</CodeBlock>,
   a: ({ href, children, ...rest }) => {
     if (href && href.startsWith("file:")) {
+      const path = uriToPath(href)
+      // Binaries / previews the editor can't open go to the OS instead; if the
+      // opener fails (e.g. not in a Tauri webview) fall back to the editor.
+      const openInOs = isBinaryPath(path)
       return (
         <a
           {...rest}
           href={href}
           onClick={(e) => {
             e.preventDefault()
-            useSessionsStore.getState().openFile(uriToPath(href))
+            if (openInOs) {
+              void openWithDefault(path).catch(() => useSessionsStore.getState().openFile(path))
+            } else {
+              useSessionsStore.getState().openFile(path)
+            }
           }}
           className="cursor-pointer text-primary underline-offset-2 hover:underline"
         >

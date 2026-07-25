@@ -53,6 +53,7 @@ import { useSettingsStore } from "@/store/settings"
 import { ConfirmDialog } from "./ConfirmDialog"
 import { GitErrorDialog } from "./GitErrorDialog"
 import { PRPanel } from "./PRPanel"
+import { useCommitReview } from "@/lib/use-commit-review"
 import { watchWorkspace } from "@/lib/file-watcher"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
@@ -82,6 +83,7 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   const openFile = useSessionsStore((s) => s.openFile)
   const active = useSessionsStore((s) => s.active)
   const settings = useSettingsStore((s) => s.settings)
+  const review = useCommitReview(workspacePath)
 
   const refresh = useCallback(async () => {
     if (!workspacePath || view === "pr") return
@@ -176,6 +178,9 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
         (e) => e.index !== " " && e.index !== "?" && e.index !== "!",
       )
       if (!anyStaged && entries.length > 0) await gitStageAll(workspacePath)
+      // Pre-commit code review gate (opt-in). Aborts leave the staged changes
+      // untouched so the user can fix and retry.
+      if ((await review.gate("commit")) === "abort") return
       const commitMsg = message.trim()
         ? normalizeCommitAttribution(message, settings.commitAttribution !== false)
         : message
@@ -217,7 +222,11 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   const canCommit = (message.trim().length > 0 || amend) && (hasChanges || amend) && !committing
 
   // ── Sync (push / pull / fetch) ───────────────────────────────────────────────
-  const doPush = () => void run(() => gitPush(workspacePath!))
+  const doPush = () =>
+    void run(async () => {
+      if ((await review.gate("push")) === "abort") return
+      await gitPush(workspacePath!)
+    })
   const doPull = () => void run(() => gitPull(workspacePath!))
   const doFetch = () => void run(() => gitFetch(workspacePath!))
   const doSync = () =>
@@ -737,6 +746,7 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
         }}
         onClose={() => setFailure(null)}
       />
+      {review.dialog}
     </div>
   )
 }

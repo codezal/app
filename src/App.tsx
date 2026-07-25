@@ -290,7 +290,18 @@ export default function App() {
   const openZoneRef = useRef<HTMLDivElement>(null)
   const splitPaneRef = useRef<HTMLDivElement>(null)
   const dropSessionRef = useRef<(id: string) => void>(() => {})
-  const [agentPaneId, setAgentPaneId] = useState<string | null>(null)
+  // The right-hand agent transcript pane is per-session: each chat remembers
+  // its own open worker (if any). Switching chats must never leak another
+  // chat's agent into the pane, nor show "agent not found" for a worker that
+  // belongs to a different chat.
+  const [agentPaneBySession, setAgentPaneBySession] = useState<Record<string, string | null>>({})
+  const agentPaneId = activeSessionId ? (agentPaneBySession[activeSessionId] ?? null) : null
+  const setAgentPane = useCallback((sessionId: string | null, workerId: string | null) => {
+    if (!sessionId) return
+    setAgentPaneBySession((prev) =>
+      (prev[sessionId] ?? null) === workerId ? prev : { ...prev, [sessionId]: workerId },
+    )
+  }, [])
   const activeStreaming = useSessionsStore((s) =>
     s.activeId ? !!s.streamingIds[s.activeId] : false,
   )
@@ -360,9 +371,10 @@ export default function App() {
     const onPushed = () => setPanelMode("agents")
     const onOpenPane = (e: Event) => {
       const id = (e as CustomEvent<{ workerId?: string }>).detail?.workerId
-      if (!id) return
+      const sid = useSessionsStore.getState().activeId
+      if (!id || !sid) return
       changeSplit(null)
-      setAgentPaneId(id)
+      setAgentPane(sid, id)
     }
     const onPreviewNav = (e: Event) => {
       const sid = (e as CustomEvent<{ sessionId?: string }>).detail?.sessionId
@@ -376,7 +388,7 @@ export default function App() {
       window.removeEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
       window.removeEventListener("codezal:preview-navigate", onPreviewNav as EventListener)
     }
-  }, [changeSplit, setPanelMode])
+  }, [changeSplit, setPanelMode, setAgentPane])
 
   useEffect(() => {
     const onDrag = (e: Event) => {
@@ -1264,7 +1276,7 @@ export default function App() {
       changeSplit(null)
       return
     }
-    setAgentPaneId(null)
+    setAgentPane(activeSessionId, null)
     const id = useSessionsStore.getState().createDetached(
       settings.defaultProvider,
       settings.defaultModel,
@@ -1286,7 +1298,7 @@ export default function App() {
     if (cur?.workspaceReadOnly === true) {
       store.updateMetaFor(id, { workspaceReadOnly: true })
     }
-    setAgentPaneId(null)
+    setAgentPane(activeSessionId, null)
     changeSplit(id)
     try {
       await store.commitDetached(id)
@@ -1305,7 +1317,7 @@ export default function App() {
         setError(errorMessage(err))
         return
       }
-      setAgentPaneId(null)
+      setAgentPane(activeSessionId, null)
       changeSplit(id)
     })()
   }
@@ -1621,6 +1633,7 @@ export default function App() {
       })
       const result = streamText({
         model,
+        allowSystemInMessages: true,
         messages,
         ...(Object.keys(providerOptions).length > 0
           ? { providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"] }
@@ -1633,7 +1646,7 @@ export default function App() {
         }),
         onError: ({ error }) => console.error("[side-chat] stream error:", error),
       })
-      for await (const chunk of result.fullStream) {
+      for await (const chunk of result.stream) {
         if (chunk.type === "text-delta") {
           if (splitter) splitter.feed(chunk.text ?? "")
           else textBuf += chunk.text ?? ""
@@ -1826,6 +1839,33 @@ export default function App() {
             role: "system",
             content: `⏹ Goal iptal edildi: "${cur.text}"`,
           })
+          return
+        }
+        if (trimmed.toLowerCase() === "resume") {
+          const cur = useSessionsStore.getState().active?.goal
+          if (!cur) {
+            pushMessage({
+              id: createId("message"),
+              role: "system",
+              content: "Aktif goal yok.",
+            })
+            return
+          }
+          if (!cur.paused) {
+            pushMessage({
+              id: createId("message"),
+              role: "system",
+              content: `Goal zaten aktif: "${cur.text}"`,
+            })
+            return
+          }
+          useSessionsStore.getState().resumeGoal()
+          pushMessage({
+            id: createId("message"),
+            role: "system",
+            content: `▶ Goal devam ediyor: "${cur.text}"`,
+          })
+          void onSend("Continue.")
           return
         }
         if (!trimmed) {
@@ -2298,7 +2338,7 @@ export default function App() {
               {agentPaneId && (
                 <AgentTranscriptPane
                   workerId={agentPaneId}
-                  onClose={() => setAgentPaneId(null)}
+                  onClose={() => setAgentPane(activeSessionId, null)}
                 />
               )}
 

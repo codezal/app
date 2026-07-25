@@ -14,6 +14,11 @@ import { Select } from "@/components/Select"
 import { LOCALES, type Locale } from "@/lib/i18n"
 import { useT } from "@/lib/i18n/useT"
 import { Section, Row, Toggle, NumberField } from "./primitives"
+import { revealItemInDir } from "@tauri-apps/plugin-opener"
+import { confirm } from "@tauri-apps/plugin-dialog"
+import { toast } from "@/store/toast"
+import { errorMessage } from "@/lib/errors"
+import { clearErrorLog, errorLogPath, errorLogSize } from "@/lib/error-log"
 
 function LanguageSelect({
   value,
@@ -301,6 +306,36 @@ export function GeneralTab() {
           />
         </Row>
         <Row
+          label={t("settings.drawer.reviewBeforeCommitLabel")}
+          description={t("settings.drawer.reviewBeforeCommitDesc")}
+        >
+          <Toggle
+            label={t("settings.drawer.reviewBeforeCommitLabel")}
+            checked={settings.reviewBeforeCommit ?? false}
+            onChange={(v) => void update({ reviewBeforeCommit: v })}
+          />
+        </Row>
+        <Row
+          label={t("settings.drawer.reviewBeforePushLabel")}
+          description={t("settings.drawer.reviewBeforePushDesc")}
+        >
+          <Toggle
+            label={t("settings.drawer.reviewBeforePushLabel")}
+            checked={settings.reviewBeforePush ?? false}
+            onChange={(v) => void update({ reviewBeforePush: v })}
+          />
+        </Row>
+        <Row
+          label={t("settings.drawer.reviewBlockOnCriticalLabel")}
+          description={t("settings.drawer.reviewBlockOnCriticalDesc")}
+        >
+          <Toggle
+            label={t("settings.drawer.reviewBlockOnCriticalLabel")}
+            checked={settings.reviewBlockOnCritical ?? true}
+            onChange={(v) => void update({ reviewBlockOnCritical: v })}
+          />
+        </Row>
+        <Row
           label={t("settings.drawer.crashReportingLabel")}
           description={t("settings.drawer.crashReportingDesc")}
         >
@@ -310,8 +345,75 @@ export function GeneralTab() {
             onChange={(v) => void update({ crashReporting: v })}
           />
         </Row>
+        <ErrorLogRow />
       </Section>
     </div>
+  )
+}
+
+function fmtBytes(n: number): string {
+  if (n <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)))
+  const v = n / Math.pow(1024, i)
+  const rounded = v >= 10 || i === 0 ? Math.round(v).toString() : v.toFixed(1)
+  return `${rounded} ${units[i]}`
+}
+
+// Settings row for the on-device error log: shows its current size and offers
+// "show in folder" (reveal in Finder/Explorer) + "clear". Self-contained so it
+// owns its size state and refreshes after every action.
+function ErrorLogRow() {
+  const t = useT()
+  const [size, setSize] = useState<number | null>(null)
+
+  const refresh = () => {
+    void errorLogSize().then(setSize)
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  async function openLog() {
+    try {
+      await revealItemInDir(await errorLogPath())
+    } catch (e) {
+      toast.error(errorMessage(e))
+    }
+  }
+
+  async function clearLog() {
+    if (!(await confirm(t("settings.drawer.errorLogClearConfirm")))) return
+    await clearErrorLog()
+    setSize(0)
+    toast.success(t("settings.drawer.errorLogCleared"))
+  }
+
+  return (
+    <Row
+      label={t("settings.drawer.errorLogLabel")}
+      description={t("settings.drawer.errorLogDesc")}
+    >
+      <div className="flex items-center gap-2">
+        <span className="min-w-[3.5rem] text-right text-sm tabular-nums text-codezal-mute">
+          {size == null ? "…" : size === 0 ? t("settings.drawer.errorLogEmpty") : fmtBytes(size)}
+        </span>
+        <button
+          type="button"
+          onClick={openLog}
+          className="rounded-md border border-codezal px-2.5 py-1 text-sm text-codezal-text transition-colors hover:bg-codezal-panel-2"
+        >
+          {t("settings.drawer.errorLogOpen")}
+        </button>
+        <button
+          type="button"
+          onClick={clearLog}
+          className="rounded-md border border-codezal px-2.5 py-1 text-sm text-destructive transition-colors hover:bg-destructive/10"
+        >
+          {t("settings.drawer.errorLogClear")}
+        </button>
+      </div>
+    </Row>
   )
 }
 

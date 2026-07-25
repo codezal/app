@@ -3,7 +3,7 @@
 // git-ai-commit.ts: NOT an agent turn, just a direct AI SDK call on the session's
 // (small) model. Grounded in real signals so suggestions are a "dangling-work
 // launcher", not generic brainstorm.
-import { streamText, tool, stepCountIs } from "ai"
+import { streamText, tool, isStepCount } from "ai"
 import { z } from "zod"
 import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
@@ -144,16 +144,16 @@ export async function generateSuggestions(opts: {
 
   const result = streamText({
     model,
-    system: SYSTEM,
+    instructions: SYSTEM,
     prompt,
     tools,
     toolChoice: gated ? "none" : undefined,
-    stopWhen: stepCountIs(1),
+    stopWhen: isStepCount(1),
     abortSignal: AbortSignal.timeout(GEN_TIMEOUT_MS),
   })
 
   let text = ""
-  for await (const chunk of result.fullStream) {
+  for await (const chunk of result.stream) {
     if (chunk.type === "text-delta") text += chunk.text ?? ""
   }
   return parseSuggestions(text)

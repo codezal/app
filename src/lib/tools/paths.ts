@@ -31,6 +31,22 @@ function comparable(path: string, windows: boolean): string {
   return windows ? path.toLowerCase() : path
 }
 
+// Like resolveInWorkspace but WITHOUT the workspace boundary: used by tools that
+// present a file to the user (e.g. open_path) where the artifact may legitimately
+// live outside the workspace (a build output dir, ~/Downloads, …). Absolute paths
+// are normalised as-is; relative paths are joined to the workspace. The actual
+// open/reveal is always user-triggered in the UI, so allowing out-of-workspace
+// paths here does not let the model launch anything on its own.
+export function resolveAny(
+  workspace: string,
+  p: string,
+  windows = isWindows(),
+): string {
+  if (isAbsolutePath(p)) return normalize(normalizeNativeFsPath(p, windows))
+  if (!workspace) throw new WorkspaceError("Çalışma klasörü bağlı değil")
+  return normalize(normalizeNativeFsPath(workspace + "/" + p, windows))
+}
+
 export function resolveInWorkspace(
   workspace: string,
   rel: string,

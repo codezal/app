@@ -1,6 +1,6 @@
 // transient API retry ve goal sentinel-loop.
 //
-import { streamText, generateText, stepCountIs, smoothStream, type ModelMessage } from "ai"
+import { streamText, generateText, isStepCount, smoothStream, type ModelMessage } from "ai"
 import { pendingScreenshots } from "@/lib/browser"
 import type { SendOverride } from "@/lib/stream/types"
 import {
@@ -28,6 +28,7 @@ import { detectStopReason } from "@/lib/stream/stop-reason"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { modelDetail, resolveContextCap, catalogPricing, modelAcceptsImages } from "@/lib/providers-catalog"
 import { resolveLocalLlm } from "@/lib/local-llm"
+import { logError } from "@/lib/error-log"
 import { useLocalRuntimeStore } from "@/store/local-runtime"
 import { lastToolBeat } from "@/lib/tool-heartbeat"
 import { applyModelToolPolicy, buildAllTools, deferredToolNames, makeToolSearchTool, resetDoomLoop, TOOL_SEARCH_NAME } from "@/lib/tools"
@@ -470,6 +471,7 @@ export function makeRunStream(deps: RunStreamDeps) {
 
       const result = streamText({
         model,
+        allowSystemInMessages: true,
         messages: outboundMessages,
         // Local models can't reliably drive the multi-step agent loop (a 7B
         // spins on junk/empty tool steps), so run them as plain single-turn
@@ -533,7 +535,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         // Reasoning models need the full output window for thinking + answer;
         // only cap output (OpenCode-style 32k) when reasoning is off.
         ...(reasoningActive ? {} : { maxOutputTokens: maxOutputTokens(outputLimit) }),
-        stopWhen: stepCountIs(localRuntimeProvider ? (localAgent ? 12 : 1) : 80),
+        stopWhen: isStepCount(localRuntimeProvider ? (localAgent ? 12 : 1) : 80),
         abortSignal: stallController.signal,
         experimental_transform: smoothStream({
           delayInMs: 3,
@@ -564,6 +566,11 @@ export function makeRunStream(deps: RunStreamDeps) {
       // if no chunk arrives within this window, abort and let the retry loop
       // open a fresh connection.
       const POST_WAKE_STALL_MS = 30_000
+      // Background throttling (macOS App Nap / browser-style background tab
+      // throttling) coalesces timers to roughly once a minute, so a gap just
+      // above the check interval is NOT proof of sleep. Require a gap well
+      // beyond typical throttling before declaring a wake event.
+      const WAKE_DETECT_MS = 90_000
       let lastChunkAt = Date.now()
       let lastTickAt = Date.now()
       let postWake = false
@@ -575,9 +582,10 @@ export function makeRunStream(deps: RunStreamDeps) {
         const tickGap = now - lastTickAt
         lastTickAt = now
 
-        // Sleep / wake detection: a gap much larger than the check interval
-        // means the JS event loop was suspended (system sleep / hibernate).
-        if (tickGap > STALL_CHECK_MS * 4) {
+        // Sleep / wake detection: a gap far beyond normal background timer
+        // throttling means the JS event loop was suspended (system sleep /
+        // hibernate) rather than the app merely being backgrounded.
+        if (tickGap > WAKE_DETECT_MS) {
           // Reset the stall timer so we don't abort on stale timestamps, but
           // switch to a short post-wake timeout — the connection is likely
           // dead and we want to retry quickly rather than wait the full
@@ -605,7 +613,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         }
       }, STALL_CHECK_MS)
       let finalFinishReason: string | undefined
-      for await (const chunk of result.fullStream) {
+      for await (const chunk of result.stream) {
         lastChunkAt = Date.now()
         postWake = false // connection is alive — leave post-wake mode
         switch (chunk.type) {
@@ -678,6 +686,16 @@ export function makeRunStream(deps: RunStreamDeps) {
               output: errorMessage(chunk.error),
               isError: true,
             })
+            // Main-flow tool failure (execute throw / repair-fail invalid arg).
+            // Unlike worker tool-results we DO have the error text here, so the
+            // log captures the real message + stack + tool + session.
+            void logError({
+              source: `tool-error:${chunk.toolName}`,
+              message: errorMessage(chunk.error),
+              name: chunk.error instanceof Error ? chunk.error.name : undefined,
+              stack: chunk.error instanceof Error ? chunk.error.stack : undefined,
+              context: { sessionId: sid, tool: chunk.toolName, toolCallId: chunk.toolCallId },
+            })
             syncFlush()
             break
           case "error": {
@@ -711,7 +729,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       let finalMessages = cleanMessages
 
       // Empty-final guard: if the run produced no assistant text (it halted on a
-      // tool step at the stepCountIs cap), force one no-tools summarization so the
+      // tool step at the isStepCount cap), force one no-tools summarization so the
       // turn never ends blank. Mirrors the spawn_agent fallback / OpenCode's
       // max-steps reminder. Only runs in the rare empty case.
       if (!collapseText(parts).trim()) {
@@ -730,6 +748,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           }
           const wrap = await generateText({
             model,
+            allowSystemInMessages: true,
             messages: [
               ...summaryInput,
               { role: "user", content: "Summarize what you did and the result as your final answer." },
@@ -1055,9 +1074,23 @@ export function makeRunStream(deps: RunStreamDeps) {
       return
     }
     if (!streamSucceeded) {
-      clearGoalSid()
-      pushGoalSystem(`⛔ Goal hata sonrası durduruldu: "${goal.text}"`)
-      fireTurnEnd("finish")
+      // Transient errors (rate-limit, network, 5xx, timeout) → pause the goal
+      // so the user can resume later instead of losing progress.
+      const transient =
+        /rate.?limit|429|too many requests|network|timeout|timed?.?out|ECONNRESET|ECONNREFUSED|socket hang up|5\d{2}\s|overloaded|capacity|temporarily unavailable/i.test(
+          retryMessage,
+        ) || streamStalled
+      if (transient) {
+        useSessionsStore.getState().pauseGoalFor(sid)
+        pushGoalSystem(
+          `⏸ Goal geçici hata nedeniyle duraklatıldı: "${goal.text}" — devam etmek için /goal resume`,
+        )
+        fireTurnEnd("goal_paused_error")
+      } else {
+        clearGoalSid()
+        pushGoalSystem(`⛔ Goal hata sonrası durduruldu: "${goal.text}"`)
+        fireTurnEnd("finish")
+      }
       return
     }
 

@@ -9,7 +9,7 @@ import { parseTurnDiffUri } from "@/lib/turn-diff-uri"
 import { DiffFileHeader, DiffView } from "./DiffView"
 import { CodeView } from "./CodeView"
 import { useT } from "@/lib/i18n/useT"
-import { File, Undo2, X } from "@/lib/icons"
+import { ChevronsDownUp, ChevronsUpDown, File, Undo2, X } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { splitHunks } from "@/lib/hunk-revert"
 import type { DiffLine } from "@/lib/diff"
@@ -30,6 +30,8 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
   const revertToBeforeMessage = useSessionsStore((s) => s.revertToBeforeMessage)
   const revertTurnFile = useSessionsStore((s) => s.revertTurnFile)
   const [reverted, setReverted] = useState<ReadonlySet<string>>(() => new Set())
+  const [diffForceKey, setDiffForceKey] = useState(0)
+  const [diffForceOpen, setDiffForceOpen] = useState<boolean | undefined>(undefined)
   const edits = useMemo(() => aggregateTurnEdits(message?.parts, writeOld), [message?.parts, writeOld])
   const perFile = useMemo(
     () =>
@@ -78,6 +80,26 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
           {shownRemoved > 0 && <span className="text-codezal-diff-del">-{shownRemoved}</span>}
         </span>
         <div className="flex-1" />
+        {shown.length > 1 && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => { setDiffForceOpen(true); setDiffForceKey((k) => k + 1) }}
+              title={t("messageList.diffExpandAll")}
+              className="rounded-md p-1.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
+            >
+              <ChevronsUpDown className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => { setDiffForceOpen(false); setDiffForceKey((k) => k + 1) }}
+              title={t("messageList.diffCollapseAll")}
+              className="rounded-md p-1.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
+            >
+              <ChevronsDownUp className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         <TurnReviewActions workspacePath={workspacePath} suggestedTitle={sessionTitle} />
         {canRevert && (
           <button
@@ -139,6 +161,8 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
                       canRevert && !isRename ? () => void handleRevertFile(file.path) : undefined
                     }
                     revertTitle={t("messageList.fileRevert")}
+                    forceOpen={diffForceOpen}
+                    forceKey={diffForceKey}
                   />
                 )}
               </div>

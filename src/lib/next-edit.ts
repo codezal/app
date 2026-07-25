@@ -7,7 +7,7 @@
 // per-keystroke suggestion is cheap and quick. Opt-in via localStorage (no
 // settings-schema dependency); default OFF (it spends tokens as you type).
 import * as monaco from "monaco-editor"
-import { streamText, tool, stepCountIs } from "ai"
+import { streamText, tool, isStepCount } from "ai"
 import { z } from "zod"
 import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
@@ -83,18 +83,18 @@ export async function predictNextEdit(args: NextEditArgs): Promise<string> {
     : undefined
   const result = streamText({
     model,
-    system: SYSTEM,
+    instructions: SYSTEM,
     prompt:
       `Language: ${args.language || "plain text"}\n\n` +
       `<prefix>\n${prefix}\n</prefix>\n\n` +
       `<suffix>\n${suffix}\n</suffix>`,
     tools,
     toolChoice: gated ? "none" : undefined,
-    stopWhen: stepCountIs(1),
+    stopWhen: isStepCount(1),
     abortSignal: args.signal,
   })
   let text = ""
-  for await (const chunk of result.fullStream) {
+  for await (const chunk of result.stream) {
     if (chunk.type === "text-delta") text += chunk.text ?? ""
   }
   return stripFence(text)

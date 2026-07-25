@@ -82,16 +82,75 @@ export type ParsedError =
   | { type: "context_overflow"; message: string }
   | { type: "api_error"; message: string; statusCode?: number; isRetryable: boolean; retryAfterMs?: number }
 
+// Provider error bodies use wildly different field names for the human-readable
+// reason: OpenAI/Anthropic nest it under `error.message`, Alibaba/DashScope often
+// return PascalCase `Code`/`Message`, others use `error_message`, `detail`, `msg`.
+// Matched case-insensitively so a bare "Bad Request" statusText never hides the
+// real reason from the banner.
+const BODY_MSG_KEYS = [
+  "message",
+  "error_message",
+  "errmsg",
+  "err_msg",
+  "detail",
+  "msg",
+  "reason",
+  "description",
+]
+
+function pickString(obj: Record<string, unknown>): string | undefined {
+  const lower: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) lower[k.toLowerCase()] = v
+  for (const key of BODY_MSG_KEYS) {
+    const v = lower[key]
+    if (typeof v === "string" && v.trim()) return v.trim()
+  }
+  return undefined
+}
+
+function extractBodyMessage(body: Record<string, unknown>): string | undefined {
+  const err = body.error
+  if (typeof err === "string" && err.trim()) return err.trim()
+  if (err && typeof err === "object" && !Array.isArray(err)) {
+    const nested = pickString(err as Record<string, unknown>)
+    if (nested) return nested
+  }
+  // Also scan a nested `error` one more level for `{ error: { error: { message } } }`.
+  if (err && typeof err === "object" && !Array.isArray(err)) {
+    const inner = (err as Record<string, unknown>).error
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      const nested = pickString(inner as Record<string, unknown>)
+      if (nested) return nested
+    }
+  }
+  return pickString(body)
+}
+
+function cap(s: string, n = 500): string {
+  const oneLine = s.replace(/\s+/g, " ").trim()
+  return oneLine.length > n ? `${oneLine.slice(0, n).trimEnd()}…` : oneLine
+}
+
 // Extract a human-readable message from an APICallError, preferring the parsed
-// response body's error field over the raw status text.
+// response body's error field over the raw status text. Falls back to the raw
+// body (plain text / HTML / unknown JSON) and finally to the HTTP status code so
+// the banner always shows more than a bare statusText like "Bad Request".
 function readableMessage(e: APICallError): string {
   const msg = e.message
-  if (msg === "" && e.responseBody) return e.responseBody
-  const body = parseJson(e.responseBody)
-  if (body) {
-    const err = body.error as { message?: string } | string | undefined
-    const errMsg = typeof err === "string" ? err : err?.message ?? (body.message as string | undefined)
-    if (errMsg && typeof errMsg === "string" && msg && !msg.includes(errMsg)) return `${msg}: ${errMsg}`
+  const raw = typeof e.responseBody === "string" ? e.responseBody : undefined
+  if (msg === "" && raw) return raw
+  const body = parseJson(raw)
+  let detail = body ? extractBodyMessage(body) : undefined
+  // JSON parse failed or the body is plain text/HTML: use the raw body itself so
+  // the real provider reason still reaches the banner.
+  if (!detail && raw && raw.trim() && raw.trim() !== msg) detail = cap(raw)
+  if (detail) {
+    if (!msg) return detail
+    if (!msg.includes(detail)) return `${msg}: ${detail}`
+  }
+  // No body at all — surface the HTTP code so the banner isn't a bare statusText.
+  if (msg && e.statusCode != null && !/(^|\D)\d{3}(\D|$)/.test(msg)) {
+    return `${msg} (HTTP ${e.statusCode})`
   }
   return msg || "Unknown error"
 }
@@ -127,6 +186,14 @@ export function parseStreamError(input: unknown): ParsedError | undefined {
   if (isOverflow(msg)) return { type: "context_overflow", message: msg }
   if (isTransientNetworkError(msg)) {
     return { type: "api_error", message: msg, isRetryable: true }
+  }
+  // Mid-stream moderation rejections (e.g. Qwen / Alibaba DashScope
+  // "Output data may contain inappropriate content.", code DataInspectionFailed)
+  // often arrive as a plain error chunk rather than an APICallError, so classify
+  // them here too — otherwise the raw provider string leaks to the banner and the
+  // user's message is not restored to the composer. Not retryable.
+  if (isContentFilterMessage(msg)) {
+    return { type: "api_error", message: msg, isRetryable: false }
   }
   return undefined
 }
@@ -172,12 +239,24 @@ export function isRetryableError(parsed: ParsedError | undefined): boolean {
 }
 
 const CONTENT_FILTER_PATTERN =
-  /content[_ ]?(policy|filter|management)|moderation|safety (system|filter)|prohibited_content|responsible ai|content_filter|violat\w* (our|the|content|usage) polic/i
+  /content[_ ]?(policy|filter|management)|moderation|safety (system|filter)|prohibited_content|responsible ai|content_filter|violat\w* (our|the|content|usage) polic|inappropriate (content|material|information)|data[_ ]?inspection|sensitive content|risk[_ ]?control/i
+
+// True when a raw message string looks like a provider content-moderation /
+// safety rejection (e.g. Alibaba DashScope "Output data may contain
+// inappropriate content." / code DataInspectionFailed). Used both for parsed
+// errors and for mid-stream error chunks that never become an APICallError.
+export function isContentFilterMessage(message: string): boolean {
+  return CONTENT_FILTER_PATTERN.test(message)
+}
+
 export function isContentFilterError(parsed: ParsedError | undefined): boolean {
   if (!parsed || parsed.type !== "api_error") return false
   const status = parsed.statusCode
-  if (status !== undefined && status !== 400 && status !== 403) return false
-  return CONTENT_FILTER_PATTERN.test(parsed.message)
+  // A content-filter rejection is a client-side policy decision, never a 5xx
+  // server failure (those are retryable). Allow any non-5xx status — including
+  // undefined for mid-stream chunks — so the pattern match decides.
+  if (status !== undefined && status >= 500) return false
+  return isContentFilterMessage(parsed.message)
 }
 
 export function retryDelayMs(attempt: number, retryAfterMs?: number): number {
