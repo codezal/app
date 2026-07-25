@@ -271,6 +271,7 @@ export async function runNativeAgentStream(args: RunNativeAgentStreamArgs): Prom
       content,
       pending: false,
       modelMsgCount: content.trim() ? 1 : 0,
+      endedAt: Date.now(),
     })
     useSessionsStore.getState().updateMetaFor(sid, {
       nativeAgent: {
@@ -291,6 +292,7 @@ export async function runNativeAgentStream(args: RunNativeAgentStreamArgs): Prom
       content: partialText || errorMessage(error),
       pending: false,
       modelMsgCount: partialText.trim() ? 1 : 0,
+      endedAt: Date.now(),
     })
     if (partialText.trim()) {
       useSessionsStore.getState().replaceModelMessagesFor(sid, [

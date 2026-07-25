@@ -1,4 +1,4 @@
-import { createElement, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createElement, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import hljs from "highlight.js"
 import "@/styles/highlight.css"
@@ -54,7 +54,10 @@ import { aggregateTurnEdits, type TurnEdits, type TurnEditFile } from "@/lib/tur
 import { insertToFocusedComposer } from "@/lib/composer-drop"
 import { getScrollPosition, setScrollPosition } from "@/lib/scroll-memory"
 import { extractTimestamp } from "@/lib/id"
+import { formatDurationMs } from "@/lib/format"
+import { buildBlocks, splitWorkLog, type Block } from "@/lib/work-log"
 import { basename } from "@/lib/workspace"
+import { resolveAny } from "@/lib/tools/paths"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { t as tStatic } from "@/lib/i18n"
@@ -431,6 +434,7 @@ export function MessageList({
                 m={m}
                 streaming={!!streaming && i === shown.length - 1 && m.role === "assistant"}
                 active={hoveredId === m.id}
+                workspace={active?.workspacePath}
                 onHover={setHoveredId}
                 onRegenerate={
                   m.role === "assistant" && prevUserId && onRegenerate
@@ -672,6 +676,7 @@ type BubbleProps = {
   m: Message
   streaming: boolean
   active: boolean
+  workspace?: string
   onHover: (id: string | null) => void
   onRegenerate?: () => void
   onEditUser?: (newText: string) => void
@@ -689,6 +694,7 @@ const Bubble = memo(BubbleImpl, (prev, next) => {
     prev.m === next.m &&
     prev.streaming === next.streaming &&
     prev.active === next.active &&
+    prev.workspace === next.workspace &&
     !!prev.onRegenerate === !!next.onRegenerate &&
     !!prev.onEditUser === !!next.onEditUser &&
     !!prev.onBranch === !!next.onBranch &&
@@ -704,6 +710,7 @@ function BubbleImpl({
   m,
   streaming,
   active,
+  workspace,
   onHover,
   onRegenerate,
   onEditUser,
@@ -852,7 +859,14 @@ function BubbleImpl({
         ) : isUser ? (
           <UserContent content={m.content} images={m.images} files={m.files} pdfs={m.pdfs} />
         ) : m.parts && m.parts.length > 0 ? (
-          <PartsRender parts={m.parts} onOpenAgentPanel={onOpenAgentPanel} streaming={streaming} />
+          <PartsRender
+            parts={m.parts}
+            onOpenAgentPanel={onOpenAgentPanel}
+            streaming={streaming}
+            workspace={workspace}
+            startedAt={msgTime || undefined}
+            endedAt={m.endedAt}
+          />
         ) : (
           <Markdown content={m.content} streaming={streaming} className="text-md leading-[1.7]" />
         )}
@@ -1239,11 +1253,6 @@ const CODE_TOOLS = new Set([
   "code_impact",
 ])
 
-function isHiddenToolRow(toolName: string): boolean {
-  if (toolName === "repo_overview" || toolName === "bash_status") return true
-  return false
-}
-
 function contextDescribe(
   call: Extract<Part, { type: "tool-call" }>,
 ): { label: string; name: string } {
@@ -1264,45 +1273,25 @@ function contextDescribe(
   return { label: call.toolName, name: "" }
 }
 
-function PartsRender({
-  parts,
+type ToolResultMap = Map<string, Extract<Part, { type: "tool-result" }>>
+
+function Blocks({
+  blocks,
+  resultMap,
   onOpenAgentPanel,
   streaming,
+  workspace,
+  lastTextKey,
 }: {
-  parts: Part[]
+  blocks: Block[]
+  resultMap: ToolResultMap
   onOpenAgentPanel?: () => void
   streaming?: boolean
+  workspace?: string
+  lastTextKey?: string
 }) {
-  const resultMap = new Map<string, Part & { type: "tool-result" }>()
-  for (const p of parts) {
-    if (p.type === "tool-result") resultMap.set(p.toolCallId, p)
-  }
-
-  type ToolCallPart = Extract<Part, { type: "tool-call" }>
-  type Block =
-    | { kind: "text"; key: string; text: string }
-    | { kind: "tools"; key: string; calls: ToolCallPart[] }
-
-  const blocks: Block[] = []
-  parts.forEach((p, i) => {
-    if (p.type === "text") {
-      if (!p.text.trim()) return
-      blocks.push({ kind: "text", key: `t${i}`, text: p.text })
-    } else if (p.type === "tool-call") {
-      if (isHiddenToolRow(p.toolName)) return
-      const last = blocks[blocks.length - 1]
-      if (last && last.kind === "tools") {
-        last.calls.push(p)
-        return
-      }
-      blocks.push({ kind: "tools", key: `g${i}`, calls: [p] })
-    }
-  })
-
-  const lastTextKey = [...blocks].reverse().find((b) => b.kind === "text")?.key
-
   return (
-    <div className="space-y-1">
+    <>
       {blocks.map((b) => {
         if (b.kind === "text") {
           return (
@@ -1324,6 +1313,7 @@ function PartsRender({
               result={resultMap.get(c.toolCallId)}
               onOpenAgentPanel={onOpenAgentPanel}
               streaming={streaming}
+              workspace={workspace}
             />
           )
         }
@@ -1334,9 +1324,125 @@ function PartsRender({
             resultMap={resultMap}
             onOpenAgentPanel={onOpenAgentPanel}
             streaming={streaming}
+            workspace={workspace}
           />
         )
       })}
+    </>
+  )
+}
+
+// Collapsed "worked for 4m 24s" row shown once a run finishes (Codex-style).
+// Expands to reveal the intermediate narration + tool calls that produced the
+// final summary, which stays visible below.
+function WorkLogGroup({
+  durationMs,
+  children,
+}: {
+  durationMs?: number
+  children: ReactNode
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const label =
+    durationMs != null
+      ? t("messageList.workedFor", {
+          duration: formatDurationMs(durationMs).replace(/\.0s$/, "s"),
+        })
+      : t("messageList.worked")
+  return (
+    <div className="my-2 overflow-hidden rounded-xl border border-codezal-hair bg-[hsl(var(--codezal-panel)_/_0.4)] text-md">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="group flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-codezal-chip/40"
+      >
+        <Check className="h-3.5 w-3.5 shrink-0 text-codezal-ok" aria-hidden />
+        <span className="min-w-0 truncate font-medium text-codezal-text">{label}</span>
+        <span className="flex-1" />
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-codezal-dim transition-transform",
+            open && "rotate-90",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="border-t border-codezal-hair bg-[hsl(var(--codezal-panel-2)_/_0.45)] px-2 py-1.5">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PartsRender({
+  parts,
+  onOpenAgentPanel,
+  streaming,
+  workspace,
+  startedAt,
+  endedAt,
+}: {
+  parts: Part[]
+  onOpenAgentPanel?: () => void
+  streaming?: boolean
+  workspace?: string
+  startedAt?: number
+  endedAt?: number
+}) {
+  const resultMap: ToolResultMap = new Map()
+  for (const p of parts) {
+    if (p.type === "tool-result") resultMap.set(p.toolCallId, p)
+  }
+
+  const blocks = buildBlocks(parts)
+  const split = splitWorkLog(blocks, !!streaming)
+
+  if (split) {
+    const durationMs =
+      endedAt != null && startedAt != null && startedAt > 0
+        ? Math.max(0, endedAt - startedAt)
+        : undefined
+    return (
+      <div className="space-y-1">
+        <WorkLogGroup durationMs={durationMs}>
+          <Blocks
+            blocks={split.worklog}
+            resultMap={resultMap}
+            onOpenAgentPanel={onOpenAgentPanel}
+            workspace={workspace}
+          />
+        </WorkLogGroup>
+        <Blocks
+          blocks={split.artifacts}
+          resultMap={resultMap}
+          onOpenAgentPanel={onOpenAgentPanel}
+          workspace={workspace}
+        />
+        <Blocks
+          blocks={split.tail}
+          resultMap={resultMap}
+          onOpenAgentPanel={onOpenAgentPanel}
+          workspace={workspace}
+        />
+      </div>
+    )
+  }
+
+  const lastTextKey = [...blocks].reverse().find((b) => b.kind === "text")?.key
+
+  return (
+    <div className="space-y-1">
+      <Blocks
+        blocks={blocks}
+        resultMap={resultMap}
+        onOpenAgentPanel={onOpenAgentPanel}
+        streaming={streaming}
+        workspace={workspace}
+        lastTextKey={lastTextKey}
+      />
     </div>
   )
 }
@@ -1346,11 +1452,13 @@ function ToolGroup({
   resultMap,
   onOpenAgentPanel,
   streaming,
+  workspace,
 }: {
   calls: Extract<Part, { type: "tool-call" }>[]
   resultMap: Map<string, Extract<Part, { type: "tool-result" }>>
   onOpenAgentPanel?: () => void
   streaming?: boolean
+  workspace?: string
 }) {
   const t = useT()
   const errorCount = calls.reduce((n, c) => {
@@ -1451,6 +1559,7 @@ function ToolGroup({
               onOpenAgentPanel={onOpenAgentPanel}
               grouped
               streaming={streaming}
+              workspace={workspace}
             />
           ))}
         </div>
@@ -1494,15 +1603,19 @@ function ToolRow({
   onOpenAgentPanel,
   grouped,
   streaming,
+  workspace,
 }: {
   call: Extract<Part, { type: "tool-call" }>
   result?: Extract<Part, { type: "tool-result" }>
   onOpenAgentPanel?: () => void
   grouped?: boolean
   streaming?: boolean
+  workspace?: string
 }) {
   const t = useT()
-  const [open, setOpen] = useState(false)
+  // open_path rows start expanded so the artifact card (Open / Show in folder)
+  // is visible without a second click.
+  const [open, setOpen] = useState(call.toolName === "open_path")
   const status = result ? (result.isError ? "error" : "done") : "running"
   const writeOld = useWriteDiffs((s) => s.byCallId[call.toolCallId])
   const writeContent = String((call.input as Record<string, unknown> | undefined)?.content ?? "")
@@ -1617,7 +1730,7 @@ function ToolRow({
       </button>
       {!isAgent && !noExpand && open && (
         <div className="mt-1 space-y-2.5">
-          <ToolBody call={call} result={result} writeHunks={writeHunks} />
+          <ToolBody call={call} result={result} writeHunks={writeHunks} workspace={workspace} />
         </div>
       )}
     </div>
@@ -1915,20 +2028,33 @@ function ToolBody({
   call,
   result,
   writeHunks,
+  workspace,
 }: {
   call: Extract<Part, { type: "tool-call" }>
   result?: Extract<Part, { type: "tool-result" }>
   writeHunks?: DiffLine[] | null
+  workspace?: string
 }) {
   const t = useT()
   const input = call.input as Record<string, unknown>
 
   if (call.toolName === "open_path") {
     const notFound = !!result && /does not exist|not found/i.test(result.output)
+    // The tool verifies the workspace-resolved absolute path, but the model may
+    // pass a workspace-relative one. The card's Open / Reveal buttons call the
+    // OS opener with this string, and the app's CWD is not the workspace — so
+    // resolve it the same way the tool did, or the buttons fail with ENOENT.
+    const rawPath = String(input.path ?? "")
+    let cardPath = rawPath
+    try {
+      cardPath = resolveAny(workspace ?? "", rawPath)
+    } catch {
+      // No workspace attached — fall back to the raw input.
+    }
     return (
       <>
         <OpenPathBody
-          path={String(input.path ?? "")}
+          path={cardPath}
           label={input.label ? String(input.label) : undefined}
           notFound={notFound}
         />

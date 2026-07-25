@@ -66,6 +66,10 @@ export type Message = {
   files?: MessageFile[]
   pdfs?: MessagePdf[]
   pending?: boolean
+  // Stream end timestamp (ms) — paired with the id-embedded start timestamp to
+  // render the Codex-style "worked for 4m 24s" collapsed work log. Absent on
+  // messages written before this field existed.
+  endedAt?: number
   localStats?: { tokPerSec: number; tokens: number; ttftMs: number }
   meta?: boolean
   compacting?: boolean

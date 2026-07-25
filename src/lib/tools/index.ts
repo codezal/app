@@ -391,7 +391,9 @@ async function gate(
   const mode = useSessionsStore.getState().sessions[ownerSessionId]?.mode ?? "build"
   if (mode === "plan" && PLAN_BLOCKED.has(tool)) {
     throw new Error(
-      `Cannot call '${tool}' in plan mode: this mode is read-only (read_file, list_dir, grep, webfetch, question). Switch to build mode (⌘M) or suggest an alternative approach.`,
+      `'${tool}' is blocked because this session is in plan mode (read-only) — this is a session mode, not a permission level. ` +
+        `Allowed here: read_file, list_dir, glob, grep, webfetch, question, and the Code Map tools. ` +
+        `Do not retry '${tool}'. Finish your analysis, then call propose_build with the full plan so the user can approve and switch to build mode (or they press ⌘M).`,
     )
   }
   // Effective hooks = global + active workspace's project config (warmed by the

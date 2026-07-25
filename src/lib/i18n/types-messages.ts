@@ -398,6 +398,11 @@ export type Messages = {
     ctxRead?: string
     ctxSearch?: string
     ctxList?: string
+    // Collapsed work-log row shown once a run finishes (Codex-style). workedFor
+    // takes {duration} ("Worked for 4m 24s"); worked is the no-duration
+    // fallback for messages written before endedAt existed.
+    workedFor?: string
+    worked?: string
     planSummary?: string
     planReason?: string
     openInBrowser?: string
@@ -2029,6 +2034,7 @@ export type Messages = {
     // Stream stall / sleep-wake notifications. Optional — EN fallback.
     streamRetry?: string
     streamStalledFailed?: string
+    streamTruncatedFailed?: string
     streamWakeReconnect?: string
     streamFailedBg?: string
   }

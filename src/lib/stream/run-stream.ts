@@ -80,7 +80,10 @@ import { runNativeAgentStream } from "@/lib/agent-providers/native-stream"
 const MAX_API_RETRIES = 5
 
 export interface RunStreamDeps {
-  setError: (e: string | null) => void
+  // sid-aware: a background/queued stream's error must land on its own session's
+  // banner, never leak into whichever session the user is currently viewing.
+  // `null` clears the banner only when it belongs to `sid`.
+  setError: (e: string | null, sid: string) => void
   recordAuxUsage: (
     sid: string,
     usage: Awaited<ReturnType<typeof generateText>>["usage"] | undefined,
@@ -152,7 +155,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       const note = tStatic("app.spendCapReached", { cap: spendCap.toFixed(2) })
       useSessionsStore
         .getState()
-        .patchMessageFor(sid, asstMsgId, { pending: false, content: note, parts: [{ type: "text", text: note }] })
+        .patchMessageFor(sid, asstMsgId, { pending: false, content: note, parts: [{ type: "text", text: note }], endedAt: Date.now() })
       return
     }
     // Per-turn override (slash command `model:` frontmatter); session stays unchanged.
@@ -244,6 +247,7 @@ export function makeRunStream(deps: RunStreamDeps) {
     let retryDelay = 0
     let retryMessage = ""
     let streamStalled = false
+    let streamTruncated = false
     let stallWatchdog: ReturnType<typeof setInterval> | undefined
 
     const effCtxWindow = resolveContextCap(
@@ -721,6 +725,20 @@ export function makeRunStream(deps: RunStreamDeps) {
       flushText()
       flushReasoning()
 
+      // Clean-close truncation: the provider can drop the SSE connection
+      // mid-turn without an error event or a terminal finish chunk. The SDK
+      // then reports a normal end (finishReason undefined/"unknown"), which
+      // would leave the message half-written with no error and no retry.
+      // Treat it like a stall and let the catch below schedule a retry.
+      if (
+        !ac.signal.aborted &&
+        !streamStalled &&
+        (finalFinishReason === undefined || finalFinishReason === "unknown")
+      ) {
+        streamTruncated = true
+        throw new Error("stream ended without a terminal finish — connection dropped mid-turn")
+      }
+
       // kaybediyordu. Tam history'yi replace ile yaz.
       const resp = await result.response
       const cleanMessages = stripVisibleToolProtocolMessages(
@@ -776,6 +794,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         pending: false,
         modelMsgCount: finalMessages.length,
         stopReason,
+        endedAt: Date.now(),
       })
 
       const updatedSnap = useSessionsStore.getState().sessions[sid]
@@ -834,7 +853,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       }
     } catch (e) {
       if (isCliAgentProvider(provider)) {
-        if (!ac.signal.aborted) deps.setError(errorMessage(e))
+        if (!ac.signal.aborted) deps.setError(errorMessage(e), sid)
       } else {
       cancelRaf()
       thinkSplitter?.flush()
@@ -851,6 +870,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         content: partialText,
         pending: false,
         modelMsgCount: partial.length,
+        endedAt: Date.now(),
       })
       await useSessionsStore.getState().persistSession(sid).catch(() => {})
       if (streamStalled) {
@@ -859,7 +879,15 @@ export function makeRunStream(deps: RunStreamDeps) {
           retryMessage = tStatic("toast.streamStalledFailed")
           retryPending = true
         } else {
-          deps.setError(tStatic("toast.streamStalledFailed"))
+          deps.setError(tStatic("toast.streamStalledFailed"), sid)
+        }
+      } else if (streamTruncated) {
+        if (apiRetryCount < MAX_API_RETRIES) {
+          retryDelay = stallRetryDelayMs(apiRetryCount + 1)
+          retryMessage = tStatic("toast.streamTruncatedFailed")
+          retryPending = true
+        } else {
+          deps.setError(tStatic("toast.streamTruncatedFailed"), sid)
         }
       } else if (!ac.signal.aborted) {
         const parsed = parseStreamError(e)
@@ -881,7 +909,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           const msgs = useSessionsStore.getState().sessions[sid]?.messages ?? []
           const lastUser = [...msgs].reverse().find((m) => m.role === "user" && !m.meta)
           if (lastUser?.content) insertToFocusedComposer(lastUser.content)
-          deps.setError(tStatic("errorBanner.contentFiltered"))
+          deps.setError(tStatic("errorBanner.contentFiltered"), sid)
         } else {
           const base = parsed?.message ?? errorMessage(e)
           const ra = parsed?.type === "api_error" ? parsed.retryAfterMs : undefined
@@ -891,6 +919,7 @@ export function makeRunStream(deps: RunStreamDeps) {
                   time: new Date(Date.now() + ra).toLocaleTimeString(),
                 })}`
               : base,
+            sid,
           )
         }
       }
@@ -905,7 +934,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         const title = useSessionsStore.getState().sessions[sid]?.title ?? "Sohbet"
         if (streamSucceeded) {
           toast.success(`"${title}" tamamlandı`)
-        } else if (streamStalled) {
+        } else if (streamStalled || streamTruncated) {
           toast.error(tStatic("toast.streamFailedBg", { title }))
         }
       }
@@ -966,7 +995,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           pending: true,
           modelMsgCount: 0,
         })
-        deps.setError(null)
+        deps.setError(null, sid)
         useSessionsStore.getState().setStreamingFor(sid, false)
         await runStream(sid, asstMsgId, retryHistory, override, retryCount + 1)
       } else {
@@ -978,6 +1007,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           effCtx && effCtx < settingCtx
             ? tStatic("app.localCtxTooSmall", { effective: String(effCtx) })
             : tStatic("app.contextOverflow"),
+          sid,
         )
         fireTurnEnd("finish")
       }
@@ -1001,7 +1031,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       })
       if (!completed || ac.signal.aborted) {
         useSessionsStore.getState().setStreamingFor(sid, false)
-        deps.setError(retryMessage)
+        deps.setError(retryMessage, sid)
         fireTurnEnd("abort")
         return
       }
@@ -1012,7 +1042,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         pending: true,
         modelMsgCount: 0,
       })
-      deps.setError(null)
+      deps.setError(null, sid)
       useSessionsStore.getState().setStreamingFor(sid, false)
       await runStream(sid, asstMsgId, retryHistory, override, retryCount, apiRetryCount + 1)
       return
@@ -1079,7 +1109,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       const transient =
         /rate.?limit|429|too many requests|network|timeout|timed?.?out|ECONNRESET|ECONNREFUSED|socket hang up|5\d{2}\s|overloaded|capacity|temporarily unavailable/i.test(
           retryMessage,
-        ) || streamStalled
+        ) || streamStalled || streamTruncated
       if (transient) {
         useSessionsStore.getState().pauseGoalFor(sid)
         pushGoalSystem(

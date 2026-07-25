@@ -353,7 +353,17 @@ export default function App() {
   const enqueueMessage = useSessionsStore((s) => s.enqueueMessage)
   const dequeueMessage = useSessionsStore((s) => s.dequeueMessage)
   const removeQueuedAt = useSessionsStore((s) => s.removeQueuedAt)
-  const [error, setError] = useState<string | null>(null)
+  // Session-scoped error banner. A single global string leaked across chats: an
+  // error raised in one session kept showing after switching away, and a
+  // background stream's error surfaced on whatever session was active. Now the
+  // banner only renders when its owning session is the active one.
+  const [error, setError] = useState<{ sid: string | null; message: string } | null>(null)
+  // Raise an error against the session the user is currently viewing (UI actions
+  // such as send / fork / revert / slash commands always target the active chat).
+  const raiseError = useCallback((message: string) => {
+    setError({ sid: useSessionsStore.getState().activeId, message })
+  }, [])
+  const clearError = useCallback(() => setError(null), [])
   const runRoutineRef = useRef<(r: Routine) => Promise<void>>(async () => {})
   const forceQuitRef = useRef(false)
   const monitorRespondRef = useRef<(sessionId: string, line: string) => void>(() => {})
@@ -822,7 +832,12 @@ export default function App() {
     })
   }
 
-  const runStream = makeRunStream({ setError, recordAuxUsage, sanitizeHistoryForProvider })
+  const runStream = makeRunStream({
+    setError: (message, sid) =>
+      setError((prev) => (message === null ? (prev?.sid === sid ? null : prev) : { sid, message })),
+    recordAuxUsage,
+    sanitizeHistoryForProvider,
+  })
 
   async function runCompaction(sid: string, force = false): Promise<boolean> {
     if (compactionInFlight.has(sid)) return false
@@ -939,7 +954,7 @@ export default function App() {
     } catch (e) {
       console.error("[compact] başarısız:", e)
       const msg = errorMessage(e)
-      setError(tStatic("app.compactFailed", { message: msg }))
+      raiseError(tStatic("app.compactFailed", { message: msg }))
       patchMessageFor(sid, statusId, {
         compacting: false,
         content:
@@ -962,7 +977,7 @@ export default function App() {
     files?: MessageFile[],
     pdfs?: MessagePdf[],
   ) {
-    setError(null)
+    clearError()
 
     const sessSt = useSessionsStore.getState()
     if (sessSt.active && sessSt.isDraft) {
@@ -1099,7 +1114,7 @@ export default function App() {
     files?: MessageFile[],
     pdfs?: MessagePdf[],
   ) {
-    setError(null)
+    clearError()
     if (!splitId) return
     if (!useSessionsStore.getState().sessions[splitId]) return
     await useSessionsStore.getState().commitDetached(splitId)
@@ -1125,7 +1140,7 @@ export default function App() {
       return
     }
     if (useSessionsStore.getState().compactingIds[sid]) {
-      setError("Bağlam sıkıştırılıyor — bitince tekrar deneyin.")
+      raiseError("Bağlam sıkıştırılıyor — bitince tekrar deneyin.")
       return
     }
 
@@ -1286,7 +1301,7 @@ export default function App() {
   }
 
   async function askSelectionInSplit(question: string) {
-    setError(null)
+    clearError()
     const store = useSessionsStore.getState()
     const cur = store.active
     const id = store.createDetached(
@@ -1304,7 +1319,7 @@ export default function App() {
       await store.commitDetached(id)
       await dispatchTurn(id, question)
     } catch (err) {
-      setError(errorMessage(err))
+      raiseError(errorMessage(err))
     }
   }
 
@@ -1314,7 +1329,7 @@ export default function App() {
       try {
         await loadIntoPool(id)
       } catch (err) {
-        setError(errorMessage(err))
+        raiseError(errorMessage(err))
         return
       }
       setAgentPane(activeSessionId, null)
@@ -1333,7 +1348,7 @@ export default function App() {
   async function onRegenerate(userMsgId: string) {
     const sid = useSessionsStore.getState().activeId
     if (!sid) return
-    setError(null)
+    clearError()
     if (!(await cancelActiveRun(sid))) {
       console.warn("[regenerate] aktif stream durmadı — kesim iptal edildi")
       return
@@ -1366,7 +1381,7 @@ export default function App() {
       if (nm) await useSessionsStore.getState().patchSessionMeta(newId, { title: nm })
     } catch (e) {
       const msg = errorMessage(e)
-      setError(msg)
+      raiseError(msg)
     }
   }
 
@@ -1382,14 +1397,14 @@ export default function App() {
   async function onFork(srcId: string, prompt: string) {
     const p = prompt.trim()
     if (!p) {
-      setError(tStatic("fork.needPrompt"))
+      raiseError(tStatic("fork.needPrompt"))
       return
     }
     let forkId: string
     try {
       forkId = await useSessionsStore.getState().forkSessionBackground(srcId)
     } catch (e) {
-      setError(errorMessage(e))
+      raiseError(errorMessage(e))
       return
     }
     toast.info(tStatic("fork.running"))
@@ -1397,7 +1412,7 @@ export default function App() {
       await dispatchTurn(forkId, p)
     } catch (e) {
       toast.error(tStatic("fork.failed"))
-      setError(errorMessage(e))
+      raiseError(errorMessage(e))
       return
     }
     const fork = useSessionsStore.getState().sessions[forkId]
@@ -1448,7 +1463,7 @@ export default function App() {
       )
     } catch (e) {
       const msg = errorMessage(e)
-      setError(tStatic("app.revertFailed", { message: msg }))
+      raiseError(tStatic("app.revertFailed", { message: msg }))
     }
   }
 
@@ -1457,7 +1472,7 @@ export default function App() {
       const r = await unrevertSession()
       if (r) useToastStore.getState().show(tStatic("app.unrevertDone"), { kind: "success" })
     } catch (e) {
-      setError(tStatic("app.revertFailed", { message: errorMessage(e) }))
+      raiseError(tStatic("app.revertFailed", { message: errorMessage(e) }))
     }
   }
 
@@ -1467,7 +1482,7 @@ export default function App() {
       const path = await appendMemory(scope, noteText, ws, undefined, "manual")
       toast.success(`${tStatic("toast.memorySaved")}: ${path}`)
     } catch (e) {
-      setError(errorMessage(e))
+      raiseError(errorMessage(e))
     }
   }
 
@@ -1762,7 +1777,7 @@ export default function App() {
       case "sdd": {
         const wsPath = useSessionsStore.getState().active?.workspacePath
         if (!wsPath) {
-          setError(tStatic("sdd.workspaceRequired"))
+          raiseError(tStatic("sdd.workspaceRequired"))
           return
         }
         const title = args.trim() || tStatic("sdd.defaultTitle")
@@ -1806,7 +1821,7 @@ export default function App() {
         const name = sp === -1 ? args : args.slice(0, sp)
         const task = sp === -1 ? "" : args.slice(sp + 1).trim()
         if (!name) {
-          setError(tStatic("app.agentNameRequired"))
+          raiseError(tStatic("app.agentNameRequired"))
           return
         }
         const text = task
@@ -1869,7 +1884,7 @@ export default function App() {
           return
         }
         if (!trimmed) {
-          setError("Goal metni gerekli — örn: /goal Tüm testler geçsin")
+          raiseError("Goal metni gerekli — örn: /goal Tüm testler geçsin")
           return
         }
         setGoal(trimmed)
@@ -1884,7 +1899,7 @@ export default function App() {
       case "codemap-index": {
         const ws = useSessionsStore.getState().active?.workspacePath
         if (!ws) {
-          setError("Code Map: önce bir workspace klasörü bağla (/workspace).")
+          raiseError("Code Map: önce bir workspace klasörü bağla (/workspace).")
           return
         }
         const cur = useSettingsStore.getState().settings.tokenSavers ?? DEFAULT_TOKEN_SAVERS
@@ -1906,7 +1921,7 @@ export default function App() {
             content: `✓ Code Map hazır: ${stats.symbols} sembol · ${stats.files} dosya. code_search / code_callers / code_callees / code_trace / code_impact araçları artık aktif.`,
           })
         } catch (e) {
-          setError(`Code Map index başarısız: ${errorMessage(e)}`)
+          raiseError(`Code Map index başarısız: ${errorMessage(e)}`)
         }
         return
       }
@@ -2096,16 +2111,16 @@ export default function App() {
       </div>
 
       <div className={cn("relative", activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
-        {error && (
+        {error && error.sid === activeSessionId && (
           <div className="absolute inset-x-0 bottom-full z-20">
             <div className="mx-auto w-full max-w-[860px] px-6">
               <ErrorBanner
-                message={error}
-                onDismiss={() => setError(null)}
+                message={error.message}
+                onDismiss={() => clearError()}
                 onOpenSettings={
-                  isAuthErrorMessage(error)
+                  isAuthErrorMessage(error.message)
                     ? () => {
-                        setError(null)
+                        clearError()
                         setShowSettings(true)
                       }
                     : undefined

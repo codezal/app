@@ -1541,10 +1541,12 @@ export function Composer({
               />
             )}
             {metaWs && <BranchPicker workspace={metaWs} />}
-            <ApprovalModeMenu
-              mode={approvalMode}
-              onChange={(m) => void updateSettings({ approvalMode: m })}
-            />
+            {mode !== "plan" && (
+              <ApprovalModeMenu
+                mode={approvalMode}
+                onChange={(m) => void updateSettings({ approvalMode: m })}
+              />
+            )}
             {metaWs && (
               <CommitBar workspace={metaWs} providerId={provider} modelId={model || undefined} />
             )}
