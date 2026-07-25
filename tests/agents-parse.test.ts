@@ -237,6 +237,25 @@ describe("checkSubagentPolicy", () => {
     expect(r.reason).toMatch(/redirection or command substitution/)
   })
 
+  it("git -C <path> prefix'i normalize edilir → allowlist eşleşir", () => {
+    const r = checkSubagentPolicy(
+      { bashAllow: ["git status", "git diff"] },
+      "bash",
+      { command: "git -C /some/repo status --short && git -C /some/repo diff" },
+    )
+    expect(r.allowed).toBe(true)
+  })
+
+  it("git -C <path> ile tehlikeli subcommand hâlâ reddedilir", () => {
+    const r = checkSubagentPolicy(
+      { bashAllow: ["git status"] },
+      "bash",
+      { command: "git -C /some/repo push origin main" },
+    )
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/not allowlisted/)
+  })
+
   it("bashAllow + tüm segmentler izinli zincir → izin verilir", () => {
     const r = checkSubagentPolicy(
       { bashAllow: ["git "] },

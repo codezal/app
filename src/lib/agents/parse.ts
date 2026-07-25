@@ -134,7 +134,11 @@ export function checkSubagentPolicy(
         .map((s) => s.trim())
         .filter(Boolean)
       for (const seg of segments) {
-        if (!policy.bashAllow.some((p) => seg.startsWith(p))) {
+        // Normalise `git -C <path> <subcmd>` → `git <subcmd>` so that the
+        // allowlist prefix (e.g. "git status") matches regardless of the
+        // working-directory override flag.
+        const normalised = seg.replace(/^git\s+-C\s+\S+\s+/, "git ")
+        if (!policy.bashAllow.some((p) => normalised.startsWith(p))) {
           return {
             allowed: false,
             reason: `Bash command segment not allowlisted: '${seg.slice(0, 60)}'`,

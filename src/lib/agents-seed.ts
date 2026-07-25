@@ -326,9 +326,11 @@ export async function reconcileSeedAgents(
     const newHash = await sha256Hex(normalizeForHash(tpl.body))
     const fileExists = await exists(path)
     let currentHash: string | null = null
+    let fileContent: string | null = null
     if (fileExists) {
       try {
-        currentHash = await sha256Hex(normalizeForHash(await readTextFile(path)))
+        fileContent = await readTextFile(path)
+        currentHash = await sha256Hex(normalizeForHash(fileContent))
       } catch {
         preserved.push(tpl.name)
         continue
@@ -336,6 +338,20 @@ export async function reconcileSeedAgents(
     }
     const action = decideSeedAction(fileExists, currentHash, newHash, tpl.legacyHashes)
     if (action === "skip") {
+      // Even when the full-file hash doesn't match a legacy hash (user edited
+      // the body), patch the bash_allow line if it drifted from the seed.
+      // This keeps read-only helper commands (echo, head, …) available without
+      // overwriting the user's customised system prompt.
+      if (fileContent) {
+        const newBA = tpl.body.match(/bash_allow:\s*\[.*?\]/)?.[0]
+        const fileBA = fileContent.match(/bash_allow:\s*\[.*?\]/)?.[0]
+        if (newBA && fileBA && newBA !== fileBA) {
+          const updated = fileContent.replace(fileBA, newBA)
+          await writeTextFile(path, updated)
+          upgraded.push(tpl.name)
+          continue
+        }
+      }
       preserved.push(tpl.name)
       continue
     }
