@@ -2,7 +2,7 @@ import { type Child, type Command } from "@tauri-apps/plugin-shell"
 import { invoke } from "@tauri-apps/api/core"
 import { create } from "zustand"
 import { createId } from "@/lib/id"
-import { spawnProgram, shellInvocation } from "@/lib/exec"
+import { spawnProgram, shellInvocation, stripLineEnding } from "@/lib/exec"
 import { sendDesktopNotification } from "@/lib/notify"
 
 function notifyJobFinished(job: BackgroundJob): void {
@@ -182,8 +182,8 @@ export const useJobsStore = create<JobsState>((set, get) => ({
       })
     }
 
-    cmd.stdout.on("data", (l) => append(l))
-    cmd.stderr.on("data", (l) => append(`[stderr] ${l}`))
+    cmd.stdout.on("data", (l) => append(stripLineEnding(l)))
+    cmd.stderr.on("data", (l) => append(`[stderr] ${stripLineEnding(l)}`))
     cmd.on("close", (p) => {
       const code = (p as { code?: number | null }).code ?? null
       set((s) => {
@@ -264,8 +264,8 @@ export const useJobsStore = create<JobsState>((set, get) => ({
         }
       })
     }
-    cmd.stdout.on("data", (l) => append(l))
-    cmd.stderr.on("data", (l) => append(`[stderr] ${l}`))
+    cmd.stdout.on("data", (l) => append(stripLineEnding(l)))
+    cmd.stderr.on("data", (l) => append(`[stderr] ${stripLineEnding(l)}`))
     cmd.on("close", (p) => {
       const code = (p as { code?: number | null }).code ?? null
       set((s) => {

@@ -1,6 +1,6 @@
 import { type Child } from "@tauri-apps/plugin-shell"
 import { invoke } from "@tauri-apps/api/core"
-import { shellInvocation, spawnProgram } from "../exec"
+import { shellInvocation, spawnProgram, stripLineEnding } from "../exec"
 import { createId } from "../id"
 
 export function lineMatches(line: string, pattern: string | undefined): boolean {
@@ -38,7 +38,10 @@ export async function startMonitor(args: MonitorStartArgs): Promise<string> {
   const wrapped = `cd ${shellQuote(args.workspace)} && ${args.command}`
   const cmd = await spawnProgram(program, [flag, wrapped])
 
-  const handle = (line: string) => {
+  const handle = (raw: string) => {
+    // plugin-shell line events keep the trailing newline — strip before matching
+    // so anchored patterns (e.g. /error$/) still work.
+    const line = stripLineEnding(raw)
     if (lineMatches(line, args.pattern)) args.onEvent(line)
   }
   cmd.stdout.on("data", handle)

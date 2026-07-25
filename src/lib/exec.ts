@@ -127,6 +127,14 @@ export type RunShellOpts = {
   onTimeout?: (cmd: Command<string>, child: Child, partial: string[]) => void
 }
 
+// plugin-shell's `data` event emits whole lines read via tauri::utils::io::read_line,
+// which KEEPS the trailing newline (\n or \r\n) in the payload. Consumers that
+// re-join lines with "\n" would otherwise render a blank line between every row.
+// Strip the trailing line ending once, at the ingestion point.
+export function stripLineEnding(line: string): string {
+  return line.replace(/\r?\n$/, "")
+}
+
 export async function shellInvocation(): Promise<{ program: string; flag: string }> {
   if (await isWindows()) {
     const bash = await resolveProgram("bash")
@@ -163,8 +171,8 @@ async function executeKillable(
   }
   const out = makeRing(RING_MAX_BYTES)
   const err = makeRing(RING_MAX_BYTES)
-  cmd.stdout.on("data", (l) => out.push(l))
-  cmd.stderr.on("data", (l) => err.push(l))
+  cmd.stdout.on("data", (l) => out.push(stripLineEnding(l)))
+  cmd.stderr.on("data", (l) => err.push(stripLineEnding(l)))
   return await new Promise<ExecResult>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined
     let settled = false
