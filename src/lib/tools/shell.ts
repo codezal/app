@@ -28,7 +28,12 @@ export async function runBash(
   if (!workspace) throw new Error("Çalışma klasörü bağlı değil — bash çalıştırılamaz")
   const timeoutMs = opts.timeoutMs ?? useSettingsStore.getState().settings.bashTimeoutMs ?? 30_000
   const sid = opts.sessionId ?? useSessionsStore.getState().active?.id ?? "default"
-  const cwd = lastCwd.get(sid) ?? workspace
+  // A cached cwd from a previous workspace must not leak into the current one:
+  // if the session's workspace changed, the stale cached dir falls outside it
+  // and would otherwise pin every command to the old workspace forever (the
+  // post-run `set` never fires because the dir isn't within the new workspace).
+  const cached = lastCwd.get(sid)
+  const cwd = cached && isWithinWorkspace(workspace, cached) ? cached : workspace
   const wrapped =
     `cd ${shellQuote(cwd)} && { ${command}\n}; __cz=$?; ` +
     `printf '${PWD_SENTINEL}%s\\n' "$(pwd)"; exit $__cz`
