@@ -1,7 +1,7 @@
 import { exists, mkdir, writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
 import { homeDir } from "@tauri-apps/api/path"
 
-export const SEED_VERSION = 7
+export const SEED_VERSION = 9
 
 export type AgentTemplate = {
   name: string
@@ -22,12 +22,13 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       "a660f01175021f92ab0c73e6d9c3e978aa296ac4a9dd66bec36376fce7019da3",
       "152b95283c80031f30137419a7c4a3e88703ac0f3016904a03640ab5f27e3f00",
       "f847d88b6256445aa393bedaba4001b5fd8f91e23fb172642543df03160f35f5",
+      "136a51541af31e58e190bba169d0481f01075885a4dcce633de548003c10b68b",
     ],
     body: `---
 name: code-reviewer
 description: Code review specialist - reviews diffs/files and returns severity-tagged findings.
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, code_query, bash]
-bash_allow: ["git diff", "git log", "git show", "git status", "git blame"]
+bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du"]
 plan_mode: true
 max_steps: 20
 ---
@@ -102,12 +103,14 @@ Rules:
       "1a60921730cdf6d6378f11eef8b4c608e7b111c04bf2fd7595ba95dae6046f87",
       "21bb7ff4c1f5070fa1eef6e08a518d6180ca1050c2c68b28e076e39e343d4718",
       "01326905a05ae8a0da144fd297a27e35e0c0712977f3c923b29be1a37fc95334",
+      // v8 (bash_allow: git + test commands only)
+      "7cd9e3e3fd776baa606789adb9cff8b6eb45323e43d0a46709e5a124506726c7",
     ],
     body: `---
 name: debugger
 description: Isolate bugs by forming hypotheses, collecting evidence, and identifying root cause.
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_trace, lsp, code_query, bash]
-bash_allow: ["git log", "git diff", "git show", "git status", "git blame", "git bisect", "pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest"]
+bash_allow: ["git log", "git diff", "git show", "git status", "git blame", "git bisect", "git rev-parse", "git ls-files", "git branch", "git remote", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest"]
 approval_required: [bash]
 max_steps: 25
 ---
@@ -173,12 +176,13 @@ Rules:
       "22cfea8212b4f2eddae1b18cff8404f94be2a185abf74aef3b3cb983419453c6",
       "e927d9f1662627d19a56786caaaad912369cf70d0ea3de2d033021d489e8794d",
       "75a0e48267155846c2bfb609b72a5f67438a8d22a28655d3259d5b328e6e867f",
+      "bce5242d5dab6440a33e2570aa48a0568aa9c57d8776d83864d4b802d557624a",
     ],
     body: `---
 name: refactorer
 description: Suggest refactors by finding duplication, complexity, poor naming, and giving a plan.
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, code_query, bash]
-bash_allow: ["git diff", "git log", "git show", "git status", "git blame"]
+bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du"]
 plan_mode: true
 max_steps: 20
 ---

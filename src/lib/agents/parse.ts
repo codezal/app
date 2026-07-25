@@ -116,18 +116,30 @@ export function checkSubagentPolicy(
       }
     }
     if (policy.bashAllow && policy.bashAllow.length > 0) {
-      if (/[;&|`\n<>]/.test(cmd) || cmd.includes("$(")) {
+      // Backticks, command substitution, and redirections are always blocked —
+      // they can exfiltrate data or execute arbitrary code regardless of prefix.
+      if (/`/.test(cmd) || cmd.includes("$(") || /[<>]/.test(cmd)) {
         return {
           allowed: false,
-          reason: `Bash command contains chaining/redirection metacharacters (allowlist bypass risk)`,
+          reason: `Bash command contains redirection or command substitution (allowlist bypass risk)`,
           requiresApproval: false,
         }
       }
-      if (!policy.bashAllow.some((p) => cmd.startsWith(p))) {
-        return {
-          allowed: false,
-          reason: `Bash command does not start with any allowlisted prefix`,
-          requiresApproval: false,
+      // Split by chaining operators (&&, ||, ;, |, newline) and validate each
+      // segment against the allowlist independently. This allows legitimate
+      // chained commands like "git diff && git status" while still blocking
+      // "git diff; rm -rf /".
+      const segments = cmd
+        .split(/&&|\|\||[;|\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      for (const seg of segments) {
+        if (!policy.bashAllow.some((p) => seg.startsWith(p))) {
+          return {
+            allowed: false,
+            reason: `Bash command segment not allowlisted: '${seg.slice(0, 60)}'`,
+            requiresApproval: false,
+          }
         }
       }
     }

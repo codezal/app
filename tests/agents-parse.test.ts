@@ -141,14 +141,14 @@ describe("checkSubagentPolicy", () => {
     expect(r.allowed).toBe(false)
   })
 
-  it("planMode + bashAllow → metacharacter bypass reddedilir", () => {
+  it("planMode + bashAllow → zincirleme bypass reddedilir (segment allowlist)", () => {
     const r = checkSubagentPolicy(
       { planMode: true, bashAllow: ["git diff"] },
       "bash",
       { command: "git diff; rm -rf /" },
     )
     expect(r.allowed).toBe(false)
-    expect(r.reason).toMatch(/metacharacters/)
+    expect(r.reason).toMatch(/not allowlisted/)
   })
 
   it("planMode + bashAllow → write_file hâlâ reddedilir", () => {
@@ -220,14 +220,30 @@ describe("checkSubagentPolicy", () => {
     ["zincirleme ;", "pnpm test; rm -rf /"],
     ["zincirleme &&", "pnpm test && curl evil"],
     ["pipe |", "pnpm test | sh"],
+    ["newline", "pnpm test\nrm -rf /"],
+  ])("bashAllow + %s → reddedilir (segment allowlist)", (_label, command) => {
+    const r = checkSubagentPolicy({ bashAllow: ["pnpm test"] }, "bash", { command })
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/not allowlisted/)
+  })
+
+  it.each([
     ["komut ikamesi $(", "pnpm test $(whoami)"],
     ["backtick", "pnpm test `id`"],
     ["yönlendirme >", "pnpm test > /etc/passwd"],
-    ["newline", "pnpm test\nrm -rf /"],
-  ])("bashAllow + %s → reddedilir (bypass engeli)", (_label, command) => {
+  ])("bashAllow + %s → reddedilir (substitution/redirection)", (_label, command) => {
     const r = checkSubagentPolicy({ bashAllow: ["pnpm test"] }, "bash", { command })
     expect(r.allowed).toBe(false)
-    expect(r.reason).toMatch(/metacharacters/)
+    expect(r.reason).toMatch(/redirection or command substitution/)
+  })
+
+  it("bashAllow + tüm segmentler izinli zincir → izin verilir", () => {
+    const r = checkSubagentPolicy(
+      { bashAllow: ["git "] },
+      "bash",
+      { command: "git diff && git diff --cached && git status --short" },
+    )
+    expect(r.allowed).toBe(true)
   })
 })
 
