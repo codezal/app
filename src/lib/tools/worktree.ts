@@ -1,5 +1,5 @@
 // list:   git worktree list --porcelain
-// remove: git worktree remove (--force opsiyonel)
+// remove: git worktree remove (--force optional)
 import { exists, remove } from "@tauri-apps/plugin-fs"
 import { runProgram } from "@/lib/exec"
 import { errorMessage } from "@/lib/errors"
@@ -56,7 +56,7 @@ export type WorktreeEntry = {
 
 export async function listWorktrees(repoPath: string): Promise<WorktreeEntry[]> {
   const r = await runGit(repoPath, ["worktree", "list", "--porcelain"])
-  if (r.code !== 0) throw new Error(`git worktree list başarısız: ${r.stderr.trim()}`)
+  if (r.code !== 0) throw new Error(`git worktree list failed: ${r.stderr.trim()}`)
   return parseWorktreePorcelain(r.stdout)
 }
 
@@ -91,7 +91,7 @@ export type CreateWorktreeOpts = {
 
 export async function createWorktree(opts: CreateWorktreeOpts): Promise<WorktreeEntry> {
   const { repoPath, branch, baseRef } = opts
-  if (!branch) throw new Error("branch parametresi gerekli")
+  if (!branch) throw new Error("branch parameter is required")
 
   let target = opts.target
   if (!target) {
@@ -103,7 +103,7 @@ export async function createWorktree(opts: CreateWorktreeOpts): Promise<Worktree
   }
 
   if (await exists(target)) {
-    throw new Error(`Hedef worktree path zaten var: ${target}`)
+    throw new Error(`Target worktree path already exists: ${target}`)
   }
 
   const args = baseRef
@@ -112,7 +112,7 @@ export async function createWorktree(opts: CreateWorktreeOpts): Promise<Worktree
 
   const r = await runGit(repoPath, args)
   if (r.code !== 0) {
-    throw new Error(`git worktree add başarısız: ${r.stderr.trim() || r.stdout.trim()}`)
+    throw new Error(`git worktree add failed: ${r.stderr.trim() || r.stdout.trim()}`)
   }
 
   const br = await runGit(target, ["rev-parse", "--abbrev-ref", "HEAD"])
@@ -136,16 +136,16 @@ export async function removeWorktree(repoPath: string, target: string, force = f
   const removeErr = r.stderr.trim() || r.stdout.trim()
   const list = await listWorktrees(repoPath).catch(() => [] as WorktreeEntry[])
   const t = canonicalPath(target)
-  // Ana worktree = `git worktree list` ilk girdisi; repoPath de belt-and-suspenders kontrol.
+  // Main worktree = first entry of `git worktree list`; repoPath is a belt-and-suspenders check.
   const mainPath = list[0] ? canonicalPath(list[0].path) : canonicalPath(repoPath)
   if (t === mainPath || t === canonicalPath(repoPath)) {
     throw new Error(
-      `Ana worktree silinemez (${target}) — bu repo'nun birincil çalışma ağacı; FS-level silme reddedildi.`,
+      `Cannot delete the main worktree (${target}) — it is this repo's primary working tree; FS-level deletion refused.`,
     )
   }
   if (!list.some((e) => canonicalPath(e.path) === t)) {
     throw new Error(
-      `git worktree remove başarısız ve '${target}' bu repoda kayıtlı worktree değil — silinmedi: ${removeErr}`,
+      `git worktree remove failed and '${target}' is not a registered worktree in this repo — not deleted: ${removeErr}`,
     )
   }
   if (await exists(target)) {
@@ -162,7 +162,7 @@ export async function removeWorktree(repoPath: string, target: string, force = f
   await runGit(repoPath, ["worktree", "prune"]).catch(() => {})
 
   if (await exists(target)) {
-    throw new Error(`git worktree remove başarısız: ${removeErr}`)
+    throw new Error(`git worktree remove failed: ${removeErr}`)
   }
 }
 
@@ -172,7 +172,7 @@ export async function findRepoRoot(path: string): Promise<string | null> {
   return r.stdout.trim() || null
 }
 
-// Mevcut branch listesi (local)
+// Current branch list (local)
 export async function listBranches(repoPath: string): Promise<string[]> {
   const r = await runGit(repoPath, ["branch", "--format=%(refname:short)"])
   if (r.code !== 0) return []

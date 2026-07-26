@@ -206,6 +206,11 @@ const SUBAGENT_MEMORY_BUDGET = 8_000 // bytes — leaner than the parent's full 
 async function buildSubagentSystem(
   agentPrompt: string,
   workspace: string | undefined,
+  // Where project memory / rules (AGENTS.md, .codezal/memory.md) are read from.
+  // Defaults to `workspace`, but spawn_agent passes the *parent* project root so
+  // a subagent inspecting a cloned/foreign repo still follows the parent's rules
+  // and never inherits the foreign repo's instructions.
+  memoryWorkspace: string | undefined = workspace,
 ): Promise<string> {
   const parts: string[] = [agentPrompt]
 
@@ -234,10 +239,10 @@ async function buildSubagentSystem(
   )
 
   // Project + user memory/rules (AGENTS.md, memory.md, etc.) — lean budget.
-  if (workspace) {
+  if (memoryWorkspace) {
     try {
       const [proj, user] = await Promise.all([
-        readProjectMemory(workspace, {}),
+        readProjectMemory(memoryWorkspace, {}),
         readUserMemory({}),
       ])
       const memBlock = buildMemorySystemPrompt([...proj, ...user], {
@@ -2226,7 +2231,13 @@ export function buildTools(
           return `Model could not be initialized: ${e instanceof Error ? e.message : String(e)}`
         }
 
-        const fullSet = buildTools(workspace, ownerSessionId)
+        // Inherit the parent's *current* workspace, not the stale closure value.
+        // clone_repo rewrites session.workspacePath to the cloned repo mid-turn,
+        // but this tool set was built with the pre-clone path — so without this a
+        // subagent spawned right after a clone would be locked to the old folder
+        // and unable to read the repo it was asked to inspect.
+        const liveWorkspace = parent.workspacePath || workspace
+        const fullSet = buildTools(liveWorkspace, ownerSessionId, configWorkspace)
         const subTools: ToolSet = {}
         const SUBAGENT_STRIP = new Set(["spawn_agent", "delegate_agents", "dispatch_workers", "merge_workers"])
         if (agent.tools && agent.tools.length > 0) {
@@ -2281,7 +2292,11 @@ export function buildTools(
 
         // Enrich the agent prompt with workspace context, tool discipline, and
         // project memory so the subagent operates with full awareness.
-        const subagentSystem = await buildSubagentSystem(agent.systemPrompt, workspace)
+        const subagentSystem = await buildSubagentSystem(
+          agent.systemPrompt,
+          liveWorkspace,
+          configWorkspace,
+        )
 
         let finalText = ""
         // Thinking models (e.g. Qwen3) can place the whole answer in reasoning

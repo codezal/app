@@ -92,9 +92,9 @@ export async function truncateOutput(text: string, opts: TruncateOptions = {}): 
     const removed = lines.length - head.length - tail.length
     const outputPath = await archiveOutput(text)
     const hint =
-      `Tool output truncated — ${removed} satır atlandı (orta kısım). Full output saved to:\n${outputPath}\n` +
+      `Tool output truncated — ${removed} lines dropped (middle section). Full output saved to:\n${outputPath}\n` +
       `Use bash with grep/head/tail to inspect, or read_file with offset/limit.`
-    const content = `${head.join("\n")}\n\n...${removed} satır kesildi (orta atlandı — baş + son korundu)...\n${hint}\n\n${tail.join("\n")}`
+    const content = `${head.join("\n")}\n\n...${removed} lines truncated (middle dropped — head + tail preserved)...\n${hint}\n\n${tail.join("\n")}`
     return { content, truncated: true, outputPath }
   }
 

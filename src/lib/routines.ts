@@ -1,4 +1,4 @@
-// ~/.codezal/routines/<name>.md (global) ve <ws>/.codezal/routines/<name>.md (proje).
+// ~/.codezal/routines/<name>.md (global) and <ws>/.codezal/routines/<name>.md (project).
 import { exists, readDir, readTextFile, writeTextFile, mkdir, remove } from "@tauri-apps/plugin-fs"
 import { homeDir } from "@tauri-apps/api/path"
 import type { ProviderId, ReasoningEffort } from "./providers"
@@ -124,7 +124,7 @@ export function serializeRoutine(r: RoutineInput): string {
 
 async function routinesRoot(scope: RoutineScope, workspace: string | undefined): Promise<string> {
   if (scope === "project") {
-    if (!workspace) throw new Error("Project routine için bağlı bir workspace gerekli")
+    if (!workspace) throw new Error("A connected workspace is required for a project routine")
     return workspace.replace(/[\\/]+$/, "") + "/.codezal/routines"
   }
   const home = await homeDir()

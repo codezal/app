@@ -25,7 +25,7 @@ export async function runBash(
   command: string,
   opts: RunBashOptions = {},
 ): Promise<string> {
-  if (!workspace) throw new Error("Çalışma klasörü bağlı değil — bash çalıştırılamaz")
+  if (!workspace) throw new Error("No workspace attached — cannot run bash")
   const timeoutMs = opts.timeoutMs ?? useSettingsStore.getState().settings.bashTimeoutMs ?? 30_000
   const sid = opts.sessionId ?? useSessionsStore.getState().active?.id ?? "default"
   // A cached cwd from a previous workspace must not leak into the current one:
@@ -50,9 +50,9 @@ export async function runBash(
   } catch (e) {
     if (detachedJobId) {
       return (
-        `[komut ${Math.round(timeoutMs / 1000)}s sürdü — öldürülmeyip arka plana alındı]\n` +
-        `jobId: ${detachedJobId}. bash_status({ id: "${detachedJobId}" }) ile çıktıyı ve ` +
-        `durumu izle; tamamlanınca bildirim gelir.`
+        `[command ran ${Math.round(timeoutMs / 1000)}s — moved to the background instead of being killed]\n` +
+        `jobId: ${detachedJobId}. Track output and status with bash_status({ id: "${detachedJobId}" }); ` +
+        `you will be notified when it finishes.`
       )
     }
     throw e

@@ -428,6 +428,15 @@ export function MessageList({
           {shown.map((m, i) => {
             const prevUser = findPrevUser(shown, i)
             const prevUserId = prevUser?.id ?? null
+            const next = shown[i + 1]
+            let nextAt = 0
+            if (next) {
+              try {
+                nextAt = extractTimestamp(next.id)
+              } catch {
+                nextAt = 0
+              }
+            }
             return (
               <Bubble
                 key={m.id}
@@ -435,6 +444,9 @@ export function MessageList({
                 streaming={!!streaming && i === shown.length - 1 && m.role === "assistant"}
                 active={hoveredId === m.id}
                 workspace={active?.workspacePath}
+                fallbackEndAt={
+                  m.role === "assistant" ? nextAt || active?.updatedAt || undefined : undefined
+                }
                 onHover={setHoveredId}
                 onRegenerate={
                   m.role === "assistant" && prevUserId && onRegenerate
@@ -677,6 +689,10 @@ type BubbleProps = {
   streaming: boolean
   active: boolean
   workspace?: string
+  // Upper bound for the work-log duration when `m.endedAt` is absent (messages
+  // written before that field existed): next message's start, else the
+  // session's last-activity time.
+  fallbackEndAt?: number
   onHover: (id: string | null) => void
   onRegenerate?: () => void
   onEditUser?: (newText: string) => void
@@ -695,6 +711,7 @@ const Bubble = memo(BubbleImpl, (prev, next) => {
     prev.streaming === next.streaming &&
     prev.active === next.active &&
     prev.workspace === next.workspace &&
+    prev.fallbackEndAt === next.fallbackEndAt &&
     !!prev.onRegenerate === !!next.onRegenerate &&
     !!prev.onEditUser === !!next.onEditUser &&
     !!prev.onBranch === !!next.onBranch &&
@@ -711,6 +728,7 @@ function BubbleImpl({
   streaming,
   active,
   workspace,
+  fallbackEndAt,
   onHover,
   onRegenerate,
   onEditUser,
@@ -865,7 +883,7 @@ function BubbleImpl({
             streaming={streaming}
             workspace={workspace}
             startedAt={msgTime || undefined}
-            endedAt={m.endedAt}
+            endedAt={m.endedAt ?? fallbackEndAt}
           />
         ) : (
           <Markdown content={m.content} streaming={streaming} className="text-md leading-[1.7]" />

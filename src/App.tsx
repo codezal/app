@@ -2032,7 +2032,7 @@ export default function App() {
     const msgs = useSessionsStore.getState().sessions[sid]?.messages
     const last = msgs?.[msgs.length - 1]
     if (last && last.role === "assistant" && last.pending) {
-      useSessionsStore.getState().patchMessageFor(sid, last.id, { pending: false })
+      useSessionsStore.getState().patchMessageFor(sid, last.id, { pending: false, endedAt: Date.now() })
     }
   }
 

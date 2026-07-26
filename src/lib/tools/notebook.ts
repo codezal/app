@@ -45,7 +45,7 @@ function makeCell(cellType: "code" | "markdown", source: string, genId?: () => s
   return cell
 }
 
-// Bulunamazsa -1.
+// Returns -1 when not found.
 function resolveIndex(cells: NotebookCell[], op: CellEditOp): number {
   if (op.cellId != null) return cells.findIndex((c) => c.id === op.cellId)
   if (op.cellNumber != null) return op.cellNumber
@@ -54,12 +54,12 @@ function resolveIndex(cells: NotebookCell[], op: CellEditOp): number {
 
 export function applyCellEdit(nb: Notebook, op: CellEditOp, genId?: () => string): Notebook {
   if (!Array.isArray(nb.cells)) {
-    throw new Error("Geçersiz notebook: 'cells' dizisi yok")
+    throw new Error("Invalid notebook: missing 'cells' array")
   }
   const cells = [...nb.cells]
 
   if (op.editMode === "insert") {
-    if (!op.cellType) throw new Error("insert için cell_type zorunlu (code|markdown)")
+    if (!op.cellType) throw new Error("cell_type is required for insert (code|markdown)")
     const newCell = makeCell(op.cellType, op.newSource ?? "", genId)
     let at: number
     if (op.cellId != null) {
@@ -76,7 +76,7 @@ export function applyCellEdit(nb: Notebook, op: CellEditOp, genId?: () => string
   const idx = resolveIndex(cells, op)
   if (idx < 0 || idx >= cells.length) {
     throw new Error(
-      `Hücre bulunamadı (${op.cellId != null ? `id=${op.cellId}` : `index=${op.cellNumber}`})`,
+      `Cell not found (${op.cellId != null ? `id=${op.cellId}` : `index=${op.cellNumber}`})`,
     )
   }
 
@@ -118,11 +118,11 @@ export async function editNotebook(abs: string, op: CellEditOp): Promise<string>
   try {
     nb = JSON.parse(raw) as Notebook
   } catch (e) {
-    return `Geçersiz .ipynb (JSON parse hatası): ${e instanceof Error ? e.message : String(e)}`
+    return `Invalid .ipynb (JSON parse error): ${e instanceof Error ? e.message : String(e)}`
   }
   const next = applyCellEdit(nb, op, newCellId)
   await writeTextFile(abs, JSON.stringify(next, null, 1) + "\n")
   const verb =
-    op.editMode === "insert" ? "eklendi" : op.editMode === "delete" ? "silindi" : "güncellendi"
-  return `Notebook hücresi ${verb}: ${abs} (${next.cells.length} hücre)`
+    op.editMode === "insert" ? "inserted" : op.editMode === "delete" ? "deleted" : "updated"
+  return `Notebook cell ${verb}: ${abs} (${next.cells.length} cells)`
 }

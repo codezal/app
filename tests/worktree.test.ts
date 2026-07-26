@@ -76,7 +76,7 @@ describe("listWorktrees", () => {
 
   it("git komutu başarısız olursa fırlatır", async () => {
     executeFn.mockResolvedValue({ code: 128, stdout: "", stderr: "not a git repo" })
-    await expect(listWorktrees("/not-git")).rejects.toThrow(/başarısız/)
+    await expect(listWorktrees("/not-git")).rejects.toThrow(/failed/)
   })
 })
 
@@ -92,7 +92,7 @@ describe("removeWorktree", () => {
         stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
         stderr: "",
       })
-    await expect(removeWorktree("/repo", "/repo")).rejects.toThrow(/Ana worktree silinemez/)
+    await expect(removeWorktree("/repo", "/repo")).rejects.toThrow(/Cannot delete the main worktree/)
     expect(vi.mocked(remove)).not.toHaveBeenCalled()
   })
 
@@ -105,7 +105,7 @@ describe("removeWorktree", () => {
         stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\n",
         stderr: "",
       }) // list — /evil yok
-    await expect(removeWorktree("/repo", "/evil/path")).rejects.toThrow(/kayıtlı worktree değil/)
+    await expect(removeWorktree("/repo", "/evil/path")).rejects.toThrow(/not a registered worktree/)
     expect(vi.mocked(remove)).not.toHaveBeenCalled()
   })
 })

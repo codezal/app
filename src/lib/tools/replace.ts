@@ -1,4 +1,4 @@
-// replacer'lar (trim, whitespace, girinti, block-anchor + Levenshtein benzerlik) devreye girer.
+// the replacers (trim, whitespace, indentation, block-anchor + Levenshtein similarity) kick in.
 //
 
 export type Replacer = (content: string, find: string) => Generator<string, void, unknown>
@@ -172,9 +172,9 @@ const normalizeUnicodePunct = (text: string): string =>
   text
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
-    .replace(/[‐‑‒–—―]/g, "-") // tireler, en/em-dash
+    .replace(/[‐‑‒–—―]/g, "-") // dashes, en/em-dash
     .replace(/…/g, "...")
-    .replace(/\u00A0/g, " ") // kirilmaz bosluk (nbsp) -> normal bosluk
+    .replace(/\u00A0/g, " ") // non-breaking space (nbsp) -> regular space
 
 export const UnicodeNormalizedReplacer: Replacer = function* (content, find) {
   const normalizedFind = normalizeUnicodePunct(find)
@@ -317,10 +317,10 @@ function isDisproportionateMatch(search: string, oldString: string): boolean {
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === "") {
-    throw new Error("old_string boş olamaz — değiştirilecek metni belirt.")
+    throw new Error("old_string cannot be empty — specify the text to replace.")
   }
   if (oldString === newString) {
-    throw new Error("old_string ve new_string aynı — değişiklik yok.")
+    throw new Error("old_string and new_string are identical — no change.")
   }
 
   let notFound = true
@@ -343,8 +343,8 @@ export function replace(content: string, oldString: string, newString: string, r
       notFound = false
       if (isDisproportionateMatch(search, oldString)) {
         throw new Error(
-          "Eşleşen metin old_string'den orantısız büyük — yanlış bloğu ezmemek için reddedildi. " +
-            "Dosyayı yeniden oku ve değiştirmek istediğin tam old_string'i ver.",
+          "The matched text is disproportionately larger than old_string — rejected to avoid clobbering the wrong block. " +
+            "Re-read the file and provide the exact old_string you want to change.",
         )
       }
       if (replaceAll) {
@@ -358,10 +358,10 @@ export function replace(content: string, oldString: string, newString: string, r
 
   if (notFound) {
     throw new Error(
-      "old_string dosyada bulunamadı — boşluk, girinti ve satır sonları dahil tam eşleşmeli.",
+      "old_string not found in the file — it must match exactly, including whitespace, indentation, and line endings.",
     )
   }
   throw new Error(
-    "old_string birden fazla yerde eşleşti — daha fazla bağlam ekle veya replace_all kullan.",
+    "old_string matched in multiple places — add more surrounding context or use replace_all.",
   )
 }

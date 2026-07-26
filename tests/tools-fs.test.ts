@@ -39,7 +39,7 @@ beforeEach(() => {
 // ─── listDir ──────────────────────────────────────────────────────────────────
 
 describe("listDir", () => {
-  it("dosya + dizin listeler", async () => {
+  it("lists files + directories", async () => {
     mockReadDir.mockResolvedValue([
       { name: "src", isDirectory: true, isFile: false, isSymlink: false },
       { name: "README.md", isDirectory: false, isFile: true, isSymlink: false },
@@ -51,13 +51,13 @@ describe("listDir", () => {
     expect(r).toContain("README.md")
   })
 
-  it("boş klasör → '(boş klasör)'", async () => {
+  it("empty folder → '(empty folder)'", async () => {
     mockReadDir.mockResolvedValue([])
     const r = await listDir(WS, ".")
-    expect(r).toBe("(boş klasör)")
+    expect(r).toBe("(empty folder)")
   })
 
-  it("dizinler önce listelenir", async () => {
+  it("directories are listed first", async () => {
     mockReadDir.mockResolvedValue([
       { name: "file.ts", isDirectory: false, isFile: true, isSymlink: false },
       { name: "subdir", isDirectory: true, isFile: false, isSymlink: false },
@@ -68,7 +68,7 @@ describe("listDir", () => {
     expect(r.indexOf("subdir")).toBeLessThan(r.indexOf("file.ts"))
   })
 
-  it("dosya boyutu gösterilir", async () => {
+  it("shows file size", async () => {
     mockReadDir.mockResolvedValue([
       { name: "big.ts", isDirectory: false, isFile: true, isSymlink: false },
     ] as Awaited<ReturnType<typeof readDir>>)
@@ -80,25 +80,25 @@ describe("listDir", () => {
     expect(r).toMatch(/2\.0K/)
   })
 
-  it("dosya verilince '(boş klasör)' değil net hata döner", async () => {
+  it("returns a clear error (not '(empty folder)') when given a file", async () => {
     mockReadDir.mockRejectedValue(new Error("ENOTDIR"))
     mockExists.mockResolvedValue(true)
     const r = await listDir(WS, "file.ts")
-    expect(r).toContain("bir dizin değil")
+    expect(r).toContain("not a directory")
   })
 
-  it("var olmayan yol → '(boş klasör)' değil 'bulunamadı'", async () => {
+  it("nonexistent path → 'not found' (not '(empty folder)')", async () => {
     mockReadDir.mockRejectedValue(new Error("ENOENT"))
     mockExists.mockResolvedValue(false)
     const r = await listDir(WS, "nope")
-    expect(r).toContain("bulunamadı")
+    expect(r).toContain("not found")
   })
 })
 
 // ─── readFile ─────────────────────────────────────────────────────────────────
 
 describe("readFile", () => {
-  it("içerik satır numaralı döner", async () => {
+  it("returns content with line numbers", async () => {
     mockRead.mockResolvedValue("line one\nline two\nline three")
     const r = await readFile(WS, "src/foo.ts")
     expect(r).toContain("line one")
@@ -107,7 +107,7 @@ describe("readFile", () => {
     expect(r).toMatch(/^\s*2\t/m)
   })
 
-  it("offset + limit çalışır", async () => {
+  it("offset + limit work", async () => {
     mockRead.mockResolvedValue("L1\nL2\nL3\nL4\nL5")
     const r = await readFile(WS, "f.ts", 2, 2)
     expect(r).toContain("L2")
@@ -116,66 +116,66 @@ describe("readFile", () => {
     expect(r).not.toContain("L5")
   })
 
-  it("offset başlangıç satır numarasını ayarlar", async () => {
+  it("offset sets the starting line number", async () => {
     mockRead.mockResolvedValue("a\nb\nc")
     const r = await readFile(WS, "f.ts", 2, 1)
     expect(r).toMatch(/^\s*2\t/m)
   })
 
-  it("uzun satır 2000 karaktere kısaltılır", async () => {
+  it("truncates a long line to 2000 characters", async () => {
     mockRead.mockResolvedValue("x".repeat(250_000))
     const r = await readFile(WS, "big.ts")
-    expect(r).toContain("kısaltıldı")
+    expect(r).toContain("truncated")
   })
 
-  it("footer dosya sonunu + toplam satırı belirtir", async () => {
+  it("footer states end of file + total lines", async () => {
     mockRead.mockResolvedValue("a\nb\nc")
     const r = await readFile(WS, "f.ts")
-    expect(r).toContain("Dosya sonu")
-    expect(r).toContain("3 satır")
+    expect(r).toContain("End of file")
+    expect(r).toContain("3 lines")
   })
 
-  it("2000 satırdan fazla → ilk 2000 + devam offset'i", async () => {
+  it("more than 2000 lines → first 2000 + continuation offset", async () => {
     mockRead.mockResolvedValue(Array.from({ length: 2500 }, (_, i) => `line${i}`).join("\n"))
     const r = await readFile(WS, "f.ts")
-    expect(r).toContain("Devamı için offset=2001")
+    expect(r).toContain("Continue with offset=2001")
     expect(r).not.toContain("line2400")
   })
 
-  it("offset dosya dışında → net hata", async () => {
+  it("offset beyond file → clear error", async () => {
     mockRead.mockResolvedValue("a\nb")
     const r = await readFile(WS, "f.ts", 99)
-    expect(r).toContain("aralığı dışında")
+    expect(r).toContain("out of range")
   })
 
-  it("dizin verilince list_dir'e yönlendirir (ham IO hatası değil)", async () => {
+  it("redirects to list_dir when given a directory (not a raw IO error)", async () => {
     mockStat.mockResolvedValue({ isDirectory: true } as Awaited<ReturnType<typeof stat>>)
     const r = await readFile(WS, "src")
-    expect(r).toContain("bir dizin")
+    expect(r).toContain("a directory")
     expect(r).toContain("list_dir")
   })
 
-  it("maxChars verilince tek okuma erken kesilir + devam offset'i döner", async () => {
+  it("with maxChars, a single read stops early + returns a continuation offset", async () => {
     mockRead.mockResolvedValue(
       Array.from({ length: 100 }, (_, i) => `L${i}_` + "y".repeat(46)).join("\n"),
     )
     const r = await readFileAbs("/workspace/big.ts", undefined, undefined, 2000)
-    expect(r).toContain("karakter sınırına ulaşıldı")
-    expect(r).toContain("Devamı için offset=")
+    expect(r).toContain("character limit")
+    expect(r).toContain("Continue with offset=")
     expect(r).not.toContain("L99_")
   })
 
-  it("maxChars içeriği aşıyorsa tüm dosya okunur (kesme yok)", async () => {
+  it("if maxChars exceeds the content, the whole file is read (no truncation)", async () => {
     mockRead.mockResolvedValue("a\nb\nc")
     const r = await readFileAbs("/workspace/f.ts", undefined, undefined, 100_000)
-    expect(r).toContain("Dosya sonu")
+    expect(r).toContain("End of file")
   })
 })
 
 // ─── writeFile ────────────────────────────────────────────────────────────────
 
 describe("writeFile", () => {
-  it("içerik yazılır, başarı mesajı döner", async () => {
+  it("writes the content and returns a success message", async () => {
     const r = await writeFile(WS, "src/new.ts", "const x = 1")
     expect(mockWrite).toHaveBeenCalledWith(
       `${WS}/src/new.ts`,
@@ -184,7 +184,7 @@ describe("writeFile", () => {
     expect(r).toContain("src/new.ts")
   })
 
-  it("parent dizin yoksa mkdir çağrılır", async () => {
+  it("calls mkdir when the parent directory is missing", async () => {
     mockExists.mockResolvedValue(false)
     await writeFile(WS, "a/b/c.ts", "")
     expect(mockMkdir).toHaveBeenCalledWith(
@@ -193,29 +193,29 @@ describe("writeFile", () => {
     )
   })
 
-  it("parent dizin varsa mkdir çağrılmaz", async () => {
+  it("does not call mkdir when the parent directory exists", async () => {
     mockExists.mockResolvedValue(true)
     await writeFile(WS, "existing/file.ts", "x")
     expect(mockMkdir).not.toHaveBeenCalled()
   })
 
-  it("yeni dosya → çıktı 'oluşturuldu'", async () => {
+  it("new file → output 'created'", async () => {
     mockExists.mockResolvedValue(false)
     const r = await writeFile(WS, "new.ts", "x")
-    expect(r).toContain("oluşturuldu")
+    expect(r).toContain("created")
   })
 
-  it("mevcut dosya overwrite → çıktı 'güncellendi'", async () => {
+  it("existing file overwrite → output 'updated'", async () => {
     mockExists.mockResolvedValue(true)
     const r = await writeFile(WS, "old.ts", "x")
-    expect(r).toContain("güncellendi")
+    expect(r).toContain("updated")
   })
 })
 
 // ─── editFile ─────────────────────────────────────────────────────────────────
 
 describe("editFile", () => {
-  it("old_string → new_string ile değiştirilir", async () => {
+  it("replaces old_string with new_string", async () => {
     mockRead.mockResolvedValue("const x = 1\nconst y = 2\n")
     const r = await editFile(WS, "f.ts", "const x = 1", "const x = 99")
     const written = mockWrite.mock.calls[0]?.[1] as string
@@ -224,24 +224,24 @@ describe("editFile", () => {
     expect(r).toContain("f.ts")
   })
 
-  it("old_string bulunamazsa fırlatır", async () => {
+  it("throws when old_string is not found", async () => {
     mockRead.mockResolvedValue("something else entirely")
-    await expect(editFile(WS, "f.ts", "missing text", "new")).rejects.toThrow(/bulunamadı/)
+    await expect(editFile(WS, "f.ts", "missing text", "new")).rejects.toThrow(/not found/)
   })
 
-  it("old_string birden fazla yerde geçerse fırlatır", async () => {
+  it("throws when old_string occurs in multiple places", async () => {
     mockRead.mockResolvedValue("dup\ndup\n")
-    await expect(editFile(WS, "f.ts", "dup", "X")).rejects.toThrow(/birden fazla/)
+    await expect(editFile(WS, "f.ts", "dup", "X")).rejects.toThrow(/multiple places/)
   })
 
-  it("replace_all tüm geçişleri değiştirir", async () => {
+  it("replace_all replaces every occurrence", async () => {
     mockRead.mockResolvedValue("foo foo foo\n")
     await editFile(WS, "f.ts", "foo", "bar", true)
     const written = mockWrite.mock.calls[0]?.[1] as string
     expect(written).toBe("bar bar bar\n")
   })
 
-  it("girinti uyuşmazlığını fallback ile tolere eder", async () => {
+  it("tolerates indentation mismatch via fallback", async () => {
     mockRead.mockResolvedValue("if (x) {\n    doThing()\n}\n")
     await editFile(WS, "f.ts", "if (x) {\ndoThing()\n}", "DONE")
     const written = mockWrite.mock.calls[0]?.[1] as string

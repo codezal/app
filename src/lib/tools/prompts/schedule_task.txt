@@ -4,7 +4,7 @@ A routine is stored as a markdown file under `.codezal/routines/`. When its cron
 
 Actions (`action`):
 - `create`: save a new routine. Requires `name` and `prompt`. Optional: `schedule` (cron, recurring), `delay` (one-shot), `description`, `scope` ("project" default, or "global").
-- `list`: list all routines (project + global) with their cron and next fire time. One-shot routines are marked `[tek-sefer]`.
+- `list`: list all routines (project + global) with their cron and next fire time. One-shot routines are marked `[one-shot]`.
 - `delete`: remove a routine. Requires `path` (from `list`).
 
 Cron format (`schedule`): 5 fields, local time — `minute hour day-of-month month day-of-week`.

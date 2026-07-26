@@ -799,7 +799,7 @@ function FileGroups({
   )
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {staged.length > 0 && (
         <Group
           label={tStatic("gitPanel.stagedLabel")}
@@ -898,7 +898,7 @@ function Group({
   const [open, setOpen] = useState(true)
   return (
     <div>
-      <div className="group mb-1.5 flex w-full items-center gap-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-codezal-mute">
+      <div className="group mb-1 flex w-full items-center gap-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-codezal-mute">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -967,16 +967,16 @@ function FileRow({
               ? l.code.trim()
               : tStatic("gitPanel.fileModified")
   return (
-    <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-codezal-panel-2">
+    <div className="group flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-codezal-panel-2">
       <button
         type="button"
         onClick={onClick}
-        className="flex min-w-0 flex-1 flex-col items-start gap-0 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
         title={entry.path}
       >
-        <span className="w-full truncate text-codezal-text">{base}</span>
+        <span className="min-w-0 truncate text-codezal-text">{base}</span>
         {dir && (
-          <span className="w-full truncate font-mono text-[11px] leading-4 text-codezal-mute">
+          <span className="ml-auto max-w-[55%] shrink-0 truncate pl-2 font-mono text-[11px] text-codezal-mute">
             {dir}
           </span>
         )}
@@ -1048,13 +1048,13 @@ function BranchFileRow({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-codezal-panel-2"
+      className="group flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm hover:bg-codezal-panel-2"
       title={change.file}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
         <span className="min-w-0 truncate text-codezal-text">{base}</span>
         {dir && (
-          <span className="ml-auto max-w-[55%] shrink-0 truncate pl-2 text-sm text-codezal-mute">
+          <span className="ml-auto max-w-[55%] shrink-0 truncate pl-2 font-mono text-[11px] text-codezal-mute">
             {dir}
           </span>
         )}

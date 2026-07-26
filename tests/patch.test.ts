@@ -34,33 +34,33 @@ beforeEach(() => {
 // ─── formatApplyResult ────────────────────────────────────────────────────────
 
 describe("formatApplyResult", () => {
-  it("hepsi boş → değişiklik yok mesajı", () => {
+  it("all empty → no-changes message", () => {
     const r = formatApplyResult({ filesChanged: [], filesAdded: [], filesDeleted: [], filesMoved: [], hunksApplied: 0 })
-    expect(r).toContain("değişmedi")
+    expect(r).toContain("Patch applied but no files changed.")
   })
 
-  it("değiştirilen dosya M ile listede görünür", () => {
+  it("a changed file appears in the list with M", () => {
     const r = formatApplyResult({ filesChanged: ["src/foo.ts"], filesAdded: [], filesDeleted: [], filesMoved: [], hunksApplied: 1 })
     expect(r).toContain("M src/foo.ts")
     expect(r).toContain("1 hunk")
   })
 
-  it("eklenen dosya A ile listede görünür", () => {
+  it("an added file appears in the list with A", () => {
     const r = formatApplyResult({ filesChanged: [], filesAdded: ["src/new.ts"], filesDeleted: [], filesMoved: [], hunksApplied: 1 })
     expect(r).toContain("A src/new.ts")
   })
 
-  it("silinen dosya D ile listede görünür", () => {
+  it("a deleted file appears in the list with D", () => {
     const r = formatApplyResult({ filesChanged: [], filesAdded: [], filesDeleted: ["src/old.ts"], filesMoved: [], hunksApplied: 1 })
     expect(r).toContain("D src/old.ts")
   })
 
-  it("taşınan dosya R ile listede görünür", () => {
+  it("a moved file appears in the list with R", () => {
     const r = formatApplyResult({ filesChanged: [], filesAdded: [], filesDeleted: [], filesMoved: [{ from: "a.ts", to: "b.ts" }], hunksApplied: 1 })
     expect(r).toContain("R a.ts → b.ts")
   })
 
-  it("çoklu dosya ayrı satırlarda", () => {
+  it("multiple files on separate lines", () => {
     const r = formatApplyResult({
       filesChanged: ["a.ts", "b.ts"],
       filesAdded: [],
@@ -76,7 +76,7 @@ describe("formatApplyResult", () => {
 // ─── applyPatch — Update File ─────────────────────────────────────────────────
 
 describe("applyPatch — Update File", () => {
-  it("Tauri scope reddederse güvenli Rust fallback ile düzenler", async () => {
+  it("falls back to the safe Rust path when Tauri scope rejects", async () => {
     mockExists.mockRejectedValue(new Error("path not allowed by scope"))
     mockRead.mockRejectedValue(new Error("path not allowed by scope"))
     mockWrite.mockRejectedValue(new Error("path not allowed by scope"))
@@ -104,7 +104,7 @@ describe("applyPatch — Update File", () => {
     })
   })
 
-  it("tek hunk satır değiştirir", async () => {
+  it("a single hunk changes a line", async () => {
     mockRead.mockResolvedValue("line1\nold line\nline3\n")
     const patch = [
       "*** Begin Patch",
@@ -124,7 +124,7 @@ describe("applyPatch — Update File", () => {
     expect(written).not.toContain("old line")
   })
 
-  it("birden fazla hunk uygulanır", async () => {
+  it("applies multiple hunks", async () => {
     mockRead.mockResolvedValue("a\nb\nc\nd\ne\n")
     const patch = [
       "*** Begin Patch",
@@ -146,7 +146,7 @@ describe("applyPatch — Update File", () => {
     expect(written).toContain("E")
   })
 
-  it("model bloğu trailing-whitespace ile verse de eşleştirir (fuzzy — eski indexOf PATLARDI)", async () => {
+  it("matches even when the model emits the block with trailing whitespace (fuzzy — the old indexOf WOULD EXPLODE)", async () => {
     mockRead.mockResolvedValue("keep\nchange me\ntail\n")
     const patch = [
       "*** Begin Patch",
@@ -165,7 +165,7 @@ describe("applyPatch — Update File", () => {
     expect(written).not.toContain("change me")
   })
 
-  it("akıllı tırnak (unicode) farkını normalize eder", async () => {
+  it("normalizes smart-quote (unicode) differences", async () => {
     mockRead.mockResolvedValue("const s = 'hi'\n")
     const patch = [
       "*** Begin Patch",
@@ -181,7 +181,7 @@ describe("applyPatch — Update File", () => {
     expect(written).toContain("bye")
   })
 
-  it("@@ context başlığı belirsiz eşleşmeyi doğru bloğa yönlendirir", async () => {
+  it("@@ context header routes an ambiguous match to the correct block", async () => {
     mockRead.mockResolvedValue("function a() {\n  return x\n}\nfunction b() {\n  return x\n}\n")
     const patch = [
       "*** Begin Patch",
@@ -198,22 +198,22 @@ describe("applyPatch — Update File", () => {
     expect(written.match(/return x/g)?.length).toBe(1)
   })
 
-  it("pure-add hunk @@ context'ten SONRA ekler (EOF'a değil)", async () => {
+  it("a pure-add hunk inserts AFTER the @@ context (not at EOF)", async () => {
     mockRead.mockResolvedValue("function a() {\n  body\n}\nfunction b() {\n  body\n}\n")
     const patch = [
       "*** Begin Patch",
       "*** Update File: f.ts",
-      "@@ function a()", // context: a()'dan sonra eklenmeli
-      "+  // yeni satir",
+      "@@ function a()", // context: should be inserted after a()
+      "+  // new line",
       "*** End Patch",
     ].join("\n")
     const r = await applyPatch(WS, patch)
     expect(r.hunksApplied).toBe(1)
     const written = mockWrite.mock.calls[0]?.[1] as string
-    expect(written.indexOf("// yeni satir")).toBeLessThan(written.indexOf("function b()"))
+    expect(written.indexOf("// new line")).toBeLessThan(written.indexOf("function b()"))
   })
 
-  it("pure-add hunk context'siz → dosya sonuna ekler (mevcut davranış korunur)", async () => {
+  it("pure-add hunk without context → appends to end of file (existing behavior preserved)", async () => {
     mockRead.mockResolvedValue("line1\nline2\n")
     const patch = [
       "*** Begin Patch",
@@ -228,7 +228,7 @@ describe("applyPatch — Update File", () => {
     expect(written.indexOf("line3")).toBeGreaterThan(written.indexOf("line2"))
   })
 
-  it("@@ context yokken belirsiz eşleşme yine hata verir", async () => {
+  it("ambiguous match without @@ context still errors", async () => {
     mockRead.mockResolvedValue("dup\ndup\n")
     const patch = [
       "*** Begin Patch",
@@ -238,10 +238,10 @@ describe("applyPatch — Update File", () => {
       "+NEW",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/birden fazla/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/multiple places/)
   })
 
-  it("dosya yoksa hata fırlatır", async () => {
+  it("throws when the file does not exist", async () => {
     mockExists.mockResolvedValue(false)
     const patch = [
       "*** Begin Patch",
@@ -251,10 +251,10 @@ describe("applyPatch — Update File", () => {
       "+new",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/dosya yok/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/does not exist/)
   })
 
-  it("hunk eşleşmezse hata fırlatır", async () => {
+  it("throws when the hunk does not match", async () => {
     mockRead.mockResolvedValue("completely different content\n")
     const patch = [
       "*** Begin Patch",
@@ -264,10 +264,10 @@ describe("applyPatch — Update File", () => {
       "+replacement",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/eşleşmedi/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/did not match/)
   })
 
-  it("aynı blok birden fazla yerde varsa hata fırlatır", async () => {
+  it("throws when the same block exists in multiple places", async () => {
     mockRead.mockResolvedValue("dup\ndup\n")
     const patch = [
       "*** Begin Patch",
@@ -277,14 +277,14 @@ describe("applyPatch — Update File", () => {
       "+NEW",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/birden fazla/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/multiple places/)
   })
 })
 
 // ─── applyPatch — Add File ────────────────────────────────────────────────────
 
 describe("applyPatch — Add File", () => {
-  it("yeni dosya oluşturulur", async () => {
+  it("creates a new file", async () => {
     mockExists.mockResolvedValue(false)
     const patch = [
       "*** Begin Patch",
@@ -298,7 +298,7 @@ describe("applyPatch — Add File", () => {
     expect(written).toContain("export const x = 1")
   })
 
-  it("dosya zaten varsa hata fırlatır", async () => {
+  it("throws when the file already exists", async () => {
     mockExists.mockResolvedValue(true)
     const patch = [
       "*** Begin Patch",
@@ -306,14 +306,14 @@ describe("applyPatch — Add File", () => {
       "+content",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/zaten var/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/already exists/)
   })
 })
 
 // ─── applyPatch — Delete File ─────────────────────────────────────────────────
 
 describe("applyPatch — Delete File", () => {
-  it("dosya silinir", async () => {
+  it("deletes the file", async () => {
     const patch = [
       "*** Begin Patch",
       "*** Delete File: src/old.ts",
@@ -324,21 +324,21 @@ describe("applyPatch — Delete File", () => {
     expect(mockRemove).toHaveBeenCalledOnce()
   })
 
-  it("dosya yoksa hata fırlatır", async () => {
+  it("throws when the file does not exist", async () => {
     mockExists.mockResolvedValue(false)
     const patch = [
       "*** Begin Patch",
       "*** Delete File: gone.ts",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/dosya yok/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/does not exist/)
   })
 })
 
 // ─── applyPatch — Move to (rename) ────────────────────────────────────────────
 
 describe("applyPatch — Move to", () => {
-  it("dosyayı yeni yola taşır + eskiyi siler", async () => {
+  it("moves the file to the new path + deletes the old one", async () => {
     mockRead.mockResolvedValue("line1\nold\nline3\n")
     const patch = [
       "*** Begin Patch",
@@ -362,27 +362,27 @@ describe("applyPatch — Move to", () => {
 
 // ─── applyPatch — parse errors ────────────────────────────────────────────────
 
-describe("applyPatch — format hataları", () => {
-  it("Begin Patch eksik → hata", async () => {
+describe("applyPatch — format errors", () => {
+  it("missing Begin Patch → error", async () => {
     await expect(applyPatch(WS, "not a patch")).rejects.toThrow(/Begin Patch/)
   })
 
-  it("boş patch (Begin/End arası boş) → hata", async () => {
-    await expect(applyPatch(WS, "*** Begin Patch\n*** End Patch")).rejects.toThrow(/Boş patch/)
+  it("empty patch (nothing between Begin/End) → error", async () => {
+    await expect(applyPatch(WS, "*** Begin Patch\n*** End Patch")).rejects.toThrow(/Empty patch/)
   })
 
-  it("End Patch eksik → hata", async () => {
+  it("missing End Patch → error", async () => {
     await expect(applyPatch(WS, "*** Begin Patch\n*** Update File: f.ts\n@@\n-x\n+y"))
       .rejects.toThrow(/End Patch/)
   })
 
-  it("bilinmeyen direktif → hata", async () => {
+  it("unknown directive → error", async () => {
     await expect(
       applyPatch(WS, "*** Begin Patch\n*** Unknown Directive: foo\n*** End Patch"),
     ).rejects.toThrow()
   })
 
-  it("Update File altında @@ yoksa hata", async () => {
+  it("error when there is no @@ under Update File", async () => {
     mockExists.mockResolvedValue(true)
     await expect(
       applyPatch(WS, "*** Begin Patch\n*** Update File: f.ts\n*** End Patch"),
@@ -391,8 +391,8 @@ describe("applyPatch — format hataları", () => {
 })
 
 
-describe("applyPatch — çoklu dosya", () => {
-  it("iki farklı dosya tek patch'te", async () => {
+describe("applyPatch — multiple files", () => {
+  it("two different files in a single patch", async () => {
     mockRead
       .mockResolvedValueOnce("aaa\n")
       .mockResolvedValueOnce("bbb\n")
@@ -416,8 +416,8 @@ describe("applyPatch — çoklu dosya", () => {
 })
 
 
-describe("applyPatch — atomiklik", () => {
-  it("ikinci op patlarsa HİÇBİR dosya yazılmaz (faz-1 hata → faz-2 atlanır)", async () => {
+describe("applyPatch — atomicity", () => {
+  it("if the second op blows up, NO file is written (phase-1 error → phase-2 skipped)", async () => {
     mockRead.mockResolvedValueOnce("aaa\n").mockResolvedValueOnce("bbb\n")
     const patch = [
       "*** Begin Patch",
@@ -431,15 +431,15 @@ describe("applyPatch — atomiklik", () => {
       "+x",
       "*** End Patch",
     ].join("\n")
-    await expect(applyPatch(WS, patch)).rejects.toThrow(/eşleşmedi/)
+    await expect(applyPatch(WS, patch)).rejects.toThrow(/did not match/)
     expect(mockWrite).not.toHaveBeenCalled()
     expect(mockRemove).not.toHaveBeenCalled()
   })
 })
 
 
-describe("parsePatchForUI — gutter satır no", () => {
-  it("update hunk: del→oldNo, add→newNo, ctx→ikisi", () => {
+describe("parsePatchForUI — gutter line numbers", () => {
+  it("update hunk: del→oldNo, add→newNo, ctx→both", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.ts",
@@ -460,7 +460,7 @@ describe("parsePatchForUI — gutter satır no", () => {
     ])
   })
 
-  it("add file: hep-add, newNo 1..N", () => {
+  it("add file: all-add, newNo 1..N", () => {
     const patch = [
       "*** Begin Patch",
       "*** Add File: new.ts",
@@ -476,7 +476,7 @@ describe("parsePatchForUI — gutter satır no", () => {
     ])
   })
 
-  it("çoklu hunk arası '…' ayraç, numara sürekli akar", () => {
+  it("'…' separator between multiple hunks, numbering flows continuously", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.ts",
@@ -498,7 +498,7 @@ describe("parsePatchForUI — gutter satır no", () => {
     ])
   })
 
-  it("bağlam ±2'ye kırpılır — dev context duvarı gösterilmez (edit_file paritesi)", () => {
+  it("context is clipped to ±2 — no giant context wall is shown (edit_file parity)", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.ts",
@@ -525,7 +525,7 @@ describe("parsePatchForUI — gutter satır no", () => {
     ])
   })
 
-  it("move + içerik değişimi → movePath + diff satırları (DiffBlock 'a → b' başlık)", () => {
+  it("move + content change → movePath + diff lines (DiffBlock 'a → b' title)", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.ts",
@@ -543,7 +543,7 @@ describe("parsePatchForUI — gutter satır no", () => {
     ])
   })
 
-  it("içerik değişimsiz rename → movePath dolu, lines BOŞ (MovedFileLine ile gösterilir)", () => {
+  it("rename without content change → movePath set, lines EMPTY (rendered via MovedFileLine)", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.ts",

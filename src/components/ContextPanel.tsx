@@ -184,8 +184,8 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
         )}
       >
         {mode === "files" && <FilesSection workspacePath={ws} />}
-        {mode === "git" && <GitPanel workspacePath={ws} surface="changes" />}
-        {mode === "review" && <GitPanel workspacePath={ws} surface="review" />}
+        {mode === "git" && <GitPanel key={ws ?? ""} workspacePath={ws} surface="changes" />}
+        {mode === "review" && <GitPanel key={ws ?? ""} workspacePath={ws} surface="review" />}
         {mode === "agents" && <AgentsSection workspacePath={ws} />}
         {mode === "skills" && <SkillsSection workspacePath={ws} />}
         {mode === "memory" && <MemorySection workspacePath={ws} />}

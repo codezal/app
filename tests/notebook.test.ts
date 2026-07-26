@@ -106,13 +106,13 @@ describe("applyCellEdit", () => {
   it("replace/delete: bulunamayan hücre hata fırlatır", () => {
     expect(() =>
       applyCellEdit(nb([]), { editMode: "replace", cellNumber: 5, newSource: "x" }),
-    ).toThrow(/bulunamadı/)
+    ).toThrow(/not found/)
     expect(() =>
       applyCellEdit(nb([{ cell_type: "code", source: ["a"] }]), {
         editMode: "delete",
         cellId: "nope",
       }),
-    ).toThrow(/bulunamadı/)
+    ).toThrow(/not found/)
   })
 
   it("boş kaynak boş satır listesine çevrilir", () => {

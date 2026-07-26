@@ -81,7 +81,14 @@ export async function listDirAbs(
     try {
       entries = await readDirSafe(dir)
     } catch {
-      return // okunamayan dizini atla
+      // Unreadable subdir: report it instead of skipping silently, so the model
+      // knows the directory exists but its contents could not be listed.
+      if (level > 1) {
+        const name = dir.split(/[\\/]/).pop() ?? dir
+        lines.push(`${"  ".repeat(level - 2)}d ${name} (unreadable — skipped)`)
+        count++
+      }
+      return
     }
     entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
@@ -115,13 +122,13 @@ export async function listDirAbs(
     await readDirSafe(abs)
   } catch {
     return (await existsSafe(abs))
-      ? `Hata: ${abs} bir dizin değil — dosya içeriği için read_file kullan.`
-      : `Hata: yol bulunamadı: ${abs}`
+      ? `Error: ${abs} is not a directory — use read_file for file contents.`
+      : `Error: path not found: ${abs}`
   }
 
   await walk(abs, 1)
-  if (lines.length === 0) return "(boş klasör)"
-  if (truncated) lines.push(`... (kesildi, ${MAX_ENTRIES}+ giriş)`)
+  if (lines.length === 0) return "(empty folder)"
+  if (truncated) lines.push(`... (truncated, ${MAX_ENTRIES}+ entries)`)
   return lines.join("\n")
 }
 
@@ -138,7 +145,7 @@ export async function readFileAbs(
   const filename = abs.split(/[\\/]/).pop() ?? abs
   const cap = maxChars && maxChars > 0 ? Math.min(maxChars, MAX_READ_CHARS) : MAX_READ_CHARS
 
-  // Resim → base64 data URL
+  // Image → base64 data URL
   if (isImage(filename)) {
     const mime = mimeForImage(filename)
     return `data:${mime};base64,${await readBase64Safe(abs)}`
@@ -147,7 +154,7 @@ export async function readFileAbs(
   if (isPdf(filename)) {
     const bytes = await readBinarySafe(abs)
     const text = await extractPdfText(bytes, 50)
-    return text || `(PDF metni çıkarılamadı — taranmış olabilir: ${filename})`
+    return text || `(could not extract PDF text — may be scanned: ${filename})`
   }
 
   if (isBinaryDoc(filename)) {
@@ -156,11 +163,11 @@ export async function readFileAbs(
   }
 
   if (isBinary(filename)) {
-    return `(binary dosya — ${filename} içeriği okunamaz)`
+    return `(binary file — cannot read contents of ${filename})`
   }
 
   if (await statIsDirSafe(abs)) {
-    return `Hata: ${abs} bir dizin — içeriğini listelemek için list_dir kullan.`
+    return `Error: ${abs} is a directory — use list_dir to list its contents.`
   }
 
   const content = await readTextSafe(abs)
@@ -169,7 +176,7 @@ export async function readFileAbs(
   const start = offset && offset > 0 ? offset - 1 : 0
 
   if (start > 0 && start >= total) {
-    return `Hata: offset ${offset} dosya aralığı dışında — dosyada ${total} satır var.`
+    return `Error: offset ${offset} is out of range — the file has ${total} lines.`
   }
 
   const lim = limit && limit > 0 ? limit : DEFAULT_READ_LIMIT
@@ -181,7 +188,7 @@ export async function readFileAbs(
   for (let i = start; i < hardEnd; i++) {
     let line = allLines[i]
     if (line.length > MAX_LINE_LEN) {
-      line = sliceCharsSafe(line, MAX_LINE_LEN) + ` … (satır ${MAX_LINE_LEN} karaktere kısaltıldı)`
+      line = sliceCharsSafe(line, MAX_LINE_LEN) + ` … (line truncated to ${MAX_LINE_LEN} characters)`
     }
     if (chars + line.length > cap && out.length > 0) {
       cut = true
@@ -196,11 +203,11 @@ export async function readFileAbs(
 
   let footer: string
   if (cut) {
-    footer = `(${Math.round(cap / 1000)}K karakter sınırına ulaşıldı. Satır ${start + 1}-${last} gösteriliyor. Devamı için offset=${last + 1}.)`
+    footer = `(hit the ${Math.round(cap / 1000)}K character limit. Showing lines ${start + 1}-${last}. Continue with offset=${last + 1}.)`
   } else if (hardEnd < total) {
-    footer = `(Satır ${start + 1}-${last} / toplam ${total}. Devamı için offset=${last + 1}.)`
+    footer = `(Lines ${start + 1}-${last} / ${total} total. Continue with offset=${last + 1}.)`
   } else {
-    footer = `(Dosya sonu — toplam ${total} satır.)`
+    footer = `(End of file — ${total} lines total.)`
   }
   return `${numbered}\n\n${footer}`
 }
@@ -249,7 +256,7 @@ export async function writeFileAbs(
     // Intentionally ignored.
   }
   await writeTextSafe(abs, content)
-  return `Dosya ${existed ? "güncellendi" : "oluşturuldu"}: ${label ?? abs} (${content.length} char)`
+  return `File ${existed ? "updated" : "created"}: ${label ?? abs} (${content.length} char)`
 }
 
 export async function writeFile(
@@ -273,7 +280,7 @@ export async function editFileAbs(
   const toEnding = (s: string) => s.replace(/\r\n/g, "\n").replace(/\n/g, ending)
   const next = replace(content, toEnding(oldString), toEnding(newString), replaceAll)
   await writeTextSafe(abs, next)
-  return `Düzenlendi: ${label ?? abs}`
+  return `Edited: ${label ?? abs}`
 }
 
 export async function editFile(

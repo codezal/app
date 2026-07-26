@@ -1,4 +1,4 @@
-// Format (Opencode/GPT-OSS stili):
+// Format (Opencode/GPT-OSS style):
 //
 // *** Begin Patch
 // *** Update File: src/foo.ts
@@ -51,7 +51,7 @@ function parsePatch(input: string): FileOp[] {
 
   while (i < lines.length && lines[i].trim() === "") i++
   if (i >= lines.length || !lines[i].startsWith("*** Begin Patch")) {
-    throw new PatchError("Patch '*** Begin Patch' satırı ile başlamalı")
+    throw new PatchError("Patch must start with a '*** Begin Patch' line")
   }
   i++
 
@@ -59,7 +59,7 @@ function parsePatch(input: string): FileOp[] {
   while (i < lines.length) {
     const line = lines[i]
     if (line.startsWith("*** End Patch")) {
-      if (ops.length === 0) throw new PatchError("Boş patch — hiçbir dosya işlemi yok")
+      if (ops.length === 0) throw new PatchError("Empty patch — no file operations")
       return ops
     }
     if (line.startsWith("*** Update File:")) {
@@ -101,9 +101,9 @@ function parsePatch(input: string): FileOp[] {
       i++
       continue
     }
-    throw new PatchError(`Tanınmayan patch direktifi (satır ${i + 1}): ${line}`)
+    throw new PatchError(`Unrecognized patch directive (line ${i + 1}): ${line}`)
   }
-  throw new PatchError("Patch '*** End Patch' ile bitmedi")
+  throw new PatchError("Patch did not end with '*** End Patch'")
 }
 
 function parseHunks(lines: string[], start: number): { hunks: Hunk[]; nextIdx: number } {
@@ -113,15 +113,15 @@ function parseHunks(lines: string[], start: number): { hunks: Hunk[]; nextIdx: n
   while (i < lines.length && lines[i].trim() === "") i++
   if (i >= lines.length || !lines[i].startsWith("@@")) {
     if (i < lines.length && lines[i].startsWith("*** ")) {
-      throw new PatchError(`Update File altında en az bir '@@' hunk gerekir (satır ${i + 1})`)
+      throw new PatchError(`Update File requires at least one '@@' hunk (line ${i + 1})`)
     }
-    throw new PatchError(`'@@' hunk başlığı bekleniyordu (satır ${i + 1})`)
+    throw new PatchError(`Expected an '@@' hunk header (line ${i + 1})`)
   }
 
   while (i < lines.length) {
     if (!lines[i].startsWith("@@")) {
       if (lines[i].startsWith("*** ")) break
-      throw new PatchError(`Hunk başlığı '@@' bekleniyordu (satır ${i + 1})`)
+      throw new PatchError(`Expected an '@@' hunk header (line ${i + 1})`)
     }
     const ctxHeader = lines[i].slice(2).trim()
     i++
@@ -134,7 +134,7 @@ function parseHunks(lines: string[], start: number): { hunks: Hunk[]; nextIdx: n
       else if (l.startsWith(" ")) hunkLines.push({ kind: "ctx", text: l.slice(1) })
       else if (l === "") hunkLines.push({ kind: "ctx", text: "" })
       else {
-        // Bilinmeyen prefix — context olarak kabul et
+        // Unknown prefix — treat as context
         hunkLines.push({ kind: "ctx", text: l })
       }
       i++
@@ -228,11 +228,11 @@ export function applyHunk(content: string, hunk: Hunk): string {
   if ("error" in match) {
     if (match.error === "ambiguous") {
       throw new PatchError(
-        `Hunk birden fazla yerde eşleşiyor — daha fazla context satırı ekle:\n---\n${oldBlock.slice(0, 400)}\n---`,
+        `Hunk matched in multiple places — add more context lines:\n---\n${oldBlock.slice(0, 400)}\n---`,
       )
     }
     throw new PatchError(
-      `Hunk eşleşmedi — eski blok dosyada bulunamadı:\n---\n${oldBlock.slice(0, 400)}\n---`,
+      `Hunk did not match — old block not found in the file:\n---\n${oldBlock.slice(0, 400)}\n---`,
     )
   }
   return content.slice(0, match.index) + newBlock + content.slice(match.index + match.length)
@@ -267,7 +267,7 @@ export async function applyPatch(workspace: string, patch: string): Promise<Appl
     const abs = resolveInWorkspace(workspace, op.path)
     if (op.op === "update") {
       const cur = await readState(abs)
-      if (cur === null) throw new PatchError(`Update File: dosya yok — ${op.path}`)
+      if (cur === null) throw new PatchError(`Update File: file does not exist — ${op.path}`)
       let content = cur
       for (const hunk of op.hunks) {
         content = applyHunk(content, hunk)
@@ -284,12 +284,12 @@ export async function applyPatch(workspace: string, patch: string): Promise<Appl
       }
     } else if (op.op === "add") {
       const cur = await readState(abs)
-      if (cur !== null) throw new PatchError(`Add File: dosya zaten var — ${op.path}`)
+      if (cur !== null) throw new PatchError(`Add File: file already exists — ${op.path}`)
       overlay.set(abs, op.content)
       result.filesAdded.push(op.path)
     } else if (op.op === "delete") {
       const cur = await readState(abs)
-      if (cur === null) throw new PatchError(`Delete File: dosya yok — ${op.path}`)
+      if (cur === null) throw new PatchError(`Delete File: file does not exist — ${op.path}`)
       overlay.set(abs, null)
       result.filesDeleted.push(op.path)
     }
@@ -361,6 +361,6 @@ export function formatApplyResult(r: ApplyPatchResult): string {
   for (const f of r.filesChanged) lines.push(`M ${f}`)
   for (const m of r.filesMoved) lines.push(`R ${m.from} → ${m.to}`)
   for (const f of r.filesDeleted) lines.push(`D ${f}`)
-  if (lines.length === 0) return "Patch uygulandı ama dosya değişmedi."
-  return `Başarılı. Değişen dosyalar:\n${lines.join("\n")}\n(${r.hunksApplied} hunk)`
+  if (lines.length === 0) return "Patch applied but no files changed."
+  return `Success. Changed files:\n${lines.join("\n")}\n(${r.hunksApplied} hunk)`
 }

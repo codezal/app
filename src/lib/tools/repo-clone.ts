@@ -2,6 +2,15 @@ import { homeDir } from "@tauri-apps/api/path"
 import { exists } from "@tauri-apps/plugin-fs"
 import { withLock } from "../lock"
 import { runProgram } from "@/lib/exec"
+import { isWindows } from "@/lib/platform"
+
+// Normalise a path for a "is it under $HOME?" prefix check: forward slashes,
+// no trailing slash, case-folded on Windows (NTFS is case-insensitive).
+function normalizeForHomeCheck(p: string): string {
+  let n = p.replace(/\\/g, "/").replace(/\/+$/, "")
+  if (isWindows()) n = n.toLowerCase()
+  return n
+}
 
 export type CloneResult = {
   path: string
@@ -51,11 +60,24 @@ export async function cloneRepo(opts: {
   const repoName = parseRepoName(url)
   if (branch) validateBranch(branch)
 
+  // The read tools (and the Rust FS layer behind them) can only access paths
+  // under $HOME. Cloning outside $HOME (e.g. /tmp) would succeed but leave the
+  // repo unreadable by every tool — including subagents — so reject it up front
+  // and steer callers to the default ~/Documents/<repo>.
+  const home = (await homeDir()).replace(/[/\\]+$/, "")
+  const normHome = normalizeForHomeCheck(home)
+
   let target = opts.target
   if (!target) {
-    const home = await homeDir()
-    const normHome = home.replace(/[/\\]+$/, "")
-    target = `${normHome}/Documents/${repoName}`
+    target = `${home}/Documents/${repoName}`
+  } else {
+    const normTarget = normalizeForHomeCheck(target)
+    if (normTarget !== normHome && !normTarget.startsWith(normHome + "/")) {
+      throw new Error(
+        `Clone target must be under your home directory (default ~/Documents/${repoName}); ` +
+          `paths outside $HOME cannot be read by the tools. Got: ${target}`,
+      )
+    }
   }
 
   const dest = target

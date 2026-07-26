@@ -10,7 +10,7 @@ async function readHead(absPath: string, maxLines: number): Promise<string | nul
     const content = await readTextFile(absPath)
     const lines = content.split(/\r?\n/)
     if (lines.length <= maxLines) return content.trim()
-    return lines.slice(0, maxLines).join("\n") + `\n... (${lines.length - maxLines} satır daha)`
+    return lines.slice(0, maxLines).join("\n") + `\n... (${lines.length - maxLines} more lines)`
   } catch {
     return null
   }
@@ -53,7 +53,7 @@ async function tree(workspace: string, depth: number): Promise<string> {
     }
   }
   await walk(workspace, "", 0)
-  return lines.slice(0, 80).join("\n") + (lines.length > 80 ? `\n... (${lines.length - 80} satır daha)` : "")
+  return lines.slice(0, 80).join("\n") + (lines.length > 80 ? `\n... (${lines.length - 80} more lines)` : "")
 }
 
 type StackInfo = { name?: string; description?: string; deps: string[]; lang: string }
@@ -112,7 +112,7 @@ async function detectStack(workspace: string): Promise<StackInfo | null> {
 }
 
 export async function repoOverview(workspace: string): Promise<string> {
-  if (!workspace) throw new Error("Çalışma klasörü bağlı değil")
+  if (!workspace) throw new Error("No workspace folder attached")
   resolveInWorkspace(workspace, ".")
 
   const sections: Section[] = []
@@ -120,15 +120,15 @@ export async function repoOverview(workspace: string): Promise<string> {
   // Stack
   const stack = await detectStack(workspace)
   if (stack) {
-    const lines: string[] = [`**Dil/Stack:** ${stack.lang}`]
-    if (stack.name) lines.push(`**Ad:** ${stack.name}`)
-    if (stack.description) lines.push(`**Açıklama:** ${stack.description}`)
+    const lines: string[] = [`**Language/Stack:** ${stack.lang}`]
+    if (stack.name) lines.push(`**Name:** ${stack.name}`)
+    if (stack.description) lines.push(`**Description:** ${stack.description}`)
     if (stack.deps.length > 0) {
-      lines.push(`**Bağımlılıklar (örnekleme):** ${stack.deps.join(", ")}`)
+      lines.push(`**Dependencies (sample):** ${stack.deps.join(", ")}`)
     }
-    sections.push({ title: "Proje", body: lines.join("\n") })
+    sections.push({ title: "Project", body: lines.join("\n") })
   } else {
-    sections.push({ title: "Proje", body: "(package.json/Cargo.toml/pyproject.toml/go.mod bulunamadı — generic klasör)" })
+    sections.push({ title: "Project", body: "(no package.json/Cargo.toml/pyproject.toml/go.mod found — generic folder)" })
   }
 
   for (const fname of ["README.md", "README.mdx", "README.rst", "README.txt", "README"]) {
@@ -146,14 +146,14 @@ export async function repoOverview(workspace: string): Promise<string> {
   const branch = await tryGit(workspace, ["rev-parse", "--abbrev-ref", "HEAD"])
   if (remote || log || branch) {
     const gitLines: string[] = []
-    if (branch) gitLines.push(`**Aktif branch:** ${branch}`)
+    if (branch) gitLines.push(`**Active branch:** ${branch}`)
     if (remote) gitLines.push("**Remote:**\n```\n" + remote + "\n```")
-    if (log) gitLines.push("**Son commitler:**\n```\n" + log + "\n```")
+    if (log) gitLines.push("**Recent commits:**\n```\n" + log + "\n```")
     sections.push({ title: "Git", body: gitLines.join("\n\n") })
   }
 
   const treeOut = await tree(workspace, 2)
-  if (treeOut) sections.push({ title: "Dosya ağacı (max 2 seviye)", body: "```\n" + treeOut + "\n```" })
+  if (treeOut) sections.push({ title: "File tree (max 2 levels)", body: "```\n" + treeOut + "\n```" })
 
   return sections.map((s) => `## ${s.title}\n${s.body}`).join("\n\n")
 }
