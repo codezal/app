@@ -12,7 +12,8 @@ import {
   MessageSquarePlus,
   Loader2,
   PanelLeftOpen,
-  PanelRight,
+  PanelRightClose,
+  PanelRightOpen,
   Search,
   Settings,
   Terminal as TerminalIcon,
@@ -37,7 +38,7 @@ import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { WindowControls } from "./WindowControls"
 import { isMacOS } from "@/lib/platform"
-import { MODE_ICON, modeLabel, type PanelMode } from "@/lib/panel-modes"
+import { modeLabel, type PanelMode } from "@/lib/panel-modes"
 import { FileTypeIcon } from "@/lib/file-icons"
 import { TerminalCliIcon } from "./TerminalCliIcon"
 
@@ -58,10 +59,6 @@ const tabRailButton =
 type Props = {
   panelMode: PanelMode | null
   onSetPanelMode: (m: PanelMode | null) => void
-  // Shows "Todo" in the top panel menu only while active todos exist.
-  todoAvailable?: boolean
-  // Shows "SDD" in the top panel menu only while the active session is linked to a draft.
-  sddAvailable?: boolean
   // Keeps chat and editor tabs visible while a workspace panel is docked.
   workspaceTabsOpen?: boolean
   // True when the sidebar is collapsed. In that state TabBar takes over the
@@ -90,8 +87,6 @@ type Props = {
 export function TabBar({
   panelMode,
   onSetPanelMode,
-  todoAvailable,
-  sddAvailable,
   workspaceTabsOpen = false,
   sidebarHidden,
   scrolled,
@@ -563,12 +558,7 @@ export function TabBar({
         </button>
       )}
 
-      <PanelMenu
-        mode={panelMode}
-        onSet={onSetPanelMode}
-        todoAvailable={todoAvailable}
-        sddAvailable={sddAvailable}
-      />
+      <PanelToggle mode={panelMode} onSet={onSetPanelMode} />
       </div>
 
       <WindowControls />
@@ -736,99 +726,44 @@ function NewTerminalMenu({
   )
 }
 
-function PanelMenu({
+function PanelToggle({
   mode,
   onSet,
-  todoAvailable,
-  sddAvailable,
 }: {
   mode: PanelMode | null
   onSet: (m: PanelMode | null) => void
-  todoAvailable?: boolean
-  sddAvailable?: boolean
 }) {
   const t = useT()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
+  // Remember the last open mode so the toggle re-opens the same panel.
+  const lastModeRef = useRef<PanelMode>("files")
   useEffect(() => {
-    if (!open) return
-    function onDoc(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    window.addEventListener("mousedown", onDoc)
-    return () => window.removeEventListener("mousedown", onDoc)
-  }, [open])
+    if (mode) lastModeRef.current = mode
+  }, [mode])
 
-  const items: PanelMode[] = ["files", "git", "review", "agents", "preview"]
-  const withTodo: PanelMode[] = todoAvailable ? [...items, "todo"] : items
-  const menuItems: PanelMode[] = sddAvailable ? [...withTodo, "sdd"] : withTodo
+  const label = mode
+    ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) })
+    : t("tabBar.rightPanelOpen")
 
   return (
-    <div ref={ref} className="relative z-10">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={mode ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) }) : t("tabBar.rightPanelOpen")}
-        aria-label={mode ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) }) : t("tabBar.rightPanelOpen")}
-        className={cn(
-          "flex h-7 items-center gap-1 rounded-md border px-1.5 text-sm",
-          mode
-            ? "border-transparent bg-codezal-accent/12 text-codezal-accent"
-            : "border-transparent text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
-        )}
-      >
-        <PanelRight className="h-4 w-4" aria-hidden />
-        <ChevronDown className="h-2.5 w-2.5 shrink-0" aria-hidden />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-[200px] overflow-hidden cz-menu">
-          {menuItems.map((m) => {
-            const Icon = MODE_ICON[m]
-            const active = m === mode
-            return (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={active}
-                onClick={() => {
-                  onSet(active ? null : m)
-                  setOpen(false)
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-base",
-                  active
-                    ? "bg-codezal-chip text-codezal-text"
-                    : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
-                )}
-              >
-                <Icon
-                  className={cn("h-3.5 w-3.5", active ? "text-codezal-accent" : "text-codezal-mute")}
-                  aria-hidden
-                />
-                <span>{modeLabel(m)}</span>
-                {active && <span className="ml-auto text-sm text-codezal-accent">●</span>}
-              </button>
-            )
-          })}
-          {mode && (
-            <button
-              type="button"
-              onClick={() => {
-                onSet(null)
-                setOpen(false)
-              }}
-              className="flex w-full items-center gap-2 border-t border-codezal px-3 py-1.5 text-left text-sm text-codezal-dim hover:bg-codezal-panel-2 hover:text-destructive"
-            >
-              <X className="h-4 w-4" aria-hidden />
-              {t("tabBar.closePanel")}
-            </button>
-          )}
-        </div>
+    <button
+      type="button"
+      onClick={() => onSet(mode ? null : lastModeRef.current)}
+      title={label}
+      aria-label={label}
+      aria-pressed={mode != null}
+      className={cn(
+        "flex h-7 items-center gap-1 rounded-md border px-1.5 text-sm",
+        mode
+          ? "border-transparent bg-codezal-accent/12 text-codezal-accent"
+          : "border-transparent text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
       )}
-    </div>
+    >
+      {mode ? (
+        <PanelRightClose className="h-4 w-4" aria-hidden />
+      ) : (
+        <PanelRightOpen className="h-4 w-4" aria-hidden />
+      )}
+    </button>
   )
 }
 

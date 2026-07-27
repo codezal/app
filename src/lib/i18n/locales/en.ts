@@ -86,6 +86,8 @@ const en: Messages = {
       "{model}: low memory — context reduced {requested} → {effective} tokens ({gb} GB model). Try a smaller quant (Q4) or a smaller model.",
     localCtxTooSmall:
       "This local model was clamped to a {effective}-token context to fit memory, and the agent tools don't fit. Pick a smaller model (e.g. Qwen3-8B) or turn agent mode off for it.",
+    turnBusyAttachments:
+      "A turn is still running — messages with attachments can't be queued. Send it again when the current turn finishes.",
   },
 
   // ---- Sidebar ----

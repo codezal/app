@@ -157,6 +157,13 @@
     accent-color: hsl(var(--codezal-accent));
   }
 
+  /* Mouse/pointer focus must not paint the WebKit default blue ring — only
+     keyboard focus (:focus-visible, below) should show an outline. Keeps the
+     sidebar rows and buttons free of the stray blue border after a click while
+     preserving keyboard accessibility. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
   :focus-visible {
     outline: 2px solid hsl(var(--codezal-accent) / 0.55);
     outline-offset: 2px;

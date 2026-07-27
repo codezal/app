@@ -3,7 +3,7 @@
 // Co-Authored-By lines (for example a model hallucinating noreply@anthropic.com)
 // and leaves exactly one correct trailer.
 
-export const COMMIT_ATTRIBUTION_TRAILER = "Co-Authored-By: Codezal <[EMAIL_2]>"
+export const COMMIT_ATTRIBUTION_TRAILER = "Co-Authored-By: Codezal <noreply@codezal.com>"
 
 // Any Co-Authored-By trailer line, regardless of email, domain or letter case.
 // Matched per line so a stray trailer anywhere in the message is removed.

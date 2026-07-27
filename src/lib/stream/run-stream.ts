@@ -151,7 +151,13 @@ export function makeRunStream(deps: RunStreamDeps) {
     const cur = useSessionsStore.getState().sessions[sid]
     if (!cur) return
     const settings = useSettingsStore.getState().settings
-    if (useSessionsStore.getState().streamingIds[sid]) return
+    // Single-flight safety net. Normal sends are gated upstream (turn-gate in
+    // dispatchTurn) and never reach this — hitting it means a caller bypassed
+    // the gate, so make it loud instead of silently dropping the turn.
+    if (useSessionsStore.getState().streamingIds[sid]) {
+      console.warn(`[runStream] dropped turn for ${sid} — a stream is already in flight (gate bypassed)`)
+      return
+    }
     const spendCap = settings.sessionSpendCapUsd ?? 0
     if (spendCap > 0 && (cur.usage?.costUsd ?? 0) >= spendCap) {
       const note = tStatic("app.spendCapReached", { cap: spendCap.toFixed(2) })

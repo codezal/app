@@ -41,7 +41,7 @@ import { useNavHistory } from "@/lib/hooks/useNavHistory"
 import { useNewSession } from "@/lib/hooks/useNewSession"
 import { usePanelState } from "@/lib/hooks/usePanelState"
 import { useTerminalsStore } from "@/store/terminals"
-import { useTodoPanelAuto, hasActiveTodos } from "@/lib/hooks/useTodoPanelAuto"
+import { useTodoPanelAuto } from "@/lib/hooks/useTodoPanelAuto"
 import { useSuggestionsAuto, triggerSuggestionsFor } from "@/lib/hooks/useSuggestionsAuto"
 import { useSuggestionsStore } from "@/store/suggestions"
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts"
@@ -112,6 +112,7 @@ import { useUpdateStore } from "@/store/update"
 import { UpdateModal } from "@/components/UpdateModal"
 import { abortStream } from "@/lib/run-registry"
 import { makeRunStream } from "@/lib/stream/run-stream"
+import { decideTurnGate } from "@/lib/stream/turn-gate"
 import { inlinesThinkTags } from "@/lib/providers/provider-quirks"
 import { createThinkSplitter, type ThinkSplitter } from "@/lib/stream/think-split"
 import { toast, useToastStore } from "@/store/toast"
@@ -172,6 +173,13 @@ function buildTerminalAiPrompt(text: string): string {
 }
 
 const compactionInFlight = new Set<string>()
+
+// Sessions whose turn is past the gate but still in pre-stream preparation
+// (hooks + auto-compaction). runStream's single-flight flag only flips once the
+// stream actually starts, so without this a second send during that window
+// would race: UI messages pushed out of order and one turn's text never
+// reaching modelMessages.
+const preparingTurns = new Set<string>()
 
 const PRECOMPACT_HOOK_TIMEOUT_MS = 5000
 
@@ -335,8 +343,6 @@ export default function App() {
     void onSend(tStatic("sdd.prompt.build", { path: planPath }))
   }
   useSuggestionsAuto(activeStreaming, setPanelMode)
-  const activeTodos = useSessionsStore((s) => s.active?.todos)
-  const todoAvailable = hasActiveTodos(activeTodos, activeStreaming)
   const activeEmpty = useSessionsStore(
     (s) => (s.active?.messages.length ?? 0) === 0 && s.loadingMsgId !== s.activeId,
   )
@@ -434,22 +440,29 @@ export default function App() {
   useBootStores()
   useBootDraft(settings, settingsLoaded)
 
+  // Drain the text queue only when the session can actually accept a turn.
+  // Dequeueing while the session is busy (stream / pre-stream preparation /
+  // compaction) would lose the message to the gate's re-queue or the
+  // "Bağlam sıkıştırılıyor" rejection. `activeSessionId` is a dep so a queue
+  // that filled while the session was in the background drains on switch-back.
   useEffect(() => {
-    if (activeStreaming) return
+    if (activeStreaming || activeCompacting) return
     const sid = useSessionsStore.getState().activeId
-    if (!sid || (useSessionsStore.getState().queued[sid]?.length ?? 0) === 0) return
+    if (!sid || preparingTurns.has(sid)) return
+    if ((useSessionsStore.getState().queued[sid]?.length ?? 0) === 0) return
     const next = dequeueMessage(sid)
     if (next) void onSend(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStreaming])
+  }, [activeStreaming, activeCompacting, activeSessionId])
 
   useEffect(() => {
-    if (splitStreaming || !splitId) return
+    if (splitStreaming || splitCompacting || !splitId) return
+    if (preparingTurns.has(splitId)) return
     if ((useSessionsStore.getState().queued[splitId]?.length ?? 0) === 0) return
     const next = dequeueMessage(splitId)
     if (next) void onSendSplit(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitStreaming, splitId])
+  }, [splitStreaming, splitCompacting, splitId])
 
   // mac+win ortak; child-process kill'i jobs.ts beforeunload'u destroy() unload'unda
   useEffect(() => {
@@ -1134,6 +1147,29 @@ export default function App() {
   ) {
     const sess = useSessionsStore.getState().sessions[sid]
     if (!sess) return
+    // Turn gate — BEFORE any message is pushed. runStream is single-flight per
+    // session: a send that lands while a stream (or the pre-stream preparation
+    // in dispatchTurnInner) is in flight would push a user message that never
+    // reaches modelMessages (the model never sees it) plus a pending bubble
+    // that spins forever. Queue plain text exactly like the Composer does;
+    // reject attachments/meta sends with a toast since the queue is text-only.
+    const gate = decideTurnGate({
+      streaming: !!useSessionsStore.getState().streamingIds[sid],
+      preparing: preparingTurns.has(sid),
+      hasAttachments:
+        meta !== undefined ||
+        (images?.length ?? 0) > 0 ||
+        (files?.length ?? 0) > 0 ||
+        (pdfs?.length ?? 0) > 0,
+    })
+    if (gate === "queue") {
+      useSessionsStore.getState().enqueueMessage(sid, text)
+      return
+    }
+    if (gate === "reject") {
+      toast.info(tStatic("app.turnBusyAttachments"))
+      return
+    }
     const spendCap = useSettingsStore.getState().settings.sessionSpendCapUsd ?? 0
     if (spendCap > 0 && (sess.usage?.costUsd ?? 0) >= spendCap) {
       toast.error(tStatic("app.spendCapReached", { cap: spendCap.toFixed(2) }))
@@ -1143,6 +1179,26 @@ export default function App() {
       raiseError("Bağlam sıkıştırılıyor — bitince tekrar deneyin.")
       return
     }
+
+    preparingTurns.add(sid)
+    try {
+      await dispatchTurnInner(sid, text, images, override, meta, files, pdfs)
+    } finally {
+      preparingTurns.delete(sid)
+    }
+  }
+
+  async function dispatchTurnInner(
+    sid: string,
+    text: string,
+    images?: MessageImage[],
+    override?: SendOverride,
+    meta?: string,
+    files?: MessageFile[],
+    pdfs?: MessagePdf[],
+  ) {
+    const sess = useSessionsStore.getState().sessions[sid]
+    if (!sess) return
 
     resetAttach(sid)
 
@@ -2156,8 +2212,6 @@ export default function App() {
     <TabBar
       panelMode={panelMode}
       onSetPanelMode={handlePanelModeChange}
-      todoAvailable={todoAvailable}
-      sddAvailable={sddAvailable}
       workspaceTabsOpen={workspaceTabsOpen && openFilesCount > 0}
       sidebarHidden={sidebarCollapsed}
       scrolled={!activeEmpty && chatScrolled}

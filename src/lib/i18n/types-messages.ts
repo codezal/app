@@ -82,6 +82,10 @@ export type Messages = {
     localCtxClamped?: string
     // Optional — clamped local window too small for the agent tools (error).
     localCtxTooSmall?: string
+    // Optional — send rejected while a turn is in flight and the message has
+    // attachments (the text-only queue can't hold them). Non-EN locales fall
+    // back to EN via the runtime BASE_MESSAGES lookup.
+    turnBusyAttachments?: string
   }
 
   sidebar: {

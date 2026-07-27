@@ -47,6 +47,11 @@ export default {
         },
         // Codezal accent'i Tailwind rengi olarak kaydet — <alpha-value> formu
         "codezal-accent": "hsl(var(--codezal-accent) / <alpha-value>)",
+        // codezal-text de Tailwind rengi olmalı; yoksa `ring-codezal-text/10`
+        // gibi opacity'li/prefix'li kullanımlar geçersiz sayılıp düşer ve
+        // `ring-1` Tailwind'in varsayılan MAVİ ring rengini çizer (aktif sohbet
+        // satırındaki istenmeyen lacivert çerçevenin kök nedeni buydu).
+        "codezal-text": "hsl(var(--codezal-text) / <alpha-value>)",
       },
       borderRadius: {
         lg: "var(--radius)",

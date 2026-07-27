@@ -3,6 +3,7 @@ import {
   Bot,
   Folder as FolderIcon,
   GitBranch,
+  GitPullRequest,
   Globe,
   ListChecks,
   Notebook,
@@ -46,7 +47,7 @@ export function modeLabel(m: PanelMode): string {
 export const MODE_ICON: Record<PanelMode, React.ComponentType<{ className?: string }>> = {
   files: FolderIcon,
   git: GitBranch,
-  review: GitBranch,
+  review: GitPullRequest,
   agents: Bot,
   skills: Sparkles,
   memory: Notebook,

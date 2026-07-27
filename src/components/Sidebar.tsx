@@ -1432,7 +1432,7 @@ function SessionItem({
           selected
               ? "bg-codezal-accent/20 text-codezal-text ring-1 ring-inset ring-codezal-accent/40 before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-codezal-accent/70"
               : active
-              ? "bg-codezal-chip font-medium text-codezal-text shadow-sm ring-1 ring-inset ring-codezal-text/10 before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-codezal-text/70"
+              ? "bg-codezal-chip font-medium text-codezal-text shadow-sm ring-1 ring-inset ring-codezal-text/10"
               : "text-codezal-text/75 hover:bg-codezal-chip-soft hover:text-codezal-text",
         )}
       >
@@ -1527,7 +1527,7 @@ function SessionItem({
               setRenaming(true)
             }}
             aria-current={active ? "page" : undefined}
-            className="flex min-w-0 flex-1 items-center gap-1 truncate text-left"
+            className="flex min-w-0 flex-1 items-center gap-1 truncate text-left outline-none"
           >
             {meta.forkParentId && (
               <button

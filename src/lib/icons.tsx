@@ -57,6 +57,8 @@ export {
   PanelLeftClose,
   PanelLeftOpen,
   PanelRight,
+  PanelRightClose,
+  PanelRightOpen,
   Paperclip,
   Pause,
   Pencil,
