@@ -315,10 +315,39 @@ function isDisproportionateMatch(search: string, oldString: string): boolean {
   return search.trim().length > Math.max(oldString.trim().length + 500, oldString.trim().length * 4)
 }
 
+// The file's dominant line ending. Windows files are CRLF; the model always
+// emits LF, so matching is done on LF-normalised text and the result is
+// converted back to the file's own style to avoid rewriting its line endings.
+export function detectEol(text: string): "\r\n" | "\n" {
+  let crlf = 0
+  let lf = 0
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") {
+      if (text[i - 1] === "\r") crlf++
+      else lf++
+    }
+  }
+  return crlf > lf ? "\r\n" : "\n"
+}
+
+export function toLf(text: string): string {
+  return text.replace(/\r\n?/g, "\n")
+}
+
+export function applyEol(text: string, eol: "\r\n" | "\n"): string {
+  return eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text
+}
+
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === "") {
     throw new Error("old_string cannot be empty — specify the text to replace.")
   }
+  const eol = detectEol(content)
+  const result = replaceLf(toLf(content), toLf(oldString), toLf(newString), replaceAll)
+  return applyEol(result, eol)
+}
+
+function replaceLf(content: string, oldString: string, newString: string, replaceAll: boolean): string {
   if (oldString === newString) {
     throw new Error("old_string and new_string are identical — no change.")
   }

@@ -252,30 +252,65 @@ function buildTransport(config: McpServerConfig, authProvider?: CodezalMcpOAuthP
 
 // Build a single AI SDK tool wrapping an MCP tool def. Shared by initial connect
 // and the tools/list_changed refresh path.
+// True when an error looks like a dead/dropped connection rather than a
+// tool-level failure (bad args, tool not found, server-side logic error).
+function isConnectionError(e: unknown): boolean {
+  const msg = String((e as { message?: string } | undefined)?.message ?? e).toLowerCase()
+  return (
+    /transport|socket|econnreset|econnrefused|epipe|closed|disconnect|broken pipe|network|timeout|timed?\s*out|abort|terminated|reset by peer|not connected|client closed|server closed|stream ended|fetch failed|load failed/i.test(
+      msg,
+    ) && !/tool.*not found|unknown tool|invalid.*argument/i.test(msg)
+  )
+}
+
+function formatMcpToolResult(res: { content?: unknown; structuredContent?: unknown; isError?: boolean }): string {
+  const content = (res.content ?? []) as Array<{ type: string; text?: string }>
+  const parts = content
+    .map((c) => (c.type === "text" ? c.text ?? "" : `[${c.type}]`))
+    .filter(Boolean)
+  let text = parts.join("\n") || "(empty)"
+  const structured = res.structuredContent
+  if (structured !== undefined && structured !== null) {
+    try {
+      text += `${parts.length ? "\n\n" : ""}\`\`\`json\n${JSON.stringify(structured, null, 2)}\n\`\`\``
+    } catch {
+      // Intentionally ignored.
+    }
+  }
+  return res.isError ? `[MCP error] ${text}` : text
+}
+
 function makeTool(config: McpServerConfig, client: Client, def: McpToolDef): ToolSet[string] {
   return tool({
     description: def.description ?? `(MCP ${config.name})`,
     inputSchema: jsonSchema(def.inputSchema as Record<string, unknown>),
     execute: async (args: unknown) => {
-      const res = await client.callTool({
-        name: def.name,
-        arguments: args as Record<string, unknown>,
-      })
-      // MCP content[] → single string
-      const content = (res.content ?? []) as Array<{ type: string; text?: string }>
-      const parts = content
-        .map((c) => (c.type === "text" ? c.text ?? "" : `[${c.type}]`))
-        .filter(Boolean)
-      let text = parts.join("\n") || "(empty)"
-      const structured = (res as { structuredContent?: unknown }).structuredContent
-      if (structured !== undefined && structured !== null) {
+      const callArgs = { name: def.name, arguments: args as Record<string, unknown> }
+      try {
+        const res = await client.callTool(callArgs)
+        return formatMcpToolResult(res as { content?: unknown; structuredContent?: unknown; isError?: boolean })
+      } catch (e) {
+        // Auto-reconnect: if the connection dropped, invalidate the cache,
+        // reconnect, and retry the call ONCE.
+        if (!isConnectionError(e)) throw e
+        console.warn(`[mcp ${config.name}] connection lost during '${def.name}', reconnecting…`)
+        invalidateCacheFor(config.name)
+        let fresh: Cached
         try {
-          text += `${parts.length ? "\n\n" : ""}\`\`\`json\n${JSON.stringify(structured, null, 2)}\n\`\`\``
-        } catch {
-          // Intentionally ignored.
+          fresh = await connectMcp(config)
+        } catch (re) {
+          console.error(`[mcp ${config.name}] reconnect failed:`, re)
+          throw e // surface the original error
+        }
+        try {
+          const res = await fresh.client.callTool(callArgs)
+          console.info(`[mcp ${config.name}] '${def.name}' succeeded after reconnect`)
+          return formatMcpToolResult(res as { content?: unknown; structuredContent?: unknown; isError?: boolean })
+        } catch (retryErr) {
+          console.error(`[mcp ${config.name}] '${def.name}' failed after reconnect:`, retryErr)
+          throw retryErr
         }
       }
-      return res.isError ? `[MCP error] ${text}` : text
     },
   })
 }

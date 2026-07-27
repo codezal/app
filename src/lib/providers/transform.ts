@@ -139,6 +139,128 @@ function filterEmptyParts(msgs: ModelMessage[], signatureKey: "anthropic" | "bed
     .filter((m): m is ModelMessage => m !== undefined)
 }
 
+// Generic empty-reasoning filter for ALL providers (not just Anthropic).
+// Empty reasoning blocks can break multi-step tool-call chains on any provider.
+// Unlike filterEmptyParts this does NOT drop empty text
+// parts or whole messages — only reasoning parts with no meaningful content.
+// Tool-call / tool-result parts are never touched (adjacency repair handles
+// those separately).
+function filterEmptyReasoning(msgs: ModelMessage[]): ModelMessage[] {
+  let changed = false
+  const out = msgs.map((msg): ModelMessage => {
+    if (!Array.isArray(msg.content)) return msg
+    const filtered = msg.content.filter((p) => {
+      const part = p as AnyPart
+      if (part.type !== "reasoning") return true
+      return typeof part.text === "string" && part.text.trim().length > 0
+    })
+    if (filtered.length === msg.content.length) return msg
+    changed = true
+    // If only reasoning parts were removed and nothing else remains, keep the
+    // message with an empty array rather than dropping it — dropping could
+    // break tool-call adjacency (the assistant message that issued tool-calls
+    // must stay so the following user message's tool-results have a parent).
+    return { ...msg, content: filtered } as ModelMessage
+  })
+  return changed ? out : msgs
+}
+
+// ----- Tool-call / tool-result adjacency repair -------------------------
+// Strict providers (Anthropic, Bedrock) reject a history where a tool-call
+// has no matching tool-result or vice versa. Compaction, truncation, or a
+// crashed stream can leave orphaned pairs. Repair BEFORE sending so the
+// request never 400s on adjacency.
+
+export function repairToolAdjacency(msgs: ModelMessage[]): ModelMessage[] {
+  // Pass 1: collect all tool-call ids and tool-result ids.
+  const callIds = new Set<string>()
+  const resultIds = new Set<string>()
+  for (const msg of msgs) {
+    if (!Array.isArray(msg.content)) continue
+    for (const p of msg.content) {
+      const part = p as AnyPart
+      if (part.type === "tool-call" && typeof part.toolCallId === "string") callIds.add(part.toolCallId)
+      if (part.type === "tool-result" && typeof part.toolCallId === "string") resultIds.add(part.toolCallId)
+    }
+  }
+
+  // Fast path: every call has a result and every result has a call.
+  let needsRepair = false
+  for (const id of callIds) {
+    if (!resultIds.has(id)) { needsRepair = true; break }
+  }
+  if (!needsRepair) {
+    for (const id of resultIds) {
+      if (!callIds.has(id)) { needsRepair = true; break }
+    }
+  }
+  if (!needsRepair) return msgs
+
+  // Pass 2: repair.
+  // - Orphaned tool-result (no matching call) → drop the part.
+  // - Orphaned tool-call (no matching result) → append a synthetic result
+  //   to the SAME message list right after the assistant message that
+  //   contains the call (as a user message with tool-result parts).
+  const orphanedCalls: Array<{ toolCallId: string; toolName: string }> = []
+  let changed = false
+
+  const stripped = msgs.map((msg): ModelMessage => {
+    if (!Array.isArray(msg.content)) return msg
+    const filtered = msg.content.filter((p) => {
+      const part = p as AnyPart
+      if (part.type === "tool-result" && typeof part.toolCallId === "string" && !callIds.has(part.toolCallId)) {
+        changed = true
+        return false // orphaned result — drop
+      }
+      if (part.type === "tool-call" && typeof part.toolCallId === "string" && !resultIds.has(part.toolCallId)) {
+        orphanedCalls.push({
+          toolCallId: part.toolCallId,
+          toolName: typeof part.toolName === "string" ? part.toolName : "unknown",
+        })
+      }
+      return true // keep the call itself
+    })
+    if (filtered.length === msg.content.length) return msg
+    changed = true
+    return { ...msg, content: filtered } as ModelMessage
+  })
+
+  if (orphanedCalls.length === 0) return changed ? stripped : msgs
+
+  // Build a synthetic user message with tool-result parts for every orphaned
+  // call, and insert it right after the last assistant message that contains
+  // any of those calls.
+  const syntheticResults = orphanedCalls.map((oc) => ({
+    type: "tool-result" as const,
+    toolCallId: oc.toolCallId,
+    toolName: oc.toolName,
+    output: { type: "text" as const, value: "[tool result unavailable — session was compacted or the stream was interrupted]" },
+  }))
+  const syntheticMsg: ModelMessage = { role: "tool", content: syntheticResults }
+
+  // Find the insertion point: after the last assistant message with an orphaned call.
+  const orphanedIdSet = new Set(orphanedCalls.map((oc) => oc.toolCallId))
+  let insertAfter = -1
+  for (let i = stripped.length - 1; i >= 0; i--) {
+    const msg = stripped[i]!
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue
+    const hasOrphan = msg.content.some((p) => {
+      const part = p as AnyPart
+      return part.type === "tool-call" && typeof part.toolCallId === "string" && orphanedIdSet.has(part.toolCallId)
+    })
+    if (hasOrphan) { insertAfter = i; break }
+  }
+
+  const out = [...stripped]
+  if (insertAfter >= 0) {
+    out.splice(insertAfter + 1, 0, syntheticMsg)
+  } else {
+    // Fallback: append at the end (should not happen in practice).
+    out.push(syntheticMsg)
+  }
+  return out
+}
+
 // Full message normalization for a given provider/model.
 export function normalizeMessages(
   msgs: ModelMessage[],
@@ -150,7 +272,14 @@ export function normalizeMessages(
   if (isMistralFamily(providerId, modelId)) out = out.map((m) => scrubToolCallIds(m, scrubMistralId))
   if (isAnthropicFamily(providerId, modelId) || isBedrock(providerId)) {
     out = filterEmptyParts(out, isBedrock(providerId) ? "bedrock" : "anthropic")
+  } else {
+    // All other providers: drop empty reasoning blocks (they can break
+    // multi-step tool-call chains). Anthropic/Bedrock already handled above.
+    out = filterEmptyReasoning(out)
   }
+  // Adjacency repair runs for ALL providers — even lenient ones benefit from
+  // a clean history (avoids confusing the model with orphaned tool artifacts).
+  out = repairToolAdjacency(out)
   return out
 }
 
@@ -222,7 +351,7 @@ export function applyCaching(
   return msgs.map((m) => (targets.has(m) ? markCache(m, opts, messageLevel) : m))
 }
 
-function stripImageParts(msgs: ModelMessage[]): ModelMessage[] {
+export function stripImageParts(msgs: ModelMessage[]): ModelMessage[] {
   return msgs.map((m) => {
     if (!Array.isArray(m.content)) return m
     let changed = false

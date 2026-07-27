@@ -1,6 +1,8 @@
 import { IGNORE_DIRS } from "./ignore"
 import { resolveRg } from "./rg-download"
 import { runProgram } from "@/lib/exec"
+import { isAbsolutePath } from "./tools/paths"
+import { isWindows } from "./platform"
 
 export type SearchHit = {
   path: string // absolute
@@ -20,6 +22,24 @@ export type SearchOpts = {
 function dirOf(absPath: string): string | undefined {
   const i = Math.max(absPath.lastIndexOf("/"), absPath.lastIndexOf("\\"))
   return i > 0 ? absPath.slice(0, i) : undefined
+}
+
+// Workspace-relative form of an absolute path, normalised to forward slashes.
+// Case-insensitive prefix strip on Windows (FS is case-insensitive there, and
+// rg may echo a different casing than the workspace string we were handed).
+function toRel(abs: string, root: string): string {
+  const a = abs.replace(/\\/g, "/")
+  const r = root.replace(/[\\/]+$/, "").replace(/\\/g, "/")
+  if (isWindows()) {
+    const al = a.toLowerCase()
+    const rl = r.toLowerCase()
+    if (al === rl) return ""
+    if (al.startsWith(rl + "/")) return a.slice(r.length + 1)
+    return a
+  }
+  if (a === r) return ""
+  if (a.startsWith(r + "/")) return a.slice(r.length + 1)
+  return a
 }
 
 export async function searchWorkspace(
@@ -61,13 +81,15 @@ export async function searchWorkspace(
   const hits: SearchHit[] = []
   const root = workspace.replace(/[\\/]+$/, "")
 
-  for (const line of raw.split("\n")) {
+  // rg/grep emit CRLF on Windows — split on both so the text carries no stray \r.
+  for (const line of raw.split(/\r?\n/)) {
     if (!line) continue
-    // Format: path:line:text
+    // Format: path:line:text — path may be a Windows drive path (D:\...) with a
+    // colon of its own, so anchor on the :line: pair, not the first colon.
     const m = line.match(/^(.+?):(\d+):(.*)$/)
     if (!m) continue
-    const abs = m[1].startsWith("/") ? m[1] : root + "/" + m[1]
-    const rel = abs.startsWith(root) ? abs.slice(root.length).replace(/^[\\/]+/, "") : abs
+    const abs = isAbsolutePath(m[1]) ? m[1] : root + "/" + m[1]
+    const rel = toRel(abs, root)
     const rawText = m[3]
     const text = rawText.length > 2000 ? rawText.slice(0, 2000) + "..." : rawText
     hits.push({
@@ -115,15 +137,12 @@ export async function globWorkspace(
   const root = workspace.replace(/[\\/]+$/, "")
   const rels: string[] = []
 
-  for (const line of raw.split("\n")) {
-    // rg searches "." so it prefixes paths with "./" — strip it before resolving.
-    const p = line.trim().replace(/^\.\//, "")
+  for (const line of raw.split(/\r?\n/)) {
+    // rg searches "." so it prefixes paths with "./" (".\" on Windows) — strip it.
+    const p = line.trim().replace(/^\.[\\/]/, "")
     if (!p) continue
-    const abs = p.startsWith("/") ? p : root + "/" + p
-    const rel = abs.startsWith(root)
-      ? abs.slice(root.length).replace(/^[\\/]+/, "")
-      : abs
-    rels.push(rel)
+    const abs = isAbsolutePath(p) ? p : root + "/" + p
+    rels.push(toRel(abs, root))
     if (rels.length >= MAX_HITS) break
   }
   return rels

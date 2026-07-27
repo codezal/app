@@ -156,8 +156,14 @@ Output format (Markdown; preserve headings exactly; write "-" under an empty hea
 ## Key Symbols and Files
 - (frequently referenced function/class/file/endpoint names and brief descriptions)
 
-## Open Issues
+## Open Issues & Re-check
 - (known bugs, failing tests, missing features)
+- (context that should be re-verified before proceeding — e.g. assumptions about an API, a file that may have changed)
+
+## Forward Plan
+- (upcoming steps the assistant intended to take next)
+- (settled decisions that must not be revisited)
+- (foreseeable obstacles or risks for the remaining work)
 
 ## Active Files
 - (files being actively worked on and their current status)

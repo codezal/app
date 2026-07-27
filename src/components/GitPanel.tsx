@@ -5,14 +5,22 @@ import {
   Check,
   ChevronDown,
   ChevronRight as ChevRight,
+  Download,
+  File,
+  FileCode2,
+  FileJson,
+  FileText,
   GitBranch,
+  GitPullRequest,
   Minus,
   MoreVertical,
   Plus,
   RefreshCcw,
   ScrollText,
+  Search,
   Sparkles,
   Undo2,
+  Upload,
   X,
 } from "@/lib/icons"
 import {
@@ -20,11 +28,13 @@ import {
   gitCommit,
   gitDiscard,
   gitDiscardAll,
+  gitFastForward,
   gitFetch,
   gitLog,
   gitPublish,
   gitPull,
   gitPush,
+  gitRebase,
   gitStage,
   gitStageAll,
   gitStashList,
@@ -33,6 +43,7 @@ import {
   gitStatus,
   gitUnstage,
   gitUnstageAll,
+  gitWorktreeStats,
   statusLabel,
   type GitBranchChange,
   type GitBranchDiff,
@@ -167,8 +178,8 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   const stageAll = () => void run(() => gitStageAll(workspacePath!))
   const unstageAll = () => void run(() => gitUnstageAll(workspacePath!))
 
-  const doCommit = async () => {
-    if (!workspacePath || (!message.trim() && !amend)) return
+  const doCommit = async (): Promise<boolean> => {
+    if (!workspacePath || (!message.trim() && !amend)) return false
     setCommitting(true)
     setError(null)
     setFailure(null)
@@ -180,7 +191,7 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
       if (!anyStaged && entries.length > 0) await gitStageAll(workspacePath)
       // Pre-commit code review gate (opt-in). Aborts leave the staged changes
       // untouched so the user can fix and retry.
-      if ((await review.gate("commit")) === "abort") return
+      if ((await review.gate("commit")) === "abort") return false
       const commitMsg = message.trim()
         ? normalizeCommitAttribution(message, settings.commitAttribution !== false)
         : message
@@ -188,8 +199,10 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
       setMessage("")
       setAmend(false)
       emitGitChanged()
+      return true
     } catch (e) {
       setFailure({ title: t("gitPanel.commitFailed"), detail: errorMessage(e) })
+      return false
     } finally {
       setCommitting(false)
     }
@@ -219,6 +232,9 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   }
 
   const hasChanges = (status?.entries.length ?? 0) > 0
+  const unstagedCount = (status?.entries ?? []).filter(
+    (e) => (e.worktree !== " " && e.worktree !== "!") || e.index === "?",
+  ).length
   const canCommit = (message.trim().length > 0 || amend) && (hasChanges || amend) && !committing
 
   // ── Sync (push / pull / fetch) ───────────────────────────────────────────────
@@ -236,9 +252,27 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
     })
   const doPublish = () => void run(() => gitPublish(workspacePath!))
 
+  const doCommitAndPush = async () => {
+    if (await doCommit()) doPush()
+  }
+  const doCommitAndSync = async () => {
+    if (await doCommit()) doSync()
+  }
+  const doForcePush = () =>
+    void run(async () => {
+      if ((await review.gate("push")) === "abort") return
+      await gitPush(workspacePath!, { force: true })
+    })
+  const doFastForward = () => void run(() => gitFastForward(workspacePath!))
+  const doRebase = () => {
+    const ref = status?.info.upstream ?? branch?.defaultBranch ?? "origin/main"
+    void run(() => gitRebase(workspacePath!, ref))
+  }
+
   const ahead = status?.info.ahead ?? 0
   const behind = status?.info.behind ?? 0
   const hasUpstream = !!status?.info.upstream
+  const rebaseRef = status?.info.upstream ?? branch?.defaultBranch ?? null
   const isWorktreeRepo = view === "worktree" && status?.isRepo !== false
   const needsSync = isWorktreeRepo && !hasChanges && hasUpstream && (ahead > 0 || behind > 0)
   const needsPublish = isWorktreeRepo && !hasChanges && !hasUpstream && !!status?.info.branch
@@ -248,6 +282,10 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
   const [history, setHistory] = useState<GitCommitEntry[]>([])
   const [stashOpen, setStashOpen] = useState(false)
   const [stashes, setStashes] = useState<GitStashEntry[]>([])
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filterQuery, setFilterQuery] = useState("")
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [stats, setStats] = useState<Record<string, { additions: number; deletions: number }>>({})
 
   const doStashSave = () => void run(() => gitStashSave(workspacePath!))
   const doStashPop = (i: number) => void run(() => gitStashPop(workspacePath!, i))
@@ -274,6 +312,20 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
       alive = false
     }
   }, [stashOpen, workspacePath, status])
+
+  // Per-file +/- line counts for the worktree CHANGES list (Orca-style).
+  // Runs after every status refresh; silently yields {} on error so the row
+  // counts just hide instead of breaking the panel.
+  useEffect(() => {
+    if (!workspacePath || view !== "worktree" || status?.isRepo === false) return
+    let alive = true
+    void gitWorktreeStats(workspacePath).then((s) => {
+      if (alive) setStats(s)
+    })
+    return () => {
+      alive = false
+    }
+  }, [workspacePath, view, status])
 
   useEffect(() => {
     if (!workspacePath) return
@@ -310,145 +362,164 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
     <div className="space-y-3">
       <div className="space-y-2">
       {view !== "pr" && (
-      <div className="flex items-center gap-2">
-        <GitBranch className="h-4 w-4 shrink-0 text-codezal-dim" />
-        <span className="min-w-0 truncate text-sm font-medium text-codezal-dim">
-          {(view === "branch" ? branch?.current : status?.info.branch) ??
-            (status?.isRepo === false ? t("gitPanel.notRepoLabel") : "…")}
-        </span>
-        {view === "worktree" && status?.info.upstream && (
-          <span className="truncate text-sm text-codezal-mute">
-            → {status.info.upstream}
-          </span>
-        )}
-        {view === "branch" && branch?.defaultBranch && (
-          <span className="truncate text-sm text-codezal-mute">
-            {t("gitPanel.branchVsLabel", { branch: branch.defaultBranch })}
-          </span>
-        )}
-        {view === "worktree" && (ahead > 0 || behind > 0) ? (
-          <span className="flex shrink-0 items-center gap-1 text-sm text-codezal-mute">
-            {behind > 0 && (
-              <span className="flex items-center gap-0.5">
-                <ArrowDown className="h-3 w-3" />
-                {behind}
+      <div className="space-y-1.5">
+        <div className="flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <GitBranch className="h-4 w-4 shrink-0 text-codezal-dim" />
+              <span className="min-w-0 truncate text-sm font-semibold text-codezal-text">
+                {(view === "branch" ? branch?.current : status?.info.branch) ??
+                  (status?.isRepo === false ? t("gitPanel.notRepoLabel") : "…")}
+              </span>
+              {view === "worktree" && (ahead > 0 || behind > 0) ? (
+                <span className="flex shrink-0 items-center gap-1 text-xs text-codezal-mute">
+                  {behind > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <ArrowDown className="h-3 w-3" />
+                      {behind}
+                    </span>
+                  )}
+                  {ahead > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <ArrowUp className="h-3 w-3" />
+                      {ahead}
+                    </span>
+                  )}
+                </span>
+              ) : null}
+            </div>
+            {view === "worktree" && status?.info.upstream && (
+              <span className="truncate pl-[22px] text-xs text-codezal-mute">
+                → {status.info.upstream}
               </span>
             )}
-            {ahead > 0 && (
-              <span className="flex items-center gap-0.5">
-                <ArrowUp className="h-3 w-3" />
-                {ahead}
+            {view === "branch" && branch?.defaultBranch && (
+              <span className="truncate pl-[22px] text-xs text-codezal-mute">
+                {t("gitPanel.branchVsLabel", { branch: branch.defaultBranch })}
               </span>
             )}
-          </span>
-        ) : null}
-        <div className="flex-1" />
-        {view === "worktree" && status?.isRepo !== false && (
-          <div className="relative shrink-0">
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {view === "worktree" && status?.isRepo !== false && surface === "full" && (
+              <button
+                type="button"
+                onClick={() => setView("pr")}
+                title={t("gitPanel.createPr")}
+                className="flex items-center gap-1 rounded-md bg-codezal-text px-2 py-1 text-xs font-medium text-codezal-bg transition-opacity hover:opacity-90"
+              >
+                <GitPullRequest className="h-3.5 w-3.5" />
+                <span>{t("gitPanel.createPr")}</span>
+              </button>
+            )}
+            {view === "worktree" && status?.isRepo !== false && (
+              <button
+                type="button"
+                onClick={() =>
+                  setFilterOpen((v) => {
+                    if (v) setFilterQuery("")
+                    return !v
+                  })
+                }
+                title={t("gitPanel.filterFiles")}
+                aria-label={t("gitPanel.filterFiles")}
+                className={cn(
+                  "rounded p-1 transition-colors",
+                  filterOpen ? "text-codezal-text" : "text-codezal-mute hover:text-codezal-text",
+                )}
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            )}
+            {view === "worktree" && status?.isRepo !== false && (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  disabled={busy}
+                  title={t("common.more")}
+                  aria-label={t("common.more")}
+                  className="rounded p-1 text-codezal-mute hover:text-codezal-text disabled:opacity-50"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                    <div className="absolute right-0 z-50 mt-1 w-44 cz-menu py-1 text-sm">
+                      <MenuItem
+                        icon={amend ? <Check className="h-4 w-4" /> : undefined}
+                        label={t("gitPanel.amend")}
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setAmend((v) => !v)
+                        }}
+                      />
+                      <div className="my-1 border-t border-codezal" />
+                      <MenuItem
+                        label={t("gitPanel.stashSave")}
+                        onClick={() => {
+                          setMenuOpen(false)
+                          doStashSave()
+                        }}
+                      />
+                      <MenuItem
+                        label={t("gitPanel.stashList")}
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setStashOpen((v) => !v)
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <button
               type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              disabled={busy}
-              title={t("common.more")}
-              aria-label={t("common.more")}
+              onClick={() => void refresh()}
+              disabled={loading}
+              title={t("gitPanel.refresh")}
+              aria-label={t("gitPanel.refresh")}
               className="rounded p-1 text-codezal-mute hover:text-codezal-text disabled:opacity-50"
             >
-              <MoreVertical className="h-4 w-4" />
+              <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
             </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 z-50 mt-1 w-44 cz-menu py-1 text-sm">
-                  <MenuItem
-                    icon={amend ? <Check className="h-4 w-4" /> : undefined}
-                    label={t("gitPanel.amend")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setAmend((v) => !v)
-                    }}
-                  />
-                  <div className="my-1 border-t border-codezal" />
-                  <MenuItem
-                    icon={<ArrowDown className="h-4 w-4" />}
-                    label={t("gitPanel.pull")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      doPull()
-                    }}
-                  />
-                  <MenuItem
-                    icon={<ArrowUp className="h-4 w-4" />}
-                    label={t("gitPanel.push")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      doPush()
-                    }}
-                  />
-                  <MenuItem
-                    icon={<RefreshCcw className="h-4 w-4" />}
-                    label={t("gitPanel.sync")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      doSync()
-                    }}
-                  />
-                  <MenuItem
-                    label={t("gitPanel.fetch")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      doFetch()
-                    }}
-                  />
-                  <div className="my-1 border-t border-codezal" />
-                  <MenuItem
-                    icon={<ScrollText className="h-4 w-4" />}
-                    label={t("gitPanel.commitHistory")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setHistoryOpen((v) => !v)
-                    }}
-                  />
-                  <MenuItem
-                    label={t("gitPanel.stashSave")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      doStashSave()
-                    }}
-                  />
-                  <MenuItem
-                    label={t("gitPanel.stashList")}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setStashOpen((v) => !v)
-                    }}
-                  />
-                </div>
-              </>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                title={tStatic("contextPanel.panelClose")}
+                aria-label={tStatic("contextPanel.panelClose")}
+                className="rounded p-1 text-codezal-mute hover:text-codezal-text"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+        {filterOpen && (
+          <div className="flex items-center gap-1.5 rounded-md border border-codezal bg-codezal-input px-2 py-1">
+            <Search className="h-3.5 w-3.5 shrink-0 text-codezal-mute" />
+            <input
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              placeholder={t("gitPanel.filterFiles")}
+              autoFocus
+              className="min-w-0 flex-1 bg-transparent text-sm text-codezal-text placeholder:text-codezal-mute focus:outline-none"
+            />
+            {filterQuery && (
+              <button
+                type="button"
+                onClick={() => setFilterQuery("")}
+                title={t("common.close")}
+                className="rounded p-0.5 text-codezal-mute hover:text-codezal-text"
+              >
+                <X className="h-3 w-3" />
+              </button>
             )}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
-          title={t("gitPanel.refresh")}
-          aria-label={t("gitPanel.refresh")}
-          className="rounded p-1 text-codezal-mute hover:text-codezal-text disabled:opacity-50"
-        >
-          <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
-        </button>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            title={tStatic("contextPanel.panelClose")}
-            aria-label={tStatic("contextPanel.panelClose")}
-            className="rounded p-1 text-codezal-mute hover:text-codezal-text"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-        </div>
+      </div>
       )}
         {surface !== "review" && (
         <div className="flex gap-0.5 rounded-lg bg-codezal-chip-soft p-0.5 text-sm">
@@ -570,6 +641,137 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
               </span>
             </button>
           </div>
+          {hasChanges && (
+            <div className="relative flex items-stretch gap-0.5">
+              <button
+                type="button"
+                onClick={stageAll}
+                disabled={busy || unstagedCount === 0}
+                title={t("gitPanel.stageAll")}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-codezal px-2.5 py-1.5 text-sm font-medium text-codezal-text transition-colors hover:bg-codezal-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/55 disabled:opacity-40"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span className="truncate">{t("gitPanel.stageAll")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionsOpen((v) => !v)}
+                disabled={busy}
+                title={t("common.more")}
+                aria-label={t("common.more")}
+                className="flex items-center rounded-md border border-codezal px-1.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/55 disabled:opacity-40"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              {actionsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
+                  <div className="absolute right-0 z-50 mt-1 w-52 cz-menu py-1 text-sm">
+                    <MenuItem
+                      icon={<Check className="h-4 w-4" />}
+                      label={t("gitPanel.commit")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        void doCommit()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<ArrowUp className="h-4 w-4" />}
+                      label={t("gitPanel.commitAndPush")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        void doCommitAndPush()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<RefreshCcw className="h-4 w-4" />}
+                      label={t("gitPanel.commitAndSync")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        void doCommitAndSync()
+                      }}
+                    />
+                    <div className="my-1 border-t border-codezal" />
+                    <MenuItem
+                      icon={<ArrowUp className="h-4 w-4" />}
+                      label={t("gitPanel.push")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doPush()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<ArrowUp className="h-4 w-4" />}
+                      label={t("gitPanel.forcePush")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doForcePush()
+                      }}
+                    />
+                    {surface === "full" && (
+                      <MenuItem
+                        icon={<GitPullRequest className="h-4 w-4" />}
+                        label={t("gitPanel.createPr")}
+                        onClick={() => {
+                          setActionsOpen(false)
+                          setView("pr")
+                        }}
+                      />
+                    )}
+                    <div className="my-1 border-t border-codezal" />
+                    <MenuItem
+                      icon={<ArrowDown className="h-4 w-4" />}
+                      label={t("gitPanel.pull")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doPull()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<ChevRight className="h-4 w-4" />}
+                      label={t("gitPanel.fastForward")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doFastForward()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<RefreshCcw className="h-4 w-4" />}
+                      label={t("gitPanel.sync")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doSync()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<GitBranch className="h-4 w-4" />}
+                      label={t("gitPanel.rebaseFrom", { ref: rebaseRef ?? "origin/main" })}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doRebase()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<Download className="h-4 w-4" />}
+                      label={t("gitPanel.fetch")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doFetch()
+                      }}
+                    />
+                    <MenuItem
+                      icon={<Upload className="h-4 w-4" />}
+                      label={t("gitPanel.publishBranch")}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        doPublish()
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -643,6 +845,8 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
         <FileGroups
           entries={status.entries}
           busy={busy}
+          stats={stats}
+          query={filterQuery}
           onPick={openWorktreeDiff}
           onStage={stageOne}
           onUnstage={unstageOne}
@@ -653,31 +857,41 @@ export function GitPanel({ workspacePath, onClose, surface = "full" }: Props) {
         />
       ) : null}
 
-      {historyOpen && (
+      {isWorktreeRepo && (
         <div>
-          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-codezal-mute">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="mb-1 flex w-full items-center gap-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-codezal-mute hover:text-codezal-text"
+          >
+            {historyOpen ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevRight className="h-3.5 w-3.5" />
+            )}
             <ScrollText className="h-3.5 w-3.5" />
-            <span>{t("gitPanel.commitHistory")}</span>
-          </div>
-          {history.length === 0 ? (
-            <div className="px-2 py-1 text-sm text-codezal-mute">{t("gitPanel.noCommits")}</div>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {history.map((c) => (
-                <button
-                  key={c.hash}
-                  type="button"
-                  onClick={() => openCommit(c.hash)}
-                  title={c.subject}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-codezal-panel-2"
-                >
-                  <span className="shrink-0 font-mono text-sm text-codezal-dim">{c.hash.slice(0, 7)}</span>
-                  <span className="min-w-0 flex-1 truncate text-codezal-text">{c.subject}</span>
-                  <span className="shrink-0 text-sm text-codezal-mute">{c.relDate}</span>
-                </button>
-              ))}
-            </div>
-          )}
+            <span>{t("gitPanel.commitsLabel")}</span>
+          </button>
+          {historyOpen &&
+            (history.length === 0 ? (
+              <div className="px-2 py-1 text-sm text-codezal-mute">{t("gitPanel.noCommits")}</div>
+            ) : (
+              <div className="flex flex-col gap-0.5">
+                {history.map((c) => (
+                  <button
+                    key={c.hash}
+                    type="button"
+                    onClick={() => openCommit(c.hash)}
+                    title={c.subject}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-codezal-panel-2"
+                  >
+                    <span className="shrink-0 font-mono text-sm text-codezal-dim">{c.hash.slice(0, 7)}</span>
+                    <span className="min-w-0 flex-1 truncate text-codezal-text">{c.subject}</span>
+                    <span className="shrink-0 text-sm text-codezal-mute">{c.relDate}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
         </div>
       )}
 
@@ -772,9 +986,31 @@ function MenuItem({
   )
 }
 
+function FileGlyph({ path, className }: { path: string; className?: string }) {
+  const dot = path.lastIndexOf(".")
+  const ext = dot >= 0 ? path.slice(dot + 1).toLowerCase() : ""
+  const codeExts = new Set([
+    "ts", "tsx", "js", "jsx", "mjs", "cjs", "rs", "go", "py", "java", "c", "cc",
+    "cpp", "h", "hpp", "cs", "rb", "php", "swift", "kt", "kts", "sh", "bash", "zsh",
+    "html", "htm", "css", "scss", "less", "vue", "svelte", "yaml", "yml", "toml",
+    "xml", "sql", "graphql", "proto", "lua",
+  ])
+  const Icon =
+    ext === "json"
+      ? FileJson
+      : ext === "md" || ext === "mdx" || ext === "txt" || ext === "log"
+        ? FileText
+        : codeExts.has(ext)
+          ? FileCode2
+          : File
+  return <Icon className={cn("h-4 w-4 shrink-0", className)} />
+}
+
 function FileGroups({
   entries,
   busy,
+  stats,
+  query,
   onPick,
   onStage,
   onUnstage,
@@ -785,6 +1021,8 @@ function FileGroups({
 }: {
   entries: GitStatusEntry[]
   busy: boolean
+  stats: Record<string, { additions: number; deletions: number }>
+  query: string
   onPick: (e: GitStatusEntry) => void
   onStage: (e: GitStatusEntry) => void
   onUnstage: (e: GitStatusEntry) => void
@@ -793,10 +1031,14 @@ function FileGroups({
   onUnstageAll: () => void
   onDiscardAll: () => void
 }) {
-  const staged = entries.filter((e) => e.index !== " " && e.index !== "?" && e.index !== "!")
-  const unstaged = entries.filter(
-    (e) => (e.worktree !== " " && e.worktree !== "!") || e.index === "?",
-  )
+  const q = query.trim().toLowerCase()
+  const matches = (path: string) => !q || path.toLowerCase().includes(q)
+  const staged = entries
+    .filter((e) => e.index !== " " && e.index !== "?" && e.index !== "!")
+    .filter((e) => matches(e.path))
+  const unstaged = entries
+    .filter((e) => (e.worktree !== " " && e.worktree !== "!") || e.index === "?")
+    .filter((e) => matches(e.path))
 
   return (
     <div className="space-y-2.5">
@@ -815,6 +1057,7 @@ function FileGroups({
               key={"s" + e.path}
               entry={e}
               busy={busy}
+              stat={stats[e.path]}
               onClick={() => onPick(e)}
               onUnstage={() => onUnstage(e)}
             />
@@ -841,6 +1084,7 @@ function FileGroups({
               key={"u" + e.path}
               entry={e}
               busy={busy}
+              stat={stats[e.path]}
               onClick={() => onPick(e)}
               onStage={() => onStage(e)}
               onDiscard={() => onDiscard(e)}
@@ -928,6 +1172,7 @@ function Group({
 function FileRow({
   entry,
   busy,
+  stat,
   onClick,
   onStage,
   onUnstage,
@@ -935,6 +1180,7 @@ function FileRow({
 }: {
   entry: GitStatusEntry
   busy?: boolean
+  stat?: { additions: number; deletions: number }
   onClick: () => void
   onStage?: () => void
   onUnstage?: () => void
@@ -950,6 +1196,13 @@ function FileRow({
     : l.kind === "conflict"
     ? "text-codezal-diff-del"
     : "text-codezal-dim"
+  const iconColor = l.kind === "add" || l.kind === "untracked"
+    ? "text-codezal-diff-add"
+    : l.kind === "del" || l.kind === "conflict"
+      ? "text-codezal-diff-del"
+      : l.kind === "ren"
+        ? "text-codezal-dim"
+        : "text-amber-500"
   const slash = entry.path.lastIndexOf("/")
   const base = slash >= 0 ? entry.path.slice(slash + 1) : entry.path
   const dir = slash >= 0 ? entry.path.slice(0, slash) : ""
@@ -967,44 +1220,59 @@ function FileRow({
               ? l.code.trim()
               : tStatic("gitPanel.fileModified")
   return (
-    <div className="group flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-codezal-panel-2">
+    <div className="group flex w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-sm hover:bg-codezal-panel-2">
       <button
         type="button"
         onClick={onClick}
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
         title={entry.path}
       >
-        <span className="min-w-0 truncate text-codezal-text">{base}</span>
+        <FileGlyph path={entry.path} className={iconColor} />
+        <span className="max-w-[62%] shrink-0 truncate font-medium text-codezal-text">{base}</span>
         {dir && (
-          <span className="ml-auto max-w-[55%] shrink-0 truncate pl-2 font-mono text-[11px] text-codezal-mute">
+          <span className="min-w-0 flex-1 truncate text-codezal-mute">
             {dir}
           </span>
         )}
       </button>
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        {onDiscard && (
-          <IconAction title={tStatic("gitPanel.discardChanges")} onClick={onDiscard} disabled={busy} danger>
-            <Undo2 className="h-3.5 w-3.5" />
-          </IconAction>
-        )}
-        {onStage && (
-          <IconAction title={tStatic("gitPanel.stage")} onClick={onStage} disabled={busy}>
-            <Plus className="h-3.5 w-3.5" />
-          </IconAction>
-        )}
-        {onUnstage && (
-          <IconAction title={tStatic("gitPanel.unstage")} onClick={onUnstage} disabled={busy}>
-            <Minus className="h-3.5 w-3.5" />
-          </IconAction>
-        )}
+      {/* Right cluster: diff stats and hover actions are stacked in the same
+          grid cell so the cluster width = max(icons, stats) and never changes
+          on hover — only opacity cross-fades. This keeps the flex-1 path from
+          re-truncating (no layout shift / "jumping" text on hover). */}
+      <div className="grid shrink-0">
+        <div className="col-start-1 row-start-1 flex items-center justify-self-end gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
+          {onDiscard && (
+            <IconAction title={tStatic("gitPanel.discardChanges")} onClick={onDiscard} disabled={busy} danger>
+              <Undo2 className="h-3.5 w-3.5" />
+            </IconAction>
+          )}
+          {onStage && (
+            <IconAction title={tStatic("gitPanel.stage")} onClick={onStage} disabled={busy}>
+              <Plus className="h-3.5 w-3.5" />
+            </IconAction>
+          )}
+          {onUnstage && (
+            <IconAction title={tStatic("gitPanel.unstage")} onClick={onUnstage} disabled={busy}>
+              <Minus className="h-3.5 w-3.5" />
+            </IconAction>
+          )}
+        </div>
+        <div className="col-start-1 row-start-1 flex items-center justify-self-end gap-1 transition-opacity group-hover:opacity-0 group-hover:pointer-events-none focus-within:opacity-0 focus-within:pointer-events-none">
+          {stat && stat.additions > 0 && (
+            <span className="font-mono text-xs text-codezal-diff-add">+{stat.additions}</span>
+          )}
+          {stat && stat.deletions > 0 && (
+            <span className="font-mono text-xs text-codezal-diff-del">-{stat.deletions}</span>
+          )}
+          <span
+            className={cn("w-4 text-center font-mono text-sm font-semibold", color)}
+            title={statusTitle}
+            aria-label={statusTitle}
+          >
+            {letter}
+          </span>
+        </div>
       </div>
-      <span
-        className={cn("w-4 shrink-0 text-center font-mono text-sm font-semibold", color)}
-        title={statusTitle}
-        aria-label={statusTitle}
-      >
-        {letter}
-      </span>
     </div>
   )
 }
@@ -1041,6 +1309,12 @@ function BranchFileRow({
       : change.status === "deleted"
       ? "text-codezal-diff-del"
       : "text-codezal-dim"
+  const iconColor =
+    change.status === "added"
+      ? "text-codezal-diff-add"
+      : change.status === "deleted"
+        ? "text-codezal-diff-del"
+        : "text-amber-500"
   const slash = change.file.lastIndexOf("/")
   const base = slash >= 0 ? change.file.slice(slash + 1) : change.file
   const dir = slash >= 0 ? change.file.slice(0, slash) : ""
@@ -1048,13 +1322,14 @@ function BranchFileRow({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm hover:bg-codezal-panel-2"
+      className="group flex w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-sm hover:bg-codezal-panel-2"
       title={change.file}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="min-w-0 truncate text-codezal-text">{base}</span>
+        <FileGlyph path={change.file} className={iconColor} />
+        <span className="max-w-[62%] shrink-0 truncate font-medium text-codezal-text">{base}</span>
         {dir && (
-          <span className="ml-auto max-w-[55%] shrink-0 truncate pl-2 font-mono text-[11px] text-codezal-mute">
+          <span className="min-w-0 flex-1 truncate text-codezal-mute">
             {dir}
           </span>
         )}

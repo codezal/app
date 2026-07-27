@@ -268,7 +268,13 @@ describe("normalizeMessages — reasoning part korunması (Anthropic continuity)
 
 describe("normalizeMessages — tool-result çıktısında surrogate scrub", () => {
   it("truncated tool çıktısındaki lone surrogate → U+FFFD (sonraki istek crash etmez)", () => {
+    // A matching tool-call keeps the result from being dropped as an orphan
+    // by repairToolAdjacency — this test targets surrogate scrubbing only.
     const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "c1", toolName: "x", input: {} }],
+      } as ModelMessage,
       {
         role: "tool",
         content: [
@@ -277,8 +283,9 @@ describe("normalizeMessages — tool-result çıktısında surrogate scrub", () 
       } as ModelMessage,
     ]
     const out = normalizeMessages(msgs, "anthropic", "claude-sonnet-4-6")
-    const part = (out[0].content as Array<{ output: { value: string } }>)[0]
-    expect(part.output.value).toBe("ok�")
+    const toolMsg = out.find((m) => m.role === "tool")!
+    const part = (toolMsg.content as Array<{ output: { value: string } }>)[0]
+    expect(part.output.value).toBe("ok\uFFFD")
   })
 })
 

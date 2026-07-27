@@ -157,6 +157,9 @@ export type SessionGoal = {
   maxIter: number
   createdAt: number
   paused?: boolean
+  // Optional budget caps — the goal loop stops when either is exceeded.
+  tokenBudget?: number
+  costBudgetUsd?: number
 }
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"

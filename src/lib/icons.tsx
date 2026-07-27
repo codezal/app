@@ -26,6 +26,8 @@ export {
   ExternalLink,
   Eye,
   File,
+  FileCode2,
+  FileJson,
   FileText,
   Folder,
   FolderOpen,

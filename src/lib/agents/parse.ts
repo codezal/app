@@ -121,7 +121,7 @@ export function checkSubagentPolicy(
       if (/`/.test(cmd) || cmd.includes("$(") || /[<>]/.test(cmd)) {
         return {
           allowed: false,
-          reason: `Bash command contains redirection or command substitution (allowlist bypass risk)`,
+          reason: `Bash command contains redirection or command substitution (allowlist bypass risk). The sandbox will keep blocking these — retry the SAME command with NO redirection: drop '>', '<', '2>', '| … >file', and '$(...)'. To read a line range use the read_file tool or 'sed -n' (both allowlisted); never redirect.`,
           requiresApproval: false,
         }
       }
@@ -141,7 +141,7 @@ export function checkSubagentPolicy(
         if (!policy.bashAllow.some((p) => normalised.startsWith(p))) {
           return {
             allowed: false,
-            reason: `Bash command segment not allowlisted: '${seg.slice(0, 60)}'`,
+            reason: `Bash command segment not allowlisted: '${seg.slice(0, 60)}'. This subagent's bash is locked to a read-only allowlist — use an allowlisted command (git diff/log/show/status/blame, grep, sed -n, awk, cat, head, tail, ls, find) or the read_file/grep/code_* tools instead.`,
             requiresApproval: false,
           }
         }

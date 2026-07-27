@@ -39,7 +39,7 @@ import { startInternalDrag, wasDragging } from "@/lib/internal-drag"
 import type { SessionMeta } from "@/store/types"
 import { resolveSessionDefaults } from "@/lib/session-defaults"
 import { cn } from "@/lib/utils"
-import { isMacOS, fmtKbd } from "@/lib/platform"
+import { isMacOS, isWindows, fmtKbd } from "@/lib/platform"
 import { useT, useLocale } from "@/lib/i18n/useT"
 import { formatRowTime, formatRowTimeAbsolute } from "@/lib/format-time"
 import { useApprovalsStore } from "@/store/approvals"
@@ -65,7 +65,7 @@ const COLLAPSE_KEY = "codezal.collapsedProjects"
 
 function SectionLabel({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-2 pb-1 pt-3">
+    <div className="flex items-center gap-2 px-1.5 pb-1 pt-3">
       <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-codezal-dim">
         {children}
       </span>
@@ -411,6 +411,19 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
   const moveTargets = projKeys.map((p) => ({ path: p, name: projectMeta[p]?.name || basename(p) }))
 
   const listRef = useRef<HTMLDivElement | null>(null)
+  // Overlay scrollbar: reveal the rail while scrolling, hide it ~700ms after the
+  // last scroll event (the .cz-scrolling class drives the CSS fade).
+  const scrollHideRef = useRef<number | null>(null)
+  function onListScroll() {
+    const el = listRef.current
+    if (!el) return
+    el.classList.add("cz-scrolling")
+    if (scrollHideRef.current != null) window.clearTimeout(scrollHideRef.current)
+    scrollHideRef.current = window.setTimeout(() => {
+      el.classList.remove("cz-scrolling")
+      scrollHideRef.current = null
+    }, 700)
+  }
   const flipTopsRef = useRef<Map<string, number>>(new Map())
   const orderSig = projKeys.join("|")
   const prevOrderSigRef = useRef(orderSig)
@@ -582,7 +595,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         )}
       </div>
 
-      <div className="flex flex-col gap-0.5 px-2 pb-2 pt-1">
+      <div className="flex flex-col gap-0.5 px-1.5 pb-2 pt-1">
         <button
           type="button"
           onClick={onNew}
@@ -608,7 +621,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
       </div>
 
       {liveSelected.length > 0 && (
-        <div className="mx-2 mb-1 flex items-center gap-1 rounded-lg border border-codezal-accent/40 bg-codezal-accent/10 px-2.5 py-1.5">
+        <div className="mx-1.5 mb-1 flex items-center gap-1 rounded-lg border border-codezal-accent/40 bg-codezal-accent/10 px-2.5 py-1.5">
           <span className="flex-1 text-[13px] font-normal tabular-nums text-codezal-text">
             {liveSelected.length}
           </span>
@@ -632,7 +645,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         </div>
       )}
 
-      <div ref={listRef} className="flex-1 overflow-y-auto px-2 pt-1">
+      <div ref={listRef} onScroll={onListScroll} className="cz-sidebar-scroll flex-1 overflow-y-auto px-1.5 pt-1">
         {filtered.length === 0 && knownProjects.length === 0 ? (
           <>
             <SectionLabel
@@ -723,7 +736,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         )}
       </div>
 
-      <div className="flex h-9 shrink-0 items-center gap-1 border-t border-codezal-panel px-2">
+      <div className="flex h-9 shrink-0 items-center gap-1 border-t border-codezal-panel px-1.5">
         <button
           type="button"
           onClick={onOpenSettings}
@@ -1415,7 +1428,7 @@ function SessionItem({
         }
         onContextMenu={onContextMenu}
         className={cn(
-          "group relative flex items-center rounded-md py-1 pl-7 pr-1 text-[13px] transition-colors",
+          "group relative flex items-center rounded-md py-1 pl-6 pr-1.5 text-[13px] transition-colors",
           selected
               ? "bg-codezal-accent/20 text-codezal-text ring-1 ring-inset ring-codezal-accent/40 before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-codezal-accent/70"
               : active
@@ -1426,7 +1439,7 @@ function SessionItem({
         {(waiting || streaming || meta.unread) && (
           <span
             className={cn(
-              "pointer-events-none absolute left-2.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full",
+              "pointer-events-none absolute left-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full",
               waiting
                 ? "animate-pulse bg-amber-400"
                 : streaming
@@ -1775,14 +1788,32 @@ function sessionSortKey(m: SessionMeta): number {
   return m.lastUserMessageAt ?? m.updatedAt
 }
 
+// On Windows the FS is case-insensitive, so "C:\Users\foo" and "c:\users\foo"
+// are the same folder. Normalise the grouping key to avoid duplicate workspace
+// sections in the sidebar.
+function workspaceGroupKey(path: string | undefined): string {
+  const p = path ?? ""
+  if (!p) return ""
+  if (isWindows()) return p.toLowerCase().replace(/\\/g, "/")
+  return p
+}
+
 function groupByWorkspace(items: SessionMeta[]): Array<[string, SessionMeta[]]> {
   const map = new Map<string, SessionMeta[]>()
+  // Keep the first-seen original path for display (the normalised key is only
+  // used for deduplication).
+  const displayKey = new Map<string, string>()
   for (const it of items) {
-    const k = it.workspacePath ?? ""
-    if (!map.has(k)) map.set(k, [])
+    const k = workspaceGroupKey(it.workspacePath)
+    if (!map.has(k)) {
+      map.set(k, [])
+      displayKey.set(k, it.workspacePath ?? "")
+    }
     map.get(k)!.push(it)
   }
-  const entries = Array.from(map.entries())
+  const entries = Array.from(map.entries()).map(
+    ([k, v]) => [displayKey.get(k) ?? k, v] as [string, SessionMeta[]],
+  )
   entries.sort(([ak, av], [bk, bv]) => {
     if (ak === "" && bk !== "") return -1
     if (bk === "" && ak !== "") return 1

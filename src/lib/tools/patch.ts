@@ -28,6 +28,9 @@ import {
   IndentationFlexibleReplacer,
   EscapeNormalizedReplacer,
   TrimmedBoundaryReplacer,
+  detectEol,
+  toLf,
+  applyEol,
   type Replacer,
 } from "./replace"
 
@@ -268,11 +271,15 @@ export async function applyPatch(workspace: string, patch: string): Promise<Appl
     if (op.op === "update") {
       const cur = await readState(abs)
       if (cur === null) throw new PatchError(`Update File: file does not exist — ${op.path}`)
-      let content = cur
+      // Match on LF (hunks are LF) regardless of the file's EOL, then restore the
+      // file's dominant EOL — otherwise CRLF Windows files never match a hunk.
+      const eol = detectEol(cur)
+      let content = toLf(cur)
       for (const hunk of op.hunks) {
         content = applyHunk(content, hunk)
         result.hunksApplied++
       }
+      content = applyEol(content, eol)
       if (op.movePath) {
         const moveAbs = resolveInWorkspace(workspace, op.movePath)
         overlay.set(abs, null)

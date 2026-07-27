@@ -439,7 +439,7 @@ export async function buildSystemPrompt({
       "\n## Git commits\n" +
         "When you create a git commit, the message must end with exactly ONE attribution trailer, after a blank line — the same byline the app's git panel adds:\n\n" +
         `${COMMIT_ATTRIBUTION_TRAILER}\n\n` +
-        "Rules: copy that line verbatim, including the email `noreply@codezal.com`. " +
+        "Rules: copy that line verbatim, including the email `[EMAIL_2]`. " +
         "NEVER use `noreply@anthropic.com` or any other address or domain. " +
         "NEVER add more than one `Co-Authored-By` line. Before appending it, remove ANY " +
         "existing `Co-Authored-By:` line already in the message (yours or pre-existing) so " +

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { Bot, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Copy, ExternalLink, Eye, FileText, FolderOpen, FolderPlus, ListChecks, MessageSquarePlus, Pencil, Plus, Scissors, Search, ShieldCheck, Sparkles, Trash2, X } from "@/lib/icons"
+import { Ban, Bot, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Copy, ExternalLink, Eye, FileText, FolderOpen, FolderPlus, ListChecks, MessageSquarePlus, MoreHorizontal, Pencil, Plus, RefreshCw, Scissors, Search, ShieldCheck, Sparkles, Trash2, X } from "@/lib/icons"
 import { FileTypeIcon, FolderTypeIcon } from "@/lib/file-icons"
 import { mkdir, rename, remove, exists } from "@tauri-apps/plugin-fs"
 import { readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"
@@ -17,6 +17,7 @@ import { readWorkspaceAgents, readUserAgents, type AgentDef } from "@/lib/agents
 import { AgentCard } from "./AgentCard"
 import type { AgentCardPart } from "@/lib/orchestra/types"
 import { GitPanel } from "./GitPanel"
+import { gitCheckIgnored, gitGrepContent, type GitGrepHit } from "@/lib/git"
 import { PreviewPanel } from "./PreviewPanel"
 import { SddRequirementView } from "./sdd/SddRequirementView"
 import { TodoList } from "./TodoList"
@@ -81,6 +82,50 @@ function isUnderOrEqual(child: string, base: string): boolean {
   return c === b || c.startsWith(b + "/")
 }
 
+function baseName(p: string): string {
+  const s = p.replace(/[\\/]+$/, "")
+  const i = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"))
+  return i >= 0 ? s.slice(i + 1) : s
+}
+
+type SearchMode = "names" | "contents"
+type FilesViewPrefs = {
+  showDotfiles: boolean
+  setShowDotfiles: (v: boolean) => void
+  showIgnored: boolean
+  setShowIgnored: (v: boolean) => void
+  searchMode: SearchMode
+  setSearchMode: (m: SearchMode) => void
+}
+
+const serBool = (v: boolean) => String(v)
+const parseBool = (s: string): boolean | null => (s === "true" ? true : s === "false" ? false : null)
+const serStr = (v: string) => v
+const parseSearchMode = (s: string): SearchMode | null => (s === "names" || s === "contents" ? s : null)
+
+function useStoredState<T>(
+  key: string,
+  initial: T,
+  parse: (s: string) => T | null,
+  serialize: (v: T) => string,
+): [T, (v: T) => void] {
+  const [val, setVal] = useState<T>(() => {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(key) : null
+    return raw === null ? initial : (parse(raw) ?? initial)
+  })
+  useEffect(() => {
+    window.localStorage.setItem(key, serialize(val))
+  }, [key, val, serialize])
+  return [val, setVal]
+}
+
+function useFilesViewPrefs(): FilesViewPrefs {
+  const [showDotfiles, setShowDotfiles] = useStoredState("codezal.files.showDotfiles", false, parseBool, serBool)
+  const [showIgnored, setShowIgnored] = useStoredState("codezal.files.showIgnored", false, parseBool, serBool)
+  const [searchMode, setSearchMode] = useStoredState<SearchMode>("codezal.files.searchMode", "names", parseSearchMode, serStr)
+  return { showDotfiles, setShowDotfiles, showIgnored, setShowIgnored, searchMode, setSearchMode }
+}
+
 const PANEL_W_KEY = "codezal.contextPanel.width"
 const PANEL_W_MIN = 240
 const PANEL_W_MAX = 1200
@@ -98,6 +143,12 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
   const isFiles = mode === "files"
   const isWorkspaceDock = isFiles || mode === "git" || mode === "review"
   const isFlush = isPreview || isSdd
+  const prefs = useFilesViewPrefs()
+  const [refreshTick, setRefreshTick] = useState(0)
+  const refreshFiles = useCallback(() => {
+    setRefreshTick((n) => n + 1)
+    if (ws) emitDirRefresh(normalizeFsPath(ws))
+  }, [ws])
 
   const storageKey = isPreview || isSdd ? PANEL_W_KEY_PREVIEW : PANEL_W_KEY
   const defaultW = isPreview || isSdd ? PANEL_W_PREVIEW_DEFAULT : PANEL_W_DEFAULT
@@ -173,7 +224,15 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
         <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-codezal-hair transition-colors group-hover:bg-codezal-accent group-focus-visible:bg-codezal-accent" />
       </div>
       {isWorkspaceDock ? (
-        <WorkspaceDockHeader mode={mode} onChange={onModeChange} onClose={onClose} />
+        <WorkspaceDockHeader
+          mode={mode}
+          onChange={onModeChange}
+          onClose={onClose}
+          isFiles={isFiles}
+          prefs={prefs}
+          workspacePath={ws}
+          onRefresh={refreshFiles}
+        />
       ) : (
         !isFlush && <PanelHeader mode={mode} onClose={onClose} />
       )}
@@ -183,7 +242,7 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
           isFlush ? "flex" : "overflow-y-auto px-3.5 py-3",
         )}
       >
-        {mode === "files" && <FilesSection workspacePath={ws} />}
+        {mode === "files" && <FilesSection workspacePath={ws} prefs={prefs} refreshTick={refreshTick} />}
         {mode === "git" && <GitPanel key={ws ?? ""} workspacePath={ws} surface="changes" />}
         {mode === "review" && <GitPanel key={ws ?? ""} workspacePath={ws} surface="review" />}
         {mode === "agents" && <AgentsSection workspacePath={ws} />}
@@ -205,10 +264,18 @@ function WorkspaceDockHeader({
   mode,
   onChange,
   onClose,
+  isFiles,
+  prefs,
+  workspacePath,
+  onRefresh,
 }: {
   mode: PanelMode
   onChange?: (mode: PanelMode) => void
   onClose: () => void
+  isFiles: boolean
+  prefs: FilesViewPrefs
+  workspacePath?: string
+  onRefresh: () => void
 }) {
   const t = useT()
   const tabs: Array<{ mode: "files" | "git" | "review"; label: string }> = [
@@ -216,39 +283,98 @@ function WorkspaceDockHeader({
     { mode: "git", label: t("prPanel.changes") },
     { mode: "review", label: t("prPanel.aiReview") },
   ]
+  const [editors, setEditors] = useState<EditorId[]>([])
+  useEffect(() => {
+    if (isFiles) detectEditors().then(setEditors)
+  }, [isFiles])
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+
+  const moreItems: CtxMenuItem[] = [
+    {
+      kind: "item",
+      checked: prefs.showDotfiles,
+      label: t("contextPanel.showDotfiles"),
+      onClick: () => prefs.setShowDotfiles(!prefs.showDotfiles),
+    },
+    {
+      kind: "item",
+      checked: prefs.showIgnored,
+      label: t("contextPanel.showGitIgnored"),
+      onClick: () => prefs.setShowIgnored(!prefs.showIgnored),
+    },
+    { kind: "sep" },
+    ...editors.map((id) => ({
+      kind: "item" as const,
+      label: t("contextPanel.ctxOpenEditor", { editor: EDITOR_LABELS[id] }),
+      icon: <ExternalLink className="h-4 w-4" />,
+      disabled: !workspacePath,
+      onClick: () => {
+        if (workspacePath) void openInEditor(id, workspacePath).catch((e) => toast.error(errorMessage(e)))
+      },
+    })),
+    {
+      kind: "item" as const,
+      label: isMacOS() ? t("contextPanel.ctxRevealFinder") : t("contextPanel.ctxRevealExplorer"),
+      icon: <FolderOpen className="h-4 w-4" />,
+      disabled: !workspacePath,
+      onClick: () => {
+        if (workspacePath) void revealItemInDir(workspacePath).catch((e) => toast.error(errorMessage(e)))
+      },
+    },
+  ]
+
+  const iconBtn =
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/45"
 
   return (
-    <div className="flex h-11 shrink-0 items-end border-b border-codezal-panel bg-codezal-sidebar px-2">
-      <nav aria-label={t("a11y.contextLandmark")} className="flex min-w-0 flex-1 items-end gap-0.5">
+    <div className="flex h-11 shrink-0 items-center gap-1 border-b border-codezal-panel bg-codezal-sidebar px-2">
+      <nav aria-label={t("a11y.contextLandmark")} className="flex min-w-0 flex-1 items-center gap-0.5">
         {tabs.map((tab) => {
           const active = mode === tab.mode
+          const Icon = MODE_ICON[tab.mode]
           return (
             <button
               key={tab.mode}
               type="button"
               aria-pressed={active}
+              title={tab.label}
+              aria-label={tab.label}
               onClick={() => onChange?.(tab.mode)}
               className={cn(
-                "relative h-10 min-w-0 px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-codezal-accent/45",
+                "flex h-8 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-codezal-accent/45",
                 active
-                  ? "text-codezal-text after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-codezal-accent"
-                  : "text-codezal-mute hover:text-codezal-text",
+                  ? "bg-codezal-panel-2 text-codezal-text"
+                  : "text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text",
               )}
             >
-              <span className="block truncate">{tab.label}</span>
+              <Icon className="h-4 w-4" aria-hidden />
             </button>
           )
         })}
       </nav>
-      <button
-        type="button"
-        onClick={onClose}
-        title={t("contextPanel.panelClose")}
-        aria-label={t("contextPanel.panelClose")}
-        className="mb-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/45"
-      >
+      {isFiles && (
+        <>
+          <button type="button" onClick={onRefresh} title={t("contextPanel.refreshTree")} aria-label={t("contextPanel.refreshTree")} className={iconBtn}>
+            <RefreshCw className="h-4 w-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            title={t("contextPanel.moreActions")}
+            aria-label={t("contextPanel.moreActions")}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              setMenu({ x: r.right - 230, y: r.bottom + 4 })
+            }}
+            className={iconBtn}
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden />
+          </button>
+        </>
+      )}
+      <button type="button" onClick={onClose} title={t("contextPanel.panelClose")} aria-label={t("contextPanel.panelClose")} className={iconBtn}>
         <X className="h-4 w-4" aria-hidden />
       </button>
+      {menu && <EditorContextMenu x={menu.x} y={menu.y} items={moreItems} onClose={() => setMenu(null)} />}
     </div>
   )
 }
@@ -327,7 +453,15 @@ function TodoSection() {
   )
 }
 
-function FilesSection({ workspacePath }: { workspacePath?: string }) {
+function FilesSection({
+  workspacePath,
+  prefs,
+  refreshTick,
+}: {
+  workspacePath?: string
+  prefs: FilesViewPrefs
+  refreshTick: number
+}) {
   const t = useT()
   const [query, setQuery] = useState("")
   const q = query.trim()
@@ -337,18 +471,12 @@ function FilesSection({ workspacePath }: { workspacePath?: string }) {
         <EmptyState icon={FolderOpen} title={t("contextPanel.notConnectedTreeMsg")} />
       ) : (
         <>
-          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-lg bg-codezal-sidebar px-2.5 py-2">
-            <FolderOpen className="h-4 w-4 shrink-0 text-codezal-accent" aria-hidden />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-codezal-text">
-                {t("contextPanel.workspaceFolder")}
-              </div>
-              <div className="truncate font-mono text-[11px] text-codezal-mute" title={workspacePath}>
-                {workspacePath}
-              </div>
-            </div>
+          <div className="mb-2 flex min-w-0 items-center px-0.5">
+            <span className="truncate text-sm font-semibold text-codezal-text" title={workspacePath}>
+              {baseName(workspacePath)}
+            </span>
           </div>
-          <div className="relative mb-2 shrink-0">
+          <div className="relative mb-1.5 shrink-0">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-codezal-mute" />
             <label htmlFor="context-files-filter" className="sr-only">
               {t("contextPanel.filterFiles")}
@@ -381,10 +509,36 @@ function FilesSection({ workspacePath }: { workspacePath?: string }) {
               </button>
             )}
           </div>
-          {q ? (
-            <FileSearchResults root={workspacePath} query={q} />
+          <div className="mb-2 grid shrink-0 grid-cols-2 gap-0.5 rounded-md bg-codezal-sidebar p-0.5">
+            {(["names", "contents"] as SearchMode[]).map((m) => {
+              const active = prefs.searchMode === m
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => prefs.setSearchMode(m)}
+                  className={cn(
+                    "rounded px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
+                    active ? "bg-codezal-panel-2 text-codezal-text" : "text-codezal-mute hover:text-codezal-text",
+                  )}
+                >
+                  {m === "names" ? t("contextPanel.searchNames") : t("contextPanel.searchContents")}
+                </button>
+              )
+            })}
+          </div>
+          {q && prefs.searchMode === "contents" ? (
+            <FileContentResults root={workspacePath} query={q} />
+          ) : q ? (
+            <FileSearchResults root={workspacePath} query={q} showDotfiles={prefs.showDotfiles} />
           ) : (
-            <FileTree root={workspacePath} />
+            <FileTree
+              root={workspacePath}
+              showDotfiles={prefs.showDotfiles}
+              showIgnored={prefs.showIgnored}
+              refreshTick={refreshTick}
+            />
           )}
         </>
       )}
@@ -392,7 +546,7 @@ function FilesSection({ workspacePath }: { workspacePath?: string }) {
   )
 }
 
-function FileSearchResults({ root, query }: { root: string; query: string }) {
+function FileSearchResults({ root, query, showDotfiles }: { root: string; query: string; showDotfiles: boolean }) {
   const t = useT()
   const openFile = useSessionsStore((s) => s.openFile)
   const [all, setAll] = useState<DirEntry[] | null>(null)
@@ -420,10 +574,11 @@ function FileSearchResults({ root, query }: { root: string; query: string }) {
       .filter(
         (e) =>
           !e.isDir &&
+          (showDotfiles || !e.name.startsWith(".")) &&
           (e.name.toLowerCase().includes(ql) || e.rel.toLowerCase().includes(ql)),
       )
       .slice(0, 200)
-  }, [all, query])
+  }, [all, query, showDotfiles])
 
   if (matches === null) {
     return <div className="px-2 py-1 text-sm text-codezal-mute">…</div>
@@ -467,7 +622,79 @@ function FileSearchResults({ root, query }: { root: string; query: string }) {
   )
 }
 
-function FileTree({ root }: { root: string }) {
+function FileContentResults({ root, query }: { root: string; query: string }) {
+  const t = useT()
+  const openFile = useSessionsStore((s) => s.openFile)
+  const [hits, setHits] = useState<GitGrepHit[] | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHits(null)
+    const id = setTimeout(() => {
+      gitGrepContent(root, query).then((h) => {
+        if (alive) setHits(h)
+      })
+    }, 200)
+    return () => {
+      alive = false
+      clearTimeout(id)
+    }
+  }, [root, query])
+
+  if (hits === null) {
+    return <div className="px-2 py-1 text-sm text-codezal-mute">{t("contextPanel.contentsSearching")}</div>
+  }
+  if (hits.length === 0) {
+    return <div className="px-2 py-1 text-sm text-codezal-mute">{t("contextPanel.contentsNoMatch")}</div>
+  }
+
+  return (
+    <ul className="flex flex-col text-sm text-codezal-text">
+      {hits.map((h, i) => {
+        const name = baseName(h.path)
+        const rel = relTo(root, h.path)
+        const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : ""
+        return (
+          <li key={`${h.path}:${h.line}:${i}`}>
+            <button
+              type="button"
+              onPointerDown={(ev) => startInternalDrag(ev, { kind: "file", payload: h.path, label: name })}
+              onClick={() => {
+                if (wasDragging()) return
+                openFile(h.path)
+              }}
+              className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left hover:bg-codezal-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+              title={`${h.path}:${h.line}`}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 opacity-80">
+                  <FileTypeIcon name={name} />
+                </span>
+                <span className="truncate text-codezal-text">{name}</span>
+                <span className="ml-auto shrink-0 font-mono text-[11px] text-codezal-mute">:{h.line}</span>
+              </span>
+              <span className="truncate pl-5 font-mono text-[11px] text-codezal-dim">{h.text}</span>
+              {dir && <span className="truncate pl-5 text-[11px] text-codezal-mute">{dir}</span>}
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function FileTree({
+  root,
+  showDotfiles,
+  showIgnored,
+  refreshTick,
+}: {
+  root: string
+  showDotfiles: boolean
+  showIgnored: boolean
+  refreshTick: number
+}) {
   const t = useT()
   const openFile = useSessionsStore((s) => s.openFile)
   const [editors, setEditors] = useState<EditorId[]>([])
@@ -504,6 +731,12 @@ function FileTree({ root }: { root: string }) {
   useEffect(() => {
     detectEditors().then(setEditors)
   }, [])
+
+  // Toolbar refresh button bumps refreshTick → re-read the root level.
+  useEffect(() => {
+    if (refreshTick === 0) return
+    emitDirRefresh(normalizeFsPath(root))
+  }, [refreshTick, root])
 
   const openMenu = useCallback((e: React.MouseEvent, target: MenuTarget) => {
     e.preventDefault()
@@ -701,7 +934,14 @@ function FileTree({ root }: { root: string }) {
         className="flex-1 select-none text-sm text-codezal-text"
         onContextMenu={openRootMenu}
       >
-        <TreeLevel path={root} depth={0} startExpanded />
+        <TreeLevel
+          path={root}
+          depth={0}
+          startExpanded
+          showDotfiles={showDotfiles}
+          showIgnored={showIgnored}
+          refreshTick={refreshTick}
+        />
       </div>
       {menu && (
         <EditorContextMenu
@@ -747,13 +987,20 @@ function TreeLevel({
   path,
   depth,
   startExpanded,
+  showDotfiles,
+  showIgnored,
+  refreshTick,
 }: {
   path: string
   depth: number
   startExpanded?: boolean
+  showDotfiles: boolean
+  showIgnored: boolean
+  refreshTick: number
 }) {
   const [entries, setEntries] = useState<FsEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [ignored, setIgnored] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
     let alive = true
@@ -788,6 +1035,19 @@ function TreeLevel({
     }
   }, [path])
 
+  // Compute which entries git ignores — needed both to hide them (showIgnored
+  // off) and to badge/italicise them (showIgnored on). No-op for non-repos.
+  useEffect(() => {
+    let alive = true
+    if (!entries || entries.length === 0) return
+    gitCheckIgnored(path, entries.map((e) => e.path)).then((s) => {
+      if (alive) setIgnored(s)
+    })
+    return () => {
+      alive = false
+    }
+  }, [path, entries, refreshTick])
+
   if (error) {
     return (
       <div className="px-2 py-1 text-sm text-destructive">{error}</div>
@@ -800,21 +1060,42 @@ function TreeLevel({
     return <div className="px-2 py-1 text-sm text-codezal-mute">{tStaticCtx("contextPanel.treeEmpty")}</div>
   }
 
-  const orderedEntries = [
-    ...entries.filter((entry) => !entry.name.startsWith(".")),
-    ...entries.filter((entry) => entry.name.startsWith(".")),
-  ]
+  const visible = entries.filter(
+    (e) => (showDotfiles || !e.name.startsWith(".")) && (showIgnored || !ignored.has(e.path)),
+  )
 
   return (
     <ul className="flex flex-col">
-      {orderedEntries.map((e) => (
-        <TreeNode key={e.path} entry={e} depth={depth} />
+      {visible.map((e) => (
+        <TreeNode
+          key={e.path}
+          entry={e}
+          depth={depth}
+          ignored={ignored.has(e.path)}
+          showDotfiles={showDotfiles}
+          showIgnored={showIgnored}
+          refreshTick={refreshTick}
+        />
       ))}
     </ul>
   )
 }
 
-function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
+function TreeNode({
+  entry,
+  depth,
+  ignored,
+  showDotfiles,
+  showIgnored,
+  refreshTick,
+}: {
+  entry: FsEntry
+  depth: number
+  ignored: boolean
+  showDotfiles: boolean
+  showIgnored: boolean
+  refreshTick: number
+}) {
   const [open, setOpen] = useState(false)
   const openFile = useSessionsStore((s) => s.openFile)
   const activeFile = useSessionsStore((s) => s.active?.activeFile ?? null)
@@ -841,9 +1122,9 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
           onContextMenu={(e) => menuCtx?.open(e, { path: entry.path, name: entry.name, isDir: false })}
           style={pad}
           className={cn(
-            "group flex w-full items-center gap-1 truncate rounded-md px-2 py-[3px] text-left transition-colors focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
+            "group flex w-full items-center gap-1 rounded-md px-2 py-[3px] text-left transition-colors focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
             isActive
-              ? "bg-codezal-accent/15 text-codezal-text"
+              ? "bg-codezal-panel-2 text-codezal-text"
               : "text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text",
             isCtxActive && "ring-1 ring-inset ring-codezal-accent/60",
           )}
@@ -852,7 +1133,8 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
           <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100" aria-hidden>
             <FileTypeIcon name={entry.name} />
           </span>
-          <span className="truncate">{entry.name}</span>
+          <span className={cn("min-w-0 flex-1 truncate", ignored && "italic text-codezal-mute")}>{entry.name}</span>
+          {ignored && <Ban className="ml-auto h-3.5 w-3.5 shrink-0 text-codezal-mute/70" aria-hidden />}
         </button>
       </li>
     )
@@ -870,7 +1152,7 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
         onContextMenu={(e) => menuCtx?.open(e, { path: entry.path, name: entry.name, isDir: true })}
         style={pad}
         className={cn(
-          "group flex w-full items-center gap-1 truncate rounded-md px-2 py-[3px] text-left text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
+          "group flex w-full items-center gap-1 rounded-md px-2 py-[3px] text-left text-codezal-dim hover:bg-codezal-panel-2 hover:text-codezal-text focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
           isCtxActive && "ring-1 ring-inset ring-codezal-accent/60",
         )}
       >
@@ -883,9 +1165,18 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
         <span className="shrink-0 opacity-70 transition-opacity group-hover:opacity-100" aria-hidden>
           <FolderTypeIcon name={entry.name} open={open} />
         </span>
-        <span className="truncate">{entry.name}</span>
+        <span className={cn("min-w-0 flex-1 truncate", ignored && "italic text-codezal-mute")}>{entry.name}</span>
+        {ignored && <Ban className="ml-auto h-3.5 w-3.5 shrink-0 text-codezal-mute/70" aria-hidden />}
       </button>
-      {open && <TreeLevel path={entry.path} depth={depth + 1} />}
+      {open && (
+        <TreeLevel
+          path={entry.path}
+          depth={depth + 1}
+          showDotfiles={showDotfiles}
+          showIgnored={showIgnored}
+          refreshTick={refreshTick}
+        />
+      )}
     </li>
   )
 }
@@ -909,26 +1200,33 @@ function AgentsSection({ workspacePath }: { workspacePath?: string }) {
     return out
   }, [messages])
 
-  const hasCompletedCards = runningCards.some(
-    (c) => c.status === "done" || c.status === "aborted" || c.status === "error",
-  )
-  const [dismissTick, setDismissTick] = useState(0)
-  useEffect(() => {
-    if (!hasCompletedCards) return
-    const id = setInterval(() => setDismissTick((t) => t + 1), 1_000)
-    return () => clearInterval(id)
-  }, [hasCompletedCards])
+  // Completed cards stay visible for the whole current turn (since the last
+  // user message), not just a few seconds — otherwise sequential spawn_agent
+  // runs vanish from the panel while the chat still shows "N agents called".
+  // Cards persist in message parts, so older turns' cards must stay hidden.
+  const turnStart = useMemo(() => {
+    const ms = messages ?? []
+    for (let i = ms.length - 1; i >= 0; i--) {
+      const m = ms[i]
+      if (m.role !== "user") continue
+      // Message ids embed the creation timestamp (prefix_hexTime_…); Message
+      // has no `createdAt` field. Inlined here (pure ops, no call/try) so the
+      // React Compiler can preserve this memo. Invalid ids fall back to 0.
+      const sep = m.id.indexOf("_")
+      if (sep === -1) return 0
+      return Number(BigInt("0x" + m.id.slice(sep + 1, sep + 15)) / BigInt(0x1000))
+    }
+    return 0
+  }, [messages])
 
-  const visibleCards = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity
-    const now = Date.now()
-    return runningCards.filter((c) => {
-      if (c.status !== "done" && c.status !== "aborted" && c.status !== "error") return true
-      if (!c.finishedAt) return false
-      return now - c.finishedAt < 10_000
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runningCards, dismissTick])
+  const visibleCards = useMemo(
+    () =>
+      runningCards.filter((c) => {
+        if (c.status !== "done" && c.status !== "aborted" && c.status !== "error") return true
+        return (c.startedAt ?? c.finishedAt ?? 0) >= turnStart
+      }),
+    [runningCards, turnStart],
+  )
 
   useEffect(() => {
     let alive = true

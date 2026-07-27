@@ -849,6 +849,15 @@ const en: Messages = {
     opFailed: "Git operation failed",
     commitFailed: "Commit failed",
     showOutput: "Show output",
+    commitAndPush: "Commit & Push",
+    commitAndSync: "Commit & Sync",
+    forcePush: "Force Push",
+    fastForward: "Fast-forward",
+    rebaseFrom: "Rebase from {ref}",
+    publishBranch: "Publish Branch",
+    createPr: "Create PR",
+    filterFiles: "Filter files…",
+    commitsLabel: "Commits",
   },
 
   // ---- Code review (pre-commit / pre-push) ----

@@ -147,7 +147,7 @@ import { buildMcpTools, listPluginMcps, listConnectedMcpResources, readMcpResour
 import { listPluginHooks } from "../hooks"
 import { createId } from "@/lib/id"
 import type { Message, Settings } from "@/store/types"
-import { isAbsolutePath, resolveInWorkspace, resolveAny, WorkspaceError } from "./paths"
+import { isAbsolutePath, resolveInWorkspace, resolveAny, WorkspaceError, assertRealPathWithinWorkspace } from "./paths"
 import { humanSize } from "@/lib/open"
 import { withLock } from "../lock"
 import { listPluginAgents } from "../agents/plugin"
@@ -494,7 +494,13 @@ async function captureCheckpoint(ownerSessionId: string, workspace: string | und
 
 async function resolvePathOrAsk(workspace: string, rel: string, toolName: string): Promise<string> {
   try {
-    return resolveInWorkspace(workspace, rel)
+    const abs = resolveInWorkspace(workspace, rel)
+    // Symlink-aware boundary check: a path that is lexically inside the
+    // workspace may escape it via a symlink. Canonicalize both sides and
+    // verify real containment. Best-effort — skipped
+    // when the file does not exist yet (write_file / edit_file create it).
+    await assertRealPathWithinWorkspace(workspace, abs)
+    return abs
   } catch (e) {
     if (!(e instanceof WorkspaceError)) throw e
     if (!isAbsolutePath(rel)) throw e
@@ -958,6 +964,14 @@ export async function buildAllTools(
   if (mode !== "orchestra") {
     delete merged.dispatch_workers
     delete merged.merge_workers
+  }
+  if (mode === "plan") {
+    // Plan mode is read-only. The runtime gate already blocks these tools, but
+    // advertising them to the model causes futile retry loops (it keeps calling
+    // bash/write and getting rejected). Hide them from the tool set entirely so
+    // the model plans with read-only tools only. Subagents spawned while the
+    // parent is in build mode are unaffected (this keys off the owner's mode).
+    for (const blocked of PLAN_BLOCKED) delete merged[blocked]
   }
   if (merged.spawn_agent) {
     try {

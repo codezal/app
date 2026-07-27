@@ -23,12 +23,14 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       "152b95283c80031f30137419a7c4a3e88703ac0f3016904a03640ab5f27e3f00",
       "f847d88b6256445aa393bedaba4001b5fd8f91e23fb172642543df03160f35f5",
       "136a51541af31e58e190bba169d0481f01075885a4dcce633de548003c10b68b",
+      // v8 body (read-only allowlist incl. sed -n/awk/git stash; no BASH POLICY section)
+      "a1d85952a1e225502b282a0d31290b48a989ccb09342d6a8d14520315a0467ad",
     ],
     body: `---
 name: code-reviewer
 description: Code review specialist - reviews diffs/files and returns severity-tagged findings.
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, code_query, bash]
-bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du"]
+bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "sed -n", "awk", "git stash list", "git stash show"]
 plan_mode: true
 max_steps: 20
 ---
@@ -60,6 +62,12 @@ Rules:
 - Do not include formatting/lint nits; include only behavior-changing issues (real errors from \`lsp\` diagnostics count).
 - If there are no findings, say "Clean."
 - Final answer: findings list + one-sentence summary.
+
+BASH POLICY (strict — violations are blocked by the sandbox; do NOT retry variants):
+- Bash is ONLY for fetching the change set: \`git diff\` / \`git diff --cached\` / \`git log\` / \`git show\` / \`git status\` / \`git blame\`, plus plain read-only text filters (\`grep\`, \`head\`, \`tail\`, \`cat\`, \`sed -n\`, \`awk\`, \`ls\`, \`find\`).
+- NEVER run build / test / typecheck / install / package-manager commands — they are NOT allowlisted and WILL fail: no \`pnpm\`, \`npm\`, \`npx\`, \`yarn\`, \`bun\`, \`node\`, \`tsc\`, \`vitest\`, \`jest\`, \`cargo\`, \`go\`, \`pytest\`, and no \`cd <dir> && …\`. To verify types or errors use the \`lsp\` tool (operation: diagnostics), never a shell command.
+- NEVER use redirection or substitution: no \`>\`, \`<\`, \`2>\`, \`| … >file\`, \`$(…)\`, or backticks — these are always blocked. To read a line range use \`read_file\` with offset/limit; never redirect output.
+- If a bash command is blocked, do NOT rephrase or retry it — switch immediately to \`read_file\` / \`grep\` / \`glob\` / \`code_*\`.
 `,
   },
   {
@@ -110,7 +118,7 @@ Rules:
 name: debugger
 description: Isolate bugs by forming hypotheses, collecting evidence, and identifying root cause.
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_trace, lsp, code_query, bash]
-bash_allow: ["git log", "git diff", "git show", "git status", "git blame", "git bisect", "git rev-parse", "git ls-files", "git branch", "git remote", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest"]
+bash_allow: ["git log", "git diff", "git show", "git status", "git blame", "git bisect", "git rev-parse", "git ls-files", "git branch", "git remote", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest", "sed -n", "awk", "git stash list", "git stash show"]
 approval_required: [bash]
 max_steps: 25
 ---
@@ -182,7 +190,7 @@ Rules:
 name: refactorer
 description: Suggest refactors by finding duplication, complexity, poor naming, and giving a plan.
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, code_query, bash]
-bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du"]
+bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "sed -n", "awk", "git stash list", "git stash show"]
 plan_mode: true
 max_steps: 20
 ---

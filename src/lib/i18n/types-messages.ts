@@ -839,6 +839,15 @@ export type Messages = {
     opFailed?: string
     commitFailed?: string
     showOutput?: string
+    commitAndPush?: string
+    commitAndSync?: string
+    forcePush?: string
+    fastForward?: string
+    rebaseFrom?: string
+    publishBranch?: string
+    createPr?: string
+    filterFiles?: string
+    commitsLabel?: string
   }
 
   // Pre-commit / pre-push code review dialog (see git-review.ts). Optional so

@@ -14,6 +14,7 @@ import {
   isContentFilterError,
   retryDelayMs,
   stallRetryDelayMs,
+  stripImageParts,
   type ProviderId,
   type ReasoningEffort,
 } from "@/lib/providers"
@@ -24,7 +25,7 @@ import {
   shouldStripVisibleToolProtocol,
   stripVisibleToolProtocolMessages,
 } from "@/lib/stream/tool-protocol-filter"
-import { detectStopReason } from "@/lib/stream/stop-reason"
+import { detectStopReason, isUserWaitingTool } from "@/lib/stream/stop-reason"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { modelDetail, resolveContextCap, catalogPricing, modelAcceptsImages } from "@/lib/providers-catalog"
 import { resolveLocalLlm } from "@/lib/local-llm"
@@ -145,6 +146,7 @@ export function makeRunStream(deps: RunStreamDeps) {
     override?: SendOverride,
     retryCount = 0,
     apiRetryCount = 0,
+    autoContinueCount = 0,
   ) {
     const cur = useSessionsStore.getState().sessions[sid]
     if (!cur) return
@@ -175,6 +177,10 @@ export function makeRunStream(deps: RunStreamDeps) {
       useSessionsStore.getState().patchMessageFor(sid, mid, p)
 
     const parts: Part[] = []
+    // Filled in once the run finishes (inside the try block) so the post-run
+    // auto-continue / background-toast logic below the try/catch/finally can
+    // see whether the turn ended prematurely (step-cap / early truncation).
+    let finalStopReason: Message["stopReason"] = undefined
     let textBuf = ""
     let reasoningBuf = ""
     let protocolTextFilter: ReturnType<typeof createVisibleToolProtocolFilter> | null = null
@@ -539,7 +545,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         // Reasoning models need the full output window for thinking + answer;
         // only cap output (OpenCode-style 32k) when reasoning is off.
         ...(reasoningActive ? {} : { maxOutputTokens: maxOutputTokens(outputLimit) }),
-        stopWhen: isStepCount(localRuntimeProvider ? (localAgent ? 12 : 1) : 80),
+        stopWhen: isStepCount(localRuntimeProvider ? (localAgent ? 12 : 1) : 200),
         abortSignal: stallController.signal,
         experimental_transform: smoothStream({
           delayInMs: 3,
@@ -579,6 +585,11 @@ export function makeRunStream(deps: RunStreamDeps) {
       let lastTickAt = Date.now()
       let postWake = false
       let pendingTools = 0
+      // toolCallId → toolName for in-flight tools. Lets the watchdog tell a
+      // genuinely stuck tool apart from one that is deliberately waiting on
+      // the user (question / propose_plan / propose_build), which must never
+      // be aborted as a stall no matter how long the user takes to answer.
+      const pendingToolNames = new Map<string, string>()
       let toolRunStartedAt = 0
       const suppressedCalls = new Set<string>()
       stallWatchdog = setInterval(() => {
@@ -601,6 +612,13 @@ export function makeRunStream(deps: RunStreamDeps) {
         }
 
         if (pendingTools > 0) {
+          // A tool waiting on the user (question / propose_plan / propose_build)
+          // can legitimately idle for as long as the user takes to answer — it
+          // is NOT a stall. Never abort the turn while such a tool is pending;
+          // when the user answers the stream resumes and finishes normally.
+          for (const name of pendingToolNames.values()) {
+            if (isUserWaitingTool(name)) return
+          }
           // (d) spawn_agent gibi ilerleme sinyali veren tool'lar lastToolBeat'i bumplar;
           const beat = lastToolBeat(sid)
           const ref = beat && beat > toolRunStartedAt ? beat : toolRunStartedAt
@@ -649,6 +667,7 @@ export function makeRunStream(deps: RunStreamDeps) {
             flushReasoning()
             if (pendingTools === 0) toolRunStartedAt = Date.now()
             pendingTools++
+            pendingToolNames.set(chunk.toolCallId, chunk.toolName)
             if (looksLikeQuotedSyntax(chunk.toolName)) {
               suppressedCalls.add(chunk.toolCallId)
             } else {
@@ -663,6 +682,7 @@ export function makeRunStream(deps: RunStreamDeps) {
             break
           case "tool-result":
             if (pendingTools > 0) pendingTools--
+            pendingToolNames.delete(chunk.toolCallId)
             if (suppressedCalls.has(chunk.toolCallId)) {
               syncFlush()
               break
@@ -678,6 +698,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           case "tool-error":
             // Tool execute throw etti veya repair-fail invalid-arg → tool-error chunk.
             if (pendingTools > 0) pendingTools--
+            pendingToolNames.delete(chunk.toolCallId)
             if (suppressedCalls.has(chunk.toolCallId) || looksLikeQuotedSyntax(chunk.toolName)) {
               suppressedCalls.add(chunk.toolCallId)
               syncFlush()
@@ -786,14 +807,14 @@ export function makeRunStream(deps: RunStreamDeps) {
 
       useSessionsStore.getState().replaceModelMessagesFor(sid, [...history, ...finalMessages])
 
-      const stopReason = detectStopReason(finalFinishReason, parts[parts.length - 1])
+      finalStopReason = detectStopReason(finalFinishReason, parts[parts.length - 1])
 
       patchFor(asstMsgId, {
         parts: [...parts],
         content: collapseText(parts),
         pending: false,
         modelMsgCount: finalMessages.length,
-        stopReason,
+        stopReason: finalStopReason,
         endedAt: Date.now(),
       })
 
@@ -932,8 +953,13 @@ export function makeRunStream(deps: RunStreamDeps) {
       clearStreamAbort(sid, ac)
       if (!aborted && sid !== useSessionsStore.getState().activeId) {
         const title = useSessionsStore.getState().sessions[sid]?.title ?? "Sohbet"
-        if (streamSucceeded) {
+        if (streamSucceeded && !finalStopReason) {
           toast.success(`"${title}" tamamlandı`)
+        } else if (streamSucceeded && finalStopReason) {
+          // The turn ended prematurely (step-cap / truncation) — never report
+          // that as "completed". The foreground banner offers Continue; here we
+          // just avoid the misleading success toast.
+          toast.info(`"${title}" yarım kaldı`)
         } else if (streamStalled || streamTruncated) {
           toast.error(tStatic("toast.streamFailedBg", { title }))
         }
@@ -983,6 +1009,17 @@ export function makeRunStream(deps: RunStreamDeps) {
         }
       } catch (e) {
         console.error("[overflow] compact failed:", e)
+      }
+      // Last resort: strip image parts to reclaim tokens.
+      // Images are the largest per-message payload; replacing them with a text
+      // marker often frees enough space for the retry to succeed.
+      if (!compactedOk) {
+        const stripped = stripImageParts(working)
+        if (stripped !== working) {
+          working = stripped
+          compactedOk = true
+          console.info("[overflow] image parts stripped as last-resort recovery")
+        }
       }
       if (compactedOk) {
         useSessionsStore.getState().replaceModelMessagesFor(sid, working)
@@ -1082,8 +1119,61 @@ export function makeRunStream(deps: RunStreamDeps) {
     // ---- Goal sentinel-loop ----
     const goal = useSessionsStore.getState().sessions[sid]?.goal
     if (!goal) {
-      if (ac.signal.aborted) fireTurnEnd("abort")
-      else if (streamSucceeded) fireTurnEnd("end_turn")
+      if (ac.signal.aborted) {
+        fireTurnEnd("abort")
+        return
+      }
+      // ---- Auto-continue on premature stop ----
+      // A turn that ended on `halted` (step budget exhausted mid tool-loop, or
+      // an early truncation on a tool) is almost always a half-finished task.
+      // Keep going automatically — the same way the goal loop does — up to a
+      // small budget, so long multi-tool jobs don't silently stall mid-way.
+      // Once the budget is spent the turn simply ends and the
+      // "incomplete / Continue" banner (driven by stopReason) lets the user
+      // resume by hand. `length` is left to the banner on purpose: resuming a
+      // turn that was cut mid tool-call JSON is unsafe.
+      const AUTO_CONTINUE_MAX = 3
+      if (
+        streamSucceeded &&
+        finalStopReason === "halted" &&
+        autoContinueCount < AUTO_CONTINUE_MAX
+      ) {
+        const sess = useSessionsStore.getState().sessions[sid]
+        if (sess) {
+          const contText =
+            "The previous turn was cut off before the task was finished (step limit reached). Continue exactly where you left off and keep working until the task is fully complete — do not stop after a single step."
+          const contUser: Message = {
+            id: createId("message"),
+            role: "user",
+            content: contText,
+            modelMsgCount: 1,
+          }
+          const contAsst: Message = {
+            id: createId("message"),
+            role: "assistant",
+            content: "",
+            parts: [],
+            pending: true,
+          }
+          useSessionsStore.getState().pushMessageFor(sid, contUser)
+          useSessionsStore.getState().pushMessageFor(sid, contAsst)
+          const contHistory: ModelMessage[] = [
+            ...(sess.modelMessages ?? []),
+            { role: "user", content: contText },
+          ]
+          await runStream(
+            sid,
+            contAsst.id,
+            contHistory,
+            override,
+            0,
+            0,
+            autoContinueCount + 1,
+          )
+          return
+        }
+      }
+      if (streamSucceeded) fireTurnEnd("end_turn")
       else fireTurnEnd("finish")
       return
     }
@@ -1142,6 +1232,29 @@ export function makeRunStream(deps: RunStreamDeps) {
       )
       fireTurnEnd("goal_blocked")
       return
+    }
+
+    // Budget caps: stop the goal when cumulative token
+    // usage or cost exceeds the user-configured limits.
+    const goalUsage = useSessionsStore.getState().sessions[sid]?.usage
+    if (goalUsage) {
+      const totalTokens = (goalUsage.inputTokens ?? 0) + (goalUsage.outputTokens ?? 0)
+      if (goal.tokenBudget && goal.tokenBudget > 0 && totalTokens >= goal.tokenBudget) {
+        clearGoalSid()
+        pushGoalSystem(
+          `⛔ Goal token bütçesine (${goal.tokenBudget.toLocaleString()}) ulaştı — durduruldu. Hedef: "${goal.text}"`,
+        )
+        fireTurnEnd("goal_budget_tokens")
+        return
+      }
+      if (goal.costBudgetUsd && goal.costBudgetUsd > 0 && (goalUsage.costUsd ?? 0) >= goal.costBudgetUsd) {
+        clearGoalSid()
+        pushGoalSystem(
+          `⛔ Goal maliyet bütçesine ($${goal.costBudgetUsd.toFixed(2)}) ulaştı — durduruldu. Hedef: "${goal.text}"`,
+        )
+        fireTurnEnd("goal_budget_cost")
+        return
+      }
     }
 
     if (goal.paused) {

@@ -63,3 +63,34 @@ describe("replace — replace_all", () => {
     expect(replace("foo", "foo", "bar", true)).toBe("bar")
   })
 })
+
+// ─── CRLF (Windows line endings) ─────────────────────────────────────────────
+
+describe("replace — CRLF files", () => {
+  it("exact match works when the file is CRLF but old_string is LF", () => {
+    const content = "line1\r\nconst x = 1\r\nline3\r\n"
+    expect(replace(content, "const x = 1", "const x = 2")).toBe(
+      "line1\r\nconst x = 2\r\nline3\r\n",
+    )
+  })
+
+  it("multi-line LF old_string matches a CRLF file", () => {
+    const content = "a\r\nb\r\nc\r\n"
+    expect(replace(content, "a\nb", "X")).toBe("X\r\nc\r\n")
+  })
+
+  it("preserves CRLF style across the whole result", () => {
+    const content = "x\r\ny\r\n"
+    const out = replace(content, "y", "z")
+    expect(out).toBe("x\r\nz\r\n")
+    expect(out).not.toMatch(/[^\r]\n/) // no bare LF introduced
+  })
+
+  it("keeps LF style for LF files (no regression)", () => {
+    expect(replace("a\nb\n", "b", "c")).toBe("a\nc\n")
+  })
+
+  it("replace_all works on CRLF content", () => {
+    expect(replace("a\r\nx\r\na\r\nx\r\n", "x", "Y", true)).toBe("a\r\nY\r\na\r\nY\r\n")
+  })
+})

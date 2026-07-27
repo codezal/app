@@ -1,6 +1,7 @@
 
 import { normalizeNativeFsPath } from "@/lib/fs-path"
 import { isWindows } from "@/lib/platform"
+import { invoke } from "@tauri-apps/api/core"
 
 export class WorkspaceError extends Error {}
 
@@ -69,4 +70,38 @@ export function resolveInWorkspace(
     throw new WorkspaceError(`Path workspace dışına çıkıyor: ${rel}`)
   }
   return joined
+}
+
+// Symlink-aware workspace boundary check.
+// resolveInWorkspace does lexical normalization only — a symlink inside the
+// workspace that points outside would pass the lexical check. This async
+// function canonicalizes BOTH the workspace root and the target path via the
+// Rust `fs_realpath` command (std::fs::canonicalize) and verifies real
+// containment. Call it before reading a file when the path was constructed
+// from untrusted (model-supplied) input.
+//
+// Best-effort: if canonicalization fails (path doesn't exist yet, permission
+// error) the check is skipped — the subsequent read will fail on its own.
+export async function assertRealPathWithinWorkspace(
+  workspace: string,
+  absPath: string,
+): Promise<void> {
+  try {
+    const [realWs, realPath] = await Promise.all([
+      invoke<string>("fs_realpath", { path: workspace }),
+      invoke<string>("fs_realpath", { path: absPath }),
+    ])
+    const ws = realWs.replace(/\\/g, "/").replace(/\/+$/, "")
+    const target = realPath.replace(/\\/g, "/")
+    const wsCmp = isWindows() ? ws.toLowerCase() : ws
+    const tgtCmp = isWindows() ? target.toLowerCase() : target
+    if (tgtCmp !== wsCmp && !tgtCmp.startsWith(wsCmp + "/")) {
+      throw new WorkspaceError(
+        `Symlink workspace dışına çıkıyor: ${absPath} → ${realPath}`,
+      )
+    }
+  } catch (e) {
+    if (e instanceof WorkspaceError) throw e
+    // Canonicalization failed (path missing, permission) — let the read fail.
+  }
 }

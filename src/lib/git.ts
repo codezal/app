@@ -1,5 +1,6 @@
 import { runProgram } from "@/lib/exec"
 import { errorMessage } from "@/lib/errors"
+import { joinFsPath } from "@/lib/fs-path"
 
 const GIT_FLAGS = [
   "--no-optional-locks",
@@ -533,16 +534,68 @@ export async function gitFetch(workspace: string): Promise<string> {
   return mutate(workspace, ["fetch"])
 }
 
-export async function gitPull(workspace: string): Promise<string> {
-  return mutate(workspace, ["pull"])
+export async function gitPull(
+  workspace: string,
+  opts: { ffOnly?: boolean } = {},
+): Promise<string> {
+  const args = ["pull"]
+  if (opts.ffOnly) args.push("--ff-only")
+  return mutate(workspace, args)
 }
 
-export async function gitPush(workspace: string): Promise<string> {
-  return mutate(workspace, ["push"])
+export async function gitPush(
+  workspace: string,
+  opts: { force?: boolean } = {},
+): Promise<string> {
+  const args = ["push"]
+  // Safe force push — refuses to overwrite remote-only commits.
+  if (opts.force) args.push("--force-with-lease")
+  return mutate(workspace, args)
 }
 
 export async function gitPublish(workspace: string): Promise<string> {
   return mutate(workspace, ["push", "-u", "origin", "HEAD"])
+}
+
+// Fast-forward only — never creates a merge commit. Used by the Orca-style
+// "Fast-forward" action in the git panel.
+export async function gitFastForward(workspace: string): Promise<string> {
+  return gitPull(workspace, { ffOnly: true })
+}
+
+export async function gitRebase(workspace: string, ref: string): Promise<string> {
+  if (!ref.trim()) throw new Error("rebase hedefi boş")
+  return mutate(workspace, ["rebase", ref.trim()])
+}
+
+// Per-file +/- line counts of the working tree (staged + unstaged tracked
+// changes) against HEAD. Untracked files are not reported by numstat and are
+// intentionally absent here, matching Orca's CHANGES list. Returns {} on any
+// error (e.g. empty repo, huge monorepo timeout) so the UI can hide counts.
+export async function gitWorktreeStats(
+  workspace: string,
+): Promise<Record<string, { additions: number; deletions: number }>> {
+  if (!workspace) return {}
+  try {
+    const raw = await exec(workspace, ["diff", "--no-ext-diff", "--numstat", "HEAD", "--", "."])
+    const out: Record<string, { additions: number; deletions: number }> = {}
+    for (const line of raw.split("\n")) {
+      if (!line) continue
+      const parts = line.split("\t")
+      if (parts.length < 3) continue
+      const file = parts[2]
+      if (!file) continue
+      const adds = parts[0] === "-" ? 0 : parseInt(parts[0] || "0", 10)
+      const dels = parts[1] === "-" ? 0 : parseInt(parts[1] || "0", 10)
+      out[file] = {
+        additions: Number.isFinite(adds) ? adds : 0,
+        deletions: Number.isFinite(dels) ? dels : 0,
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
 }
 
 export type GitCommitEntry = {
@@ -642,5 +695,67 @@ export async function gitDiffAhead(workspace: string): Promise<string> {
     return capDiff(out)
   } catch {
     return ""
+  }
+}
+
+// Returns the subset of the given absolute paths that git considers ignored
+// (via .gitignore / global ignore / .git/info/exclude). Used by the file tree
+// to mark ignored entries (italic + badge) and optionally hide them.
+// `git check-ignore` exits 1 when nothing is ignored and non-zero when not a
+// repo, so we tolerate any non-zero code and never throw.
+export async function gitCheckIgnored(workspace: string, absPaths: string[]): Promise<Set<string>> {
+  const out = new Set<string>()
+  if (!workspace || absPaths.length === 0) return out
+  try {
+    // -z → NUL-separated output so paths with spaces / unicode survive intact.
+    const r = await runProgram("git", [...GIT_FLAGS, "check-ignore", "-z", "--", ...absPaths], {
+      cwd: workspace,
+      timeoutMs: 8000,
+    })
+    if (r.code === 0 && r.stdout) {
+      for (const p of r.stdout.split("\0")) {
+        if (p) out.add(p)
+      }
+    }
+  } catch {
+    // not a repo / git missing / timeout → treat as "nothing ignored"
+  }
+  return out
+}
+
+export type GitGrepHit = { path: string; line: number; text: string }
+
+// Literal, case-insensitive content search across tracked + untracked-but-not-
+// ignored files (`git grep -I -i -F -n`). Returns absolute paths. Empty query,
+// no matches, or a non-repo all resolve to `[]` (never throws). Output is capped
+// both by a timeout/ring buffer (runProgram) and a 200-row slice here.
+export async function gitGrepContent(workspace: string, query: string): Promise<GitGrepHit[]> {
+  const q = query.trim()
+  if (!workspace || !q) return []
+  try {
+    const r = await runProgram(
+      "git",
+      [...GIT_FLAGS, "grep", "-n", "-I", "-i", "-F", "--", q],
+      { cwd: workspace, timeoutMs: 10000 },
+    )
+    // 0 = matches, 1 = no matches, 128+ = error / not a repo
+    if (r.code !== 0 || !r.stdout) return []
+    const hits: GitGrepHit[] = []
+    for (const raw of r.stdout.split("\n")) {
+      if (!raw) continue
+      const i1 = raw.indexOf(":")
+      if (i1 < 0) continue
+      const i2 = raw.indexOf(":", i1 + 1)
+      if (i2 < 0) continue
+      const rel = raw.slice(0, i1)
+      const line = Number(raw.slice(i1 + 1, i2))
+      const text = raw.slice(i2 + 1)
+      if (!rel || !Number.isFinite(line)) continue
+      hits.push({ path: joinFsPath(workspace, rel), line, text })
+      if (hits.length >= 200) break
+    }
+    return hits
+  } catch {
+    return []
   }
 }

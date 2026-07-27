@@ -42,6 +42,7 @@ import { lineDiff, type DiffLine } from "@/lib/diff"
 import { revertHunk } from "@/lib/hunk-revert"
 import { resolveInWorkspace } from "@/lib/tools/paths"
 import { abortStream } from "@/lib/run-registry"
+import { registerWorkspaceRoot, registerWorkspaceRoots } from "@/lib/workspace-roots"
 import { planSessionEviction, MAX_HYDRATED_SESSIONS } from "@/lib/session-evict"
 import type { ProviderId, ReasoningEffort } from "@/lib/providers"
 import { createId } from "@/lib/id"
@@ -73,6 +74,9 @@ function makeEmptySession(
   // (Session.reasoningEffort ?? settings.reasoningEffort ?? "medium").
   if (reasoningEffort) s.reasoningEffort = reasoningEffort
   if (routineId) s.routineId = routineId
+  // Home dışı (D:\ vb.) workspace fs erişimini aç — create/createDraft/createDetached
+  // hepsi buradan geçtiği için tek nokta yeterli.
+  void registerWorkspaceRoot(workspacePath)
   return s
 }
 
@@ -710,6 +714,8 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
           }
         }
         set({ index: metas, loaded: true, projects, projectMeta })
+        // Home dışı (D:\ vb.) workspace'ler için fs erişimini başlangıçta aç.
+        registerWorkspaceRoots(projects)
       } catch (e) {
         console.error("[sessions] DB başlatılamadı, in-memory moda düşülüyor:", e)
         set({ index: [], loaded: true, projects: [], projectMeta: {} })
@@ -1038,8 +1044,10 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         updatedAt: Date.now(),
       })),
 
-    updateMetaFor: (sessionId, patch) =>
-      mut(sessionId, (s) => ({ ...s, ...patch, updatedAt: Date.now() })),
+    updateMetaFor: (sessionId, patch) => {
+      if (patch.workspacePath) void registerWorkspaceRoot(patch.workspacePath)
+      return mut(sessionId, (s) => ({ ...s, ...patch, updatedAt: Date.now() }))
+    },
     updateActiveMeta: (patch) => {
       const id = get().activeId
       if (id) get().updateMetaFor(id, patch)
@@ -1583,6 +1591,11 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         forkParentId: a.id,
         openFiles: [],
         activeFile: null,
+        mode: a.mode,
+        ...(a.orchestra ? { orchestra: { ...a.orchestra } } : {}),
+        ...(a.reasoningEffort ? { reasoningEffort: a.reasoningEffort } : {}),
+        ...(a.permission ? { permission: [...a.permission] } : {}),
+        ...(a.todos?.length ? { todos: a.todos.map((t) => ({ ...t })) } : {}),
       }
       const cutSeq = (await dbMessageIdx(db, a.id, messageId)) ?? idx
       await forkCopy(db, fork, a.id, cutSeq)
@@ -1653,6 +1666,11 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         forkParentId: id,
         openFiles: [],
         activeFile: null,
+        mode: src.mode,
+        ...(src.orchestra ? { orchestra: { ...src.orchestra } } : {}),
+        ...(src.reasoningEffort ? { reasoningEffort: src.reasoningEffort } : {}),
+        ...(src.permission ? { permission: [...src.permission] } : {}),
+        ...(src.todos?.length ? { todos: src.todos.map((t) => ({ ...t })) } : {}),
       }
       await forkCopy(db, fork, id, Number.MAX_SAFE_INTEGER)
       const msgs = await loadAllMessages(db, forkId)
@@ -1696,6 +1714,7 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         ...(src.orchestra ? { orchestra: { ...src.orchestra } } : {}),
         ...(src.reasoningEffort ? { reasoningEffort: src.reasoningEffort } : {}),
         ...(src.permission ? { permission: [...src.permission] } : {}),
+        ...(src.todos?.length ? { todos: src.todos.map((t) => ({ ...t })) } : {}),
       }
       await forkCopy(db, fork, id, Number.MAX_SAFE_INTEGER)
       const msgs = await loadAllMessages(db, forkId)

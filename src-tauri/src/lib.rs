@@ -93,6 +93,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .manage(pty::PtyManager::default())
+        .manage(fs::WorkspaceRoots::default())
         .manage(browser::BrowserManager::default())
         .manage(KeepAwakeState::default())
         .manage(inference::LlmManager::default())
@@ -146,6 +147,7 @@ pub fn run() {
             exec::terminal_available_programs,
             exec::login_path,
             exec::process_alive,
+            fs::register_workspace_root,
             fs::fs_read_text_file,
             fs::fs_read_file_base64,
             fs::fs_write_text_file,
@@ -154,6 +156,7 @@ pub fn run() {
             fs::fs_read_dir,
             fs::fs_stat_size,
             fs::fs_copy_dir,
+            fs::fs_realpath,
             fs::fs_remove_dir,
             exec::agent_runtime_dir,
             exec::path_exists,

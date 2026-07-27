@@ -246,6 +246,8 @@ export {
   sanitizeToolSchema,
   withSchemaSanitize,
   sanitizeSurrogates,
+  stripImageParts,
+  repairToolAdjacency,
 } from "./transform"
 export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, retryDelayMs, stallRetryDelayMs } from "./error"
 export type { ParsedError } from "./error"

@@ -28,6 +28,23 @@ export function errorFormat(error: unknown): string {
   return String(error)
 }
 
+/**
+ * Detect provider context-overflow errors (HTTP 413 / "request too large").
+ * Used to trigger auto-compaction + retry in the run loop.
+ */
+export function isContextOverflowError(error: unknown): boolean {
+  const msg = errorMessage(error).toLowerCase()
+  return (
+    msg.includes("413") ||
+    msg.includes("request too large") ||
+    msg.includes("context length") ||
+    msg.includes("maximum context") ||
+    msg.includes("token limit") ||
+    msg.includes("too many tokens") ||
+    msg.includes("content too large")
+  )
+}
+
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     if (error.message) return error.message

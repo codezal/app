@@ -1,5 +1,6 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { normalizeNativeFsPath } from "./fs-path"
+import { registerWorkspaceRoot } from "./workspace-roots"
 
 export async function pickWorkspaceFolder(): Promise<string | null> {
   const result = await openDialog({
@@ -8,7 +9,10 @@ export async function pickWorkspaceFolder(): Promise<string | null> {
     title: "Çalışma klasörü seç",
   })
   if (!result || Array.isArray(result)) return null
-  return normalizeNativeFsPath(result)
+  const path = normalizeNativeFsPath(result)
+  // Home dışı sürücülerde (D:\ vb.) fs scope'unu hemen aç.
+  void registerWorkspaceRoot(path)
+  return path
 }
 
 export function basename(path: string | undefined): string {

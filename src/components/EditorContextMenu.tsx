@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
+import { Check } from "@/lib/icons"
 
 export type CtxMenuItem =
   | { kind: "sep" }
@@ -9,6 +10,8 @@ export type CtxMenuItem =
       label: string
       shortcut?: string
       icon?: ReactNode
+      // When set, a check mark is shown in the leading slot (toggle-style rows).
+      checked?: boolean
       disabled?: boolean
       onClick: () => void
     }
@@ -80,7 +83,7 @@ export function EditorContextMenu({ x, y, items, onClose }: Props) {
             )}
           >
             <span className="flex h-4 w-4 shrink-0 items-center justify-center text-codezal-mute">
-              {it.icon}
+              {it.checked ? <Check className="h-4 w-4 text-codezal-accent" aria-hidden /> : it.icon}
             </span>
             <span className="flex-1 truncate">{it.label}</span>
             {it.shortcut && <span className="shrink-0 text-sm tabular-nums opacity-60">{it.shortcut}</span>}
