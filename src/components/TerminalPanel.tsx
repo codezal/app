@@ -358,6 +358,13 @@ function getOrCreateLiveTerm(
       term.onResize(({ rows, cols }) => {
         void handle.resize(rows, cols)
       })
+      // The PTY was spawned with whatever cols/rows xterm had at that instant,
+      // but fit() may already have run (via rAF / ResizeObserver) during the
+      // spawn await above — before this onResize handler existed — so that
+      // resize was dropped and the PTY can be stuck at a stale, narrower size
+      // (the TUI then renders "half width" inside a wider xterm). Re-sync the
+      // PTY to xterm's current size now that the handler is wired up.
+      void handle.resize(term.rows, term.cols)
       if (opts.launchCommand) {
         await handle.write(`${opts.launchCommand}\r`)
       }
