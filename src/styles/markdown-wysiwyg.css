@@ -1,0 +1,106 @@
+/* Tiptap / ProseMirror WYSIWYG markdown editor — Codezal theme bindings.
+   Prose sınıfları (başlık/tablo/liste/blockquote) sarıcıya verilen `prose`
+   utility'lerinden gelir; burada yalnız ProseMirror'e özgü durumlar
+   (placeholder, seçili hücre, yeniden boyutlama tutamacı, gap imleci, kod
+   bloğu geri boyaması) tema değişkenlerine bağlanır. */
+
+.cz-md-wysiwyg .ProseMirror {
+  outline: none;
+  min-height: 100%;
+  caret-color: hsl(var(--codezal-text));
+}
+
+/* Boş belge / boş paragraf yer tutucusu */
+.cz-md-wysiwyg .ProseMirror p.is-editor-empty:first-child::before,
+.cz-md-wysiwyg .ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: hsl(var(--codezal-text-mute));
+  font-style: normal;
+}
+
+/* Kod bloğu — paylaşılan PROSE `pre`yi saydam yapar, burada geri boyarız */
+.cz-md-wysiwyg pre {
+  background-color: hsl(var(--codezal-panel-2));
+  border: 1px solid rgb(var(--codezal-line-rgb) / 0.1);
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  overflow-x: auto;
+}
+.cz-md-wysiwyg pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+/* Tablo — seçili hücre vurgusu + sütun yeniden boyutlama tutamacı */
+.cz-md-wysiwyg .ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.cz-md-wysiwyg .ProseMirror .selectedCell {
+  background-color: hsl(var(--codezal-accent) / 0.16);
+}
+.cz-md-wysiwyg .ProseMirror table .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: hsl(var(--codezal-accent));
+  pointer-events: none;
+}
+.cz-md-wysiwyg .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Satır/hücre ekleme kontrolleri yerine sade bir hover ipucu */
+.cz-md-wysiwyg .ProseMirror td,
+.cz-md-wysiwyg .ProseMirror th {
+  position: relative;
+  transition: background-color 120ms ease;
+}
+
+/* Gap imleci — bloklar arası / boş belge konumlandırması */
+.cz-md-wysiwyg .ProseMirror .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+.cz-md-wysiwyg .ProseMirror .ProseMirror-gapcursor:after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid hsl(var(--codezal-text));
+  animation: cz-md-cursor-blink 1.1s steps(2, start) infinite;
+}
+.cz-md-wysiwyg .ProseMirror.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+@keyframes cz-md-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* Resim — editör içinde taşmasın, köşeli ve hafif çerçeveli */
+.cz-md-wysiwyg .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--codezal-line-rgb) / 0.12);
+}
+.cz-md-wysiwyg .ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid hsl(var(--codezal-accent) / 0.7);
+  outline-offset: 2px;
+}
+
+/* Salt okunur modda seçim/odak parıltısını yumuşat */
+.cz-md-wysiwyg.is-readonly .ProseMirror {
+  caret-color: transparent;
+  cursor: default;
+}

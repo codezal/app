@@ -1,5 +1,5 @@
 // kopyala.
-import { useEffect, useRef, useState, useCallback } from "react"
+import { Suspense, lazy, useEffect, useRef, useState, useCallback } from "react"
 import { type UnwatchFn } from "@tauri-apps/plugin-fs"
 import { readFileSafe, readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
@@ -25,10 +25,12 @@ import { useSessionsStore } from "@/store/sessions"
 import {
   AlertTriangle,
   Check,
+  Code,
   Copy,
   Eye,
   FolderOpen,
   MessageSquare,
+  Pencil,
   Plus,
   RefreshCcw,
   Save,
@@ -43,8 +45,33 @@ import { useT } from "@/lib/i18n/useT"
 import { t as tStatic } from "@/lib/i18n"
 import "@/styles/highlight.css"
 import { errorMessage } from "@/lib/errors"
+import { Markdown } from "./Markdown"
+import type { MarkdownWysiwygHandle } from "./markdown-editor/MarkdownWysiwyg"
+
+const MarkdownWysiwyg = lazy(() =>
+  import("./markdown-editor/MarkdownWysiwyg").then((m) => ({ default: m.MarkdownWysiwyg })),
+)
 
 const CAP = 500_000
+
+type MdMode = "source" | "wysiwyg" | "preview"
+const MD_MODE_KEY = "codezal.mdViewMode"
+
+function isMarkdownPath(p: string): boolean {
+  const clean = p.split(/[?#]/)[0] ?? p
+  const ext = clean.slice(clean.lastIndexOf(".") + 1).toLowerCase()
+  return ext === "md" || ext === "markdown"
+}
+
+function readStoredMdMode(): MdMode {
+  try {
+    const v = localStorage.getItem(MD_MODE_KEY)
+    if (v === "source" || v === "wysiwyg" || v === "preview") return v
+  } catch {
+    // localStorage erişilemezse varsayılana düş.
+  }
+  return "wysiwyg"
+}
 
 function getPreviewKind(path: string): "image" | "pdf" | null {
   const clean = path.split(/[?#]/)[0] ?? path
@@ -70,6 +97,10 @@ export function FileViewer({ path, reloadSignal }: Props) {
   }
 
   const previewKind = getPreviewKind(path)
+  const isMd = isMarkdownPath(path)
+  const [viewMode, setViewMode] = useState<MdMode>(() =>
+    isMarkdownPath(path) ? readStoredMdMode() : "source",
+  )
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
 
   const [content, setContent] = useState<string | null>(null)
@@ -96,7 +127,22 @@ export function FileViewer({ path, reloadSignal }: Props) {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const editorRef = useRef<CodeEditorHandle>(null)
+  const wysiwygRef = useRef<MarkdownWysiwygHandle>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+
+  const changeMode = useCallback(
+    (m: MdMode) => {
+      setViewMode(m)
+      if (isMarkdownPath(path)) {
+        try {
+          localStorage.setItem(MD_MODE_KEY, m)
+        } catch {
+          // Intentionally ignored.
+        }
+      }
+    },
+    [path],
+  )
 
   useEffect(() => {
     detectEditors().then(setEditors)
@@ -220,6 +266,7 @@ export function FileViewer({ path, reloadSignal }: Props) {
     setDirty(false)
     setDiskChanged(false)
     setMenuOpen(false)
+    setViewMode(isMarkdownPath(path) ? readStoredMdMode() : "source")
   }, [path])
 
   const onDirty = useCallback(
@@ -229,6 +276,13 @@ export function FileViewer({ path, reloadSignal }: Props) {
       storeSetDirty(path, d)
     },
     [path],
+  )
+
+  const onWysiwygChange = useCallback(
+    (md: string) => {
+      onDirty(md !== (content ?? ""))
+    },
+    [content, onDirty],
   )
 
   const canEdit = !truncated && !error && content !== null
@@ -335,10 +389,16 @@ export function FileViewer({ path, reloadSignal }: Props) {
     editorRef.current?.selectAll()
   }
 
+  function currentText(): string | null | undefined {
+    if (viewMode === "wysiwyg") return wysiwygRef.current?.getMarkdown() ?? getDraft(path) ?? content
+    if (viewMode === "source") return editorRef.current?.getText() ?? getDraft(path)
+    return content
+  }
+
   async function onSave() {
     if (!canEdit) return
-    const text = editorRef.current?.getText() ?? getDraft(path)
-    if (text === undefined) return
+    const text = currentText()
+    if (text === undefined || text === null) return
     try {
       markSelfWrite(path)
       await writeTextFileSafe(path, text)
@@ -375,7 +435,9 @@ export function FileViewer({ path, reloadSignal }: Props) {
   }
 
   async function onCopy() {
-    const text = editorRef.current?.getText() ?? content
+    const text = viewMode === "wysiwyg"
+      ? wysiwygRef.current?.getMarkdown() ?? content
+      : editorRef.current?.getText() ?? content
     if (text === null || text === undefined) return
     try {
       await navigator.clipboard.writeText(text)
@@ -471,7 +533,7 @@ export function FileViewer({ path, reloadSignal }: Props) {
         )}
         <div
           className={cn(
-            "flex shrink-0 items-center gap-0.5",
+            "flex shrink-0 items-center gap-1.5",
             content !== null ? "" : "ml-auto",
           )}
         >
@@ -497,7 +559,33 @@ export function FileViewer({ path, reloadSignal }: Props) {
             </button>
           )}
 
-          {showEditor && (
+          {isMd && content !== null && (
+            <div className="flex items-center gap-0.5 rounded-lg bg-codezal-panel-2/70 p-0.5">
+              <ModeButton
+                active={viewMode === "source"}
+                title={t("fileViewer.modeSource")}
+                onClick={() => changeMode("source")}
+              >
+                <Code className="h-4 w-4" />
+              </ModeButton>
+              <ModeButton
+                active={viewMode === "wysiwyg"}
+                title={t("fileViewer.modeVisual")}
+                onClick={() => changeMode("wysiwyg")}
+              >
+                <Pencil className="h-4 w-4" />
+              </ModeButton>
+              <ModeButton
+                active={viewMode === "preview"}
+                title={t("fileViewer.modePreview")}
+                onClick={() => changeMode("preview")}
+              >
+                <Eye className="h-4 w-4" />
+              </ModeButton>
+            </div>
+          )}
+
+          {showEditor && viewMode === "source" && (
             <ToolbarButton
               title={t("common.search")}
               onClick={() => editorRef.current?.openSearch()}
@@ -579,20 +667,42 @@ export function FileViewer({ path, reloadSignal }: Props) {
       {content === null && !error ? (
         <div className="px-4 py-4 text-sm text-codezal-mute">{t("fileViewer.loading")}</div>
       ) : content !== null ? (
-        <CodeEditor
-          key={path}
-          ref={editorRef}
-          path={path}
-          initialText={getDraft(path) ?? content}
-          baselineText={content}
-          readOnly={!canEdit}
-          onSave={onSave}
-          onDirtyChange={onDirty}
-          onInlineEdit={canEdit ? openInlineEdit : undefined}
-          onContextMenu={canEdit ? onEditorContextMenu : undefined}
-        />
+        viewMode === "source" ? (
+          <CodeEditor
+            key={path}
+            ref={editorRef}
+            path={path}
+            initialText={getDraft(path) ?? content}
+            baselineText={content}
+            readOnly={!canEdit}
+            onSave={onSave}
+            onDirtyChange={onDirty}
+            onInlineEdit={canEdit ? openInlineEdit : undefined}
+            onContextMenu={canEdit ? onEditorContextMenu : undefined}
+          />
+        ) : viewMode === "wysiwyg" ? (
+          <Suspense
+            fallback={
+              <div className="px-4 py-4 text-sm text-codezal-mute">{t("fileViewer.loading")}</div>
+            }
+          >
+            <MarkdownWysiwyg
+              key={path}
+              ref={wysiwygRef}
+              value={getDraft(path) ?? content}
+              onChange={onWysiwygChange}
+              readOnly={!canEdit}
+            />
+          </Suspense>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto bg-codezal-bg">
+            <div className="px-8 py-6">
+              <Markdown content={content} />
+            </div>
+          </div>
+        )
       ) : null}
-      {inlineEdit && (
+      {inlineEdit && viewMode === "source" && (
         <InlineEditBar
           selection={inlineEdit.sel}
           rect={inlineEdit.rect}
@@ -708,6 +818,36 @@ function ToolbarButton({
       className={cn(
         "flex h-[26px] w-[26px] items-center justify-center rounded text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-codezal-dim",
         active && "bg-codezal-panel-2 text-codezal-text",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ModeButton({
+  title,
+  onClick,
+  active,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  active?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex h-[22px] w-[26px] items-center justify-center rounded-md transition-all duration-150",
+        active
+          ? "bg-codezal-panel text-codezal-text shadow-sm"
+          : "text-codezal-dim hover:text-codezal-text",
       )}
     >
       {children}

@@ -510,6 +510,14 @@ export type Messages = {
     ctxInvalidName?: string
     ctxExists?: string
     ctxNoComposer?: string
+    showDotfiles?: string
+    showGitIgnored?: string
+    refreshTree?: string
+    moreActions?: string
+    searchNames?: string
+    searchContents?: string
+    contentsSearching?: string
+    contentsNoMatch?: string
     agentsHeading: string
     runningHeading?: string
     doneHeading?: string
@@ -608,6 +616,24 @@ export type Messages = {
     unsavedTitle?: string
     unsavedMessage?: string
     unsavedConfirm?: string
+    modeSource?: string
+    modeVisual?: string
+    modePreview?: string
+    mdHeading1?: string
+    mdHeading2?: string
+    mdHeading3?: string
+    mdParagraph?: string
+    mdBold?: string
+    mdItalic?: string
+    mdStrike?: string
+    mdBulletList?: string
+    mdOrderedList?: string
+    mdQuote?: string
+    mdCodeBlock?: string
+    mdLink?: string
+    mdImage?: string
+    mdLinkPrompt?: string
+    mdImagePrompt?: string
   }
 
   prPanel?: {
