@@ -211,3 +211,51 @@ npm run bench -- --provider kimi-for-coding --model k2p6 --task <id>
   long-horizon, single-shot JSON edits.
 - `--repeat 3` on a run gives a variance estimate before trusting a ±1-task
   pass-rate delta.
+
+## OpenBench (external suite)
+
+[OpenBench](https://github.com/minghinmatthewlam/openbench) benchmarks agent
+**harnesses** with the model held fixed — Codezal runs as one harness next to
+codex/pi/opencode, graded by per-task `checker.sh` scripts (never by the
+agent's own claim). Setup (already vendored, see `bench/vendor/openbench`):
+
+```bash
+cd bench/vendor/openbench
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e .
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/obench validate   # task polarity check
+```
+
+Pieces:
+
+- `bench/headless.ts` — headless Codezal CLI. OpenBench invokes it with
+  cwd = a disposable task workspace; it runs the same agent loop (shared
+  system prompt + tool descriptions) and ends stdout with a parseable
+  `HEADLESS_RESULT {...}` line.
+- `bench/obench-adapter/codezal.py` — the OpenBench adapter (their
+  `ADAPTER_SPEC`). Maps canonical model names to your saved providers
+  (`qwen3.8-max`, `deepseek-v4-pro`, `kimi-k3`) or pass-through
+  `provider/model`. The API key comes from the OS keychain, as always.
+
+Run one cell manually:
+
+```bash
+cd bench/vendor/openbench
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/obench run \
+  --task fix-failing-test --harness codezal --model qwen3.8-max \
+  --adapters-dir ../../../bench/obench-adapter
+```
+
+RSI loop scored by OpenBench (core 8 tasks by default — the
+Terminal-Bench-imported tier needs Docker Desktop running):
+
+```bash
+npm run bench:optimize:obench -- \
+  --model qwen3.8-max \
+  --optimizer-provider kimi-for-coding --optimizer-model k3 \
+  --max-iterations 20 --time-budget-min 180
+```
+
+Flags: `--tasks a,b,c`, `--trials N` (variance control), `--timeout S`
+(per-cell), plus the usual `--dry-run` / `--allow-system-prompt` /
+`--allow-dirty`. Results: `bench/results/obench-*.jsonl` + per-cell
+transcripts under `bench/results/obench-transcripts/`.

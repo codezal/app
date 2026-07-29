@@ -37,7 +37,9 @@
     "build:mac:arm": "npm run tauri -- build --bundles app --target aarch64-apple-darwin --features llm-metal,llm-mlx && node scripts/make-dmg.mjs aarch64-apple-darwin",
     "build:mac:intel": "npm run tauri -- build --bundles app --target x86_64-apple-darwin --features llm-metal && node scripts/make-dmg.mjs x86_64-apple-darwin",
     "build:win": "npm run tauri -- build --target x86_64-pc-windows-msvc --features llm-vulkan --bundles nsis",
-    "prepare": "husky"
+    "prepare": "husky",
+    "bench:optimize:obench": "tsx bench/optimize-obench.ts",
+    "bench:headless": "tsx bench/headless.ts"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^5.0.31",

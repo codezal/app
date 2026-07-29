@@ -192,9 +192,16 @@ export function benchModelRef(): ModelRef {
 }
 
 export function optimizerModelRef(): ModelRef {
-  const fallback = benchModelRef()
-  return {
-    provider: process.env.OPTIMIZER_PROVIDER ?? fallback.provider,
-    model: process.env.OPTIMIZER_MODEL ?? fallback.model,
+  // Lazy fallback: OPTIMIZER_* alone must work even when BENCH_* is unset
+  // (e.g. optimize-obench, where the subject model is not a bench-runtime
+  // model at all — OpenBench drives it via the adapter).
+  const provider = process.env.OPTIMIZER_PROVIDER ?? process.env.BENCH_PROVIDER
+  const model = process.env.OPTIMIZER_MODEL ?? process.env.BENCH_MODEL
+  if (!provider || !model) {
+    throw new Error(
+      "Select an optimizer model: --optimizer-provider <id> --optimizer-model <id>, " +
+        "or set OPTIMIZER_PROVIDER + OPTIMIZER_MODEL (falls back to BENCH_*).",
+    )
   }
+  return { provider, model }
 }
