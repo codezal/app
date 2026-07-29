@@ -1,0 +1,13 @@
+const assert = require("node:assert")
+const { prorate } = require("./src/billing/proration")
+const { buildInvoice } = require("./src/billing/invoice")
+
+assert.strictEqual(prorate(60, 15, 30), 30, "half of 30-day month")
+assert.strictEqual(prorate(90, 10, 30), 30, "third of 30-day month")
+assert.strictEqual(prorate(100, 7, 28), 25, "quarter of 28-day month")
+assert.strictEqual(prorate(31, 31, 31), 31, "full month is full price")
+assert.strictEqual(prorate(100, 1, 3), 33.33, "rounds to 2 decimals")
+assert.strictEqual(prorate(100, 0, 30), 0, "zero days costs nothing")
+const inv = buildInvoice({ monthlyPrice: 60, daysUsed: 15, daysInMonth: 30, customer: "acme" })
+assert.strictEqual(inv.total, 30, "invoice total wrong")
+console.log("verify ok")

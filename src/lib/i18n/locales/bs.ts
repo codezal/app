@@ -1339,6 +1339,7 @@ const bs: Messages = {
       updateFailed: "Ažuriranje nije uspjelo",
       retry: "Pokušajte ponovo",
       downloadingHint: "Ostavite aplikaciju otvorenom…",
+      updateBadge: "Ažuriranje dostupno — kliknite za prikaz",
     },
     approvalMode: {
       title: "Način odobrenja",

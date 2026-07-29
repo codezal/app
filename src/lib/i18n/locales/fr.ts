@@ -1228,6 +1228,7 @@ const fr: Messages = {
       updateFailed: "La mise à jour a échoué",
       retry: "Réessayer",
       downloadingHint: "Veuillez garder l'application ouverte…",
+      updateBadge: "Mise à jour disponible — cliquez pour voir",
     },
     approvalMode: {
       title: "Mode de confirmation",

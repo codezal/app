@@ -1,0 +1,10 @@
+const assert = require("node:assert")
+const { computeOrderTotal } = require("./src/api")
+const { cartSummary } = require("./src/cart")
+const { renderInvoice } = require("./src/invoice")
+
+assert.strictEqual(typeof computeOrderTotal, "function", "computeOrderTotal not exported from src/api.js")
+assert.strictEqual(computeOrderTotal([{ price: 3, qty: 3 }]), 9)
+assert.deepStrictEqual(cartSummary([{ price: 2, qty: 4 }]), { total: 8, count: 1 })
+assert.strictEqual(renderInvoice([{ price: 1, qty: 5 }]), "INVOICE total=5")
+console.log("verify ok")

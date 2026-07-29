@@ -1339,6 +1339,7 @@ const da: Messages = {
       updateFailed: "Opdatering mislykkedes",
       retry: "Prøv igen",
       downloadingHint: "Hold venligst appen åben…",
+      updateBadge: "Opdatering tilgængelig — klik for at se",
     },
     approvalMode: {
       title: "Godkendelsestilstand",

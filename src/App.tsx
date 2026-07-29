@@ -42,6 +42,7 @@ import { useNewSession } from "@/lib/hooks/useNewSession"
 import { usePanelState } from "@/lib/hooks/usePanelState"
 import { useTerminalsStore } from "@/store/terminals"
 import { useTodoPanelAuto } from "@/lib/hooks/useTodoPanelAuto"
+import { useAiPanelAuto } from "@/lib/hooks/useAiPanelAuto"
 import { useSuggestionsAuto, triggerSuggestionsFor } from "@/lib/hooks/useSuggestionsAuto"
 import { useSuggestionsStore } from "@/store/suggestions"
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts"
@@ -90,6 +91,7 @@ import {
   RECENT_TOOL_PROTECT_TOKENS,
 } from "@/lib/compact"
 import { estimateMessagesTokens } from "@/lib/tokens"
+import { messagesToModelMessages } from "@/lib/model-history"
 import { applyAppearance, watchSystemTheme, applyFontScale, DEFAULT_APPEARANCE } from "@/lib/theme"
 import { installTooltipSuppressor } from "@/lib/native-feel"
 import { loadUserThemes } from "@/lib/theme-loader"
@@ -107,9 +109,10 @@ import { subscribeSessionMessage } from "@/lib/session-message-bus"
 import { enqueueInbox, takeInbox, framePeerMessage } from "@/lib/session-inbox"
 import { abortDispatchFor } from "@/lib/orchestra/runtime"
 import { pickWorkspaceFolder } from "@/lib/workspace"
-import { checkForUpdateOnLaunch } from "@/lib/updater"
+import { checkForUpdateOnLaunch, UPDATE_CHECK_INTERVAL_MS } from "@/lib/updater"
 import { useUpdateStore } from "@/store/update"
-import { UpdateModal } from "@/components/UpdateModal"
+import { UpdateToast } from "@/components/UpdateToast"
+import type { Update } from "@tauri-apps/plugin-updater"
 import { abortStream } from "@/lib/run-registry"
 import { makeRunStream } from "@/lib/stream/run-stream"
 import { decideTurnGate } from "@/lib/stream/turn-gate"
@@ -276,9 +279,16 @@ export default function App() {
   const [sideChatThreadId, setSideChatThreadId] = useState<string | null>(null)
   const [sideChatBusy, setSideChatBusy] = useState(false)
   const sideChatAbortRef = useRef<AbortController | null>(null)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Reset per-session transient UI when switching chats. Done during render
+  // (React's recommended "adjusting state" pattern) instead of an effect to
+  // avoid cascading renders; the abort cleanup still lives in an effect.
+  const [prevSessionId, setPrevSessionId] = useState(activeSessionId)
+  if (activeSessionId !== prevSessionId) {
+    setPrevSessionId(activeSessionId)
     setSideChatThreadId(null)
+    setShowRoutines(false)
+  }
+  useEffect(() => {
     return () => {
       sideChatAbortRef.current?.abort()
       sideChatAbortRef.current = null
@@ -318,6 +328,9 @@ export default function App() {
     s.activeId ? !!s.compactingIds[s.activeId] : false,
   )
   useTodoPanelAuto(panelMode, setPanelMode, activeStreaming)
+  // AI-transient panes (agents / todo / preview): the AI opens them while it
+  // works and they close again when the run finishes — they never linger.
+  const markAiOpened = useAiPanelAuto(panelMode, setPanelMode, activeStreaming)
   useEffect(() => {
     if (sddAvailable) {
       setPanelMode((m) => (m == null ? "sdd" : m))
@@ -384,7 +397,10 @@ export default function App() {
   }>({ newChat: () => {}, newProject: () => {}, toggleSplit: () => {}, settings: () => {} })
 
   useEffect(() => {
-    const onPushed = () => setPanelMode("agents")
+    const onPushed = () => {
+      markAiOpened("agents")
+      setPanelMode("agents")
+    }
     const onOpenPane = (e: Event) => {
       const id = (e as CustomEvent<{ workerId?: string }>).detail?.workerId
       const sid = useSessionsStore.getState().activeId
@@ -394,7 +410,10 @@ export default function App() {
     }
     const onPreviewNav = (e: Event) => {
       const sid = (e as CustomEvent<{ sessionId?: string }>).detail?.sessionId
-      if (sid && sid === useSessionsStore.getState().activeId) setPanelMode("preview")
+      if (sid && sid === useSessionsStore.getState().activeId) {
+        markAiOpened("preview")
+        setPanelMode("preview")
+      }
     }
     window.addEventListener("codezal:agent-card-pushed", onPushed)
     window.addEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
@@ -404,7 +423,7 @@ export default function App() {
       window.removeEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
       window.removeEventListener("codezal:preview-navigate", onPreviewNav as EventListener)
     }
-  }, [changeSplit, setPanelMode, setAgentPane])
+  }, [changeSplit, setPanelMode, setAgentPane, markAiOpened])
 
   useEffect(() => {
     const onDrag = (e: Event) => {
@@ -523,9 +542,21 @@ export default function App() {
 
   useEffect(() => {
     if (!settingsLoaded) return
-    void checkForUpdateOnLaunch().then((u) => {
-      if (u) useUpdateStore.getState().present(u)
-    })
+    const presentUpdate = (u: Update | null) => {
+      if (!u) return
+      const st = useUpdateStore.getState()
+      if (st.phase === "downloading" || st.phase === "installing") return
+      // Same version already shown/snoozed — don't pop the card back open.
+      if (st.update && st.update.version === u.version) return
+      st.present(u)
+    }
+    void checkForUpdateOnLaunch().then(presentUpdate)
+    // Keep checking while the app stays open so a release published mid-session
+    // still surfaces without a restart.
+    const id = setInterval(() => {
+      void checkForUpdateOnLaunch().then(presentUpdate)
+    }, UPDATE_CHECK_INTERVAL_MS)
+    return () => clearInterval(id)
   }, [settingsLoaded])
 
   useEffect(() => {
@@ -701,11 +732,6 @@ export default function App() {
     void setKeepAwake(anyStreaming)
   }, [settingsLoaded, anyStreaming])
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowRoutines(false)
-  }, [activeSessionId])
-
   // Appearance: apply theme presets, fonts, motion flags, etc. Follow OS changes when mode='system'.
   useEffect(() => {
     const appearance = settings.appearance ?? DEFAULT_APPEARANCE
@@ -725,12 +751,13 @@ export default function App() {
     void applyFontScale(settings.fontScale)
   }, [settings.fontScale])
 
-  useEffect(() => {
-    if (settingsLoaded && settings.onboardingCompleted && Object.keys(settings.apiKeys).length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowSettings(true)
-    }
-  }, [settingsLoaded, settings.onboardingCompleted, settings.apiKeys])
+  // Auto-open settings once after hydration when no API key is configured.
+  // Render-phase guard avoids setState-in-effect cascading renders.
+  const [autoOpenedSettings, setAutoOpenedSettings] = useState(false)
+  if (!autoOpenedSettings && settingsLoaded && settings.onboardingCompleted && Object.keys(settings.apiKeys).length === 0) {
+    setAutoOpenedSettings(true)
+    setShowSettings(true)
+  }
 
   // Auto-heal default provider — DEFAULT.defaultProvider is "openai", but if
   // the user never connected OpenAI (no apiKey, no oauth, no env), the
@@ -893,6 +920,13 @@ export default function App() {
       useSessionsStore.getState().setEffectiveContextTokensFor(sid, afterPrune)
       if (!force && !shouldCompact(afterPrune, snap.model, settings.autoCompact, limits)) {
         console.info(`[compact] prune yeterli: ${eff} → ${afterPrune} (~${prunedTokens} tok budandı)`)
+        // Surface the prune — previously this path was silent, so old tool
+        // outputs vanished from the model's context with no visible trace.
+        useSessionsStore.getState().pushMessageFor(sid, {
+          id: createId("message"),
+          role: "system",
+          content: tStatic("app.compactPrunedOnly", { tokens: prunedTokens.toLocaleString() }),
+        })
         return true
       }
     }
@@ -1266,7 +1300,7 @@ export default function App() {
       if (snapM.modelMessages) {
         historyM = [...snapM.modelMessages, ...turnUsers]
       } else {
-        const prior = messagesToModelFallback(snapM.messages.slice(0, -3))
+        const prior = messagesToModelMessages(snapM.messages.slice(0, -3))
         historyM = [...prior, ...turnUsers]
       }
       await runStream(sid, asstMsgM.id, historyM, override)
@@ -1321,7 +1355,7 @@ export default function App() {
     if (snap.modelMessages) {
       history = [...snap.modelMessages, { role: "user", content: userContent }]
     } else {
-      history = messagesToModelFallback(snap.messages)
+      history = messagesToModelMessages(snap.messages)
       const last = history[history.length - 1]
       if (last && last.role === "user") {
         history[history.length - 1] = { role: "user", content: userContent }
@@ -1421,7 +1455,7 @@ export default function App() {
     }
     useSessionsStore.getState().pushMessageFor(sid, asstMsg)
     const history: ModelMessage[] =
-      snap.modelMessages ?? messagesToModelFallback(snap.messages)
+      snap.modelMessages ?? messagesToModelMessages(snap.messages)
     await runStream(sid, asstMsg.id, history)
   }
 
@@ -1642,9 +1676,14 @@ export default function App() {
     let reasoningBuf = ""
     let splitter: ThinkSplitter | null = null
     let rafId: number | null = null
+    let flushTimerId: ReturnType<typeof setTimeout> | null = null
     let pendingPatch = false
     const flush = () => {
       rafId = null
+      if (flushTimerId !== null) {
+        clearTimeout(flushTimerId)
+        flushTimerId = null
+      }
       pendingPatch = false
       useSessionsStore.getState().patchSideChatMsgFor(sid, threadId, asstIdx, {
         content: textBuf,
@@ -1652,10 +1691,26 @@ export default function App() {
         pending: true,
       })
     }
+    const cancelSchedule = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      if (flushTimerId !== null) {
+        clearTimeout(flushTimerId)
+        flushTimerId = null
+      }
+      pendingPatch = false
+    }
     const schedule = () => {
       if (pendingPatch) return
       pendingPatch = true
       rafId = requestAnimationFrame(flush)
+      // rAF is suspended while the window is occluded / the app is napped and
+      // the missed callback is not replayed on refocus, which would otherwise
+      // freeze side-chat updates until the stream ends. A timer fires its
+      // pending callback on resume, releasing the `pendingPatch` lock.
+      flushTimerId = setTimeout(flush, 200)
     }
 
     try {
@@ -1729,7 +1784,7 @@ export default function App() {
           throw chunk.error instanceof Error ? chunk.error : new Error(errorMessage(chunk.error))
         }
       }
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      cancelSchedule()
       splitter?.flush()
       useSessionsStore.getState().patchSideChatMsgFor(sid, threadId, asstIdx, {
         content: textBuf || "…",
@@ -1737,7 +1792,7 @@ export default function App() {
         pending: false,
       })
     } catch (e) {
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      cancelSchedule()
       splitter?.flush()
       const aborted = ac.signal.aborted
       useSessionsStore.getState().patchSideChatMsgFor(sid, threadId, asstIdx, {
@@ -1984,17 +2039,6 @@ export default function App() {
     }
   }
 
-
-  function messagesToModelFallback(msgs: Message[]): ModelMessage[] {
-    return msgs
-      .filter(
-        (m) =>
-          (m.role === "user" || m.role === "assistant") &&
-          !m.pending &&
-          m.content.trim().length > 0,
-      )
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
-  }
 
   // Build the AI SDK user-message content from text + optional images. No images
   // → plain string (unchanged behaviour). With images → a parts array (empty
@@ -2456,7 +2500,7 @@ export default function App() {
       <HelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
 
       <ApprovalModal />
-      <UpdateModal />
+      <UpdateToast />
     </div>
   )
 }

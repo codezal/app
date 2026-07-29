@@ -3,9 +3,11 @@
 // 1) shouldCompact: effectiveContextTokens >= cap * (triggerPct/100) -> trigger
 //
 
-import { generateText, type ModelMessage } from "ai"
+import { generateText, isStepCount, streamText, tool, type ModelMessage } from "ai"
+import { z } from "zod"
 import type { ProviderId } from "./providers"
 import { buildLanguageModel } from "./providers"
+import { isCodingAgentGated } from "./providers/provider-quirks"
 import { compactionModelFor, contextCap } from "./pricing"
 import { pickSmallModel } from "./small-model"
 import type { ProvidersCatalog } from "./providers-catalog"
@@ -16,15 +18,36 @@ const PRUNE_PROTECT_TOKENS = 40_000
 const PRUNE_MIN_GAIN = 20_000
 const PRUNE_TAIL_TURNS = 2
 const PRUNE_PLACEHOLDER = "[previous tool output removed to save context]"
+// Keep a short head of the original tool output instead of a blank marker so the
+// model does not go blind to what it already read/ran and re-do the same work
+// (the "alzheimer" symptom: re-exploring files it already inspected because the
+// proof of that work was wiped from its context).
+const PRUNE_PREVIEW_CHARS = 600
 const PER_TOOL_OVERHEAD = 12
 
 export const RECENT_TOOL_PROTECT_TOKENS = 64_000
 
 function isPrunedOutput(output: unknown): boolean {
+  if (typeof output !== "object" || output === null) return false
+  const v = (output as Record<string, unknown>).value
+  // startsWith (not ===) because the pruned value now carries a preview after
+  // the placeholder prefix — see prunedOutput().
+  return typeof v === "string" && v.startsWith(PRUNE_PLACEHOLDER)
+}
+
+// Build a pruned replacement that retains a truncated preview of the original
+// output. The placeholder prefix keeps `isPrunedOutput` idempotent; the preview
+// keeps the model oriented so it won't re-read / re-run the same tool just to
+// recover context it already had.
+function prunedOutput(outStr: string): string {
+  const head = outStr.slice(0, PRUNE_PREVIEW_CHARS)
+  const truncated = outStr.length > PRUNE_PREVIEW_CHARS
   return (
-    typeof output === "object" &&
-    output !== null &&
-    (output as Record<string, unknown>).value === PRUNE_PLACEHOLDER
+    PRUNE_PLACEHOLDER +
+    "\nPreview of the original output — you already saw the full result earlier; " +
+    "do NOT re-read or re-run this tool just to see it again:\n" +
+    head +
+    (truncated ? "\n…[truncated]" : "")
   )
 }
 
@@ -76,8 +99,12 @@ export function pruneToolOutputs(
         kept += tok
         continue
       }
-      newContent[j] = { ...p, output: { type: "text", value: PRUNE_PLACEHOLDER } }
-      prunedTokens += tok
+      const preview = prunedOutput(outStr)
+      const previewTok = estimateTextTokens(preview) + PER_TOOL_OVERHEAD
+      newContent[j] = { ...p, output: { type: "text", value: preview } }
+      // Only count the tokens actually reclaimed (full output minus the preview
+      // we keep), so minGain / logs reflect the real saving.
+      prunedTokens += Math.max(0, tok - previewTok)
       msgChanged = true
     }
     if (msgChanged) {
@@ -206,10 +233,34 @@ async function summarizeOldMessages(
       `<previous-summary>\n${previousMemory}\n</previous-summary>`
     : `Create a NEW memory note from the conversation history below.`
 
+  const prompt = `${anchor}\n\nConversation transcript:\n\n${transcript}\n\nFill the template above.`
+
+  // Gated providers (Kimi For Coding, Z.AI Coding…) 403 a bare generateText;
+  // the request must look "agent-like" (streaming + tools). Dummy noop tool +
+  // toolChoice:"none" passes the gate but still returns plain text — same
+  // workaround as suggestions.ts / git-ai-commit.ts. Without this, every
+  // auto-compaction on those providers failed with 403.
+  if (isCodingAgentGated(provider)) {
+    const result = streamText({
+      model: llm,
+      instructions: STRUCTURED_MEMORY_PROMPT,
+      prompt,
+      tools: { noop: tool({ description: "unused", inputSchema: z.object({}), execute: async () => "" }) },
+      toolChoice: "none",
+      stopWhen: isStepCount(1),
+    })
+    let text = ""
+    for await (const chunk of result.stream) {
+      if (chunk.type === "text-delta") text += chunk.text ?? ""
+    }
+    const usage = await result.usage
+    return { text, usage, usedProvider: provider, usedModel: model }
+  }
+
   const result = await generateText({
     model: llm,
     instructions: STRUCTURED_MEMORY_PROMPT,
-    prompt: `${anchor}\n\nConversation transcript:\n\n${transcript}\n\nFill the template above.`,
+    prompt,
   })
   return { text: result.text, usage: result.usage, usedProvider: provider, usedModel: model }
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import type { Dispatch, SetStateAction } from "react"
 import { useSessionsStore } from "@/store/sessions"
 import type { TodoItem } from "@/store/types"
-import type { PanelMode } from "@/components/TabBar"
+import type { PanelMode } from "@/lib/panel-modes"
 
 export function hasActiveTodos(todos: TodoItem[] | undefined, streaming: boolean): boolean {
   if (!todos || todos.length === 0) return false

@@ -1,0 +1,15 @@
+{
+  "id": "cross-file-rename",
+  "difficulty": "hard",
+  "prompt": "Rename the function `calculateTotal` to `computeOrderTotal` across the ENTIRE workspace — every definition, import, call site and test. `node test.js` must pass afterwards and no occurrence of the old name may remain in any file.",
+  "verify": [
+    { "type": "commandSucceeds", "command": "node .bench-verify.js" },
+    { "type": "fileNotContains", "path": "src/api.js", "pattern": "calculateTotal" },
+    { "type": "fileNotContains", "path": "src/cart.js", "pattern": "calculateTotal" },
+    { "type": "fileNotContains", "path": "src/invoice.js", "pattern": "calculateTotal" },
+    { "type": "fileNotContains", "path": "cli.js", "pattern": "calculateTotal" },
+    { "type": "fileNotContains", "path": "test.js", "pattern": "calculateTotal" },
+    { "type": "fileContains", "path": "src/api.js", "pattern": "computeOrderTotal" }
+  ],
+  "maxSteps": 25
+}

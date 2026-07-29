@@ -1,0 +1,6 @@
+{
+  "id": "fix-off-by-one",
+  "prompt": "`node test.js` fails in this workspace. There is an off-by-one error somewhere. Find it, fix it, and make the test pass.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

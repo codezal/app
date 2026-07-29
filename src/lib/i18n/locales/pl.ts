@@ -1339,6 +1339,7 @@ const pl: Messages = {
       updateFailed: "Aktualizacja nie powiodła się",
       retry: "Spróbuj ponownie",
       downloadingHint: "Pozostaw aplikację otwartą…",
+      updateBadge: "Dostępna aktualizacja — kliknij, aby zobaczyć",
     },
     approvalMode: {
       title: "Tryb zatwierdzania",

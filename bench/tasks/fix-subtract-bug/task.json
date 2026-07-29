@@ -1,0 +1,6 @@
+{
+  "id": "fix-subtract-bug",
+  "prompt": "Run `node test.js` in this workspace — it fails. Find the bug, fix it, and make the test pass.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

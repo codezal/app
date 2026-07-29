@@ -153,7 +153,9 @@ export function ToolLine({ group, tFn }: { group: ToolGroup; tFn: (k: MessageKey
 
 export function AgentTranscriptBody({ part, capped = false }: { part: AgentCardPart; capped?: boolean }) {
   const t = useT()
-  const logText = (part.outputLog ?? []).join("\n")
+  // [tool-error] lines are already represented by the red ✗ tool line above;
+  // keep them in outputLog (persisted) but out of the rendered body.
+  const logText = (part.outputLog ?? []).filter((l) => !l.startsWith("[tool-error]")).join("\n")
   const toolGroups = part.toolCalls && part.toolCalls.length > 0 ? groupTools(part.toolCalls) : []
   const body = part.finalText?.trim() ? part.finalText : logText
 

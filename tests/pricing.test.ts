@@ -123,6 +123,18 @@ describe("contextCap", () => {
     expect(contextCap("deepseek-chat")).toBe(128_000)
   })
 
+  it("kimi k3 → 1_000_000 (bare, prefixed and [1m] suffix)", () => {
+    expect(contextCap("k3")).toBe(1_000_000)
+    expect(contextCap("kimi-k3")).toBe(1_000_000)
+    expect(contextCap("kimi-k3[1m]")).toBe(1_000_000)
+  })
+
+  it("kimi k2.x → 256_000", () => {
+    expect(contextCap("k2.6")).toBe(256_000)
+    expect(contextCap("kimi-k2.5")).toBe(256_000)
+    expect(contextCap("kimi-k2-thinking")).toBe(256_000)
+  })
+
   it("bilinmeyen → 200_000", () => {
     expect(contextCap("some-unknown-model")).toBe(200_000)
   })

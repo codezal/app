@@ -1,0 +1,10 @@
+{
+  "id": "exact-output-cli",
+  "difficulty": "hard",
+  "prompt": "This workspace has a CLI (`node cli.js`) and a golden file `expected.txt`. The CLI's stdout must match expected.txt byte-for-byte (one trailing newline is fine). Fix the report GENERATION in cli.js — do not read, print or hardcode the contents of expected.txt from your program.",
+  "verify": [
+    { "type": "commandSucceeds", "command": "node .bench-verify.js" },
+    { "type": "fileNotContains", "path": "cli.js", "pattern": "expected" }
+  ],
+  "maxSteps": 15
+}

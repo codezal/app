@@ -61,6 +61,86 @@ export function parseAgentFile(
   }
 }
 
+/**
+ * Remove `quote`-delimited spans from a shell command, keeping everything
+ * else. Used to test for shell metacharacters without tripping over string
+ * literals. Backslash-escaped quotes outside a span do not start one.
+ */
+function stripQuotedSpans(cmd: string, quote: '"' | "'"): string {
+  let out = ""
+  let inSpan = false
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i]
+    if (inSpan) {
+      if (c === quote) inSpan = false
+      continue
+    }
+    if (c === "\\" && i + 1 < cmd.length) {
+      out += c + cmd[++i]
+      continue
+    }
+    if (c === quote) {
+      inSpan = true
+      continue
+    }
+    out += c
+  }
+  return out
+}
+
+/**
+ * Split a shell command on chaining operators (&&, ||, ;, |, newline) that
+ * appear OUTSIDE single/double quotes. Returns trimmed non-empty segments.
+ */
+function splitShellSegments(cmd: string): string[] {
+  const segments: string[] = []
+  let current = ""
+  let quote: '"' | "'" | null = null
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i]
+    if (quote) {
+      // Inside double quotes a backslash still escapes the next char, so an
+      // escaped quote does not close the span.
+      if (c === "\\" && quote === '"' && i + 1 < cmd.length) {
+        current += c + cmd[++i]
+        continue
+      }
+      if (c === quote) quote = null
+      current += c
+      continue
+    }
+    if (c === "\\" && i + 1 < cmd.length) {
+      current += c + cmd[++i]
+      continue
+    }
+    if (c === '"' || c === "'") {
+      quote = c
+      current += c
+      continue
+    }
+    if (c === "\n" || c === ";") {
+      if (current.trim()) segments.push(current.trim())
+      current = ""
+      continue
+    }
+    if (c === "|") {
+      if (current.trim()) segments.push(current.trim())
+      current = ""
+      if (cmd[i + 1] === "|") i++ // consume the second | of ||
+      continue
+    }
+    if (c === "&" && cmd[i + 1] === "&") {
+      if (current.trim()) segments.push(current.trim())
+      current = ""
+      i++ // consume the second &
+      continue
+    }
+    current += c
+  }
+  if (current.trim()) segments.push(current.trim())
+  return segments
+}
+
 export function checkSubagentPolicy(
   policy: SubagentPolicy,
   toolName: string,
@@ -118,7 +198,14 @@ export function checkSubagentPolicy(
     if (policy.bashAllow && policy.bashAllow.length > 0) {
       // Backticks, command substitution, and redirections are always blocked —
       // they can exfiltrate data or execute arbitrary code regardless of prefix.
-      if (/`/.test(cmd) || cmd.includes("$(") || /[<>]/.test(cmd)) {
+      // Quote-aware: '...' spans are inert literals (no substitution, no
+      // redirection), "..." spans still allow $( ) and backticks but a quoted
+      // '>' is just a character (e.g. grep "a > b"), so each check strips the
+      // appropriate quoted spans first. The old naive regexes rejected
+      // allowlisted commands whose patterns merely CONTAINED these chars.
+      const noSingle = stripQuotedSpans(cmd, "'")
+      const noQuotes = stripQuotedSpans(stripQuotedSpans(cmd, "'"), '"')
+      if (/`/.test(noSingle) || noSingle.includes("$(") || /[<>]/.test(noQuotes)) {
         return {
           allowed: false,
           reason: `Bash command contains redirection or command substitution (allowlist bypass risk). The sandbox will keep blocking these — retry the SAME command with NO redirection: drop '>', '<', '2>', '| … >file', and '$(...)'. To read a line range use the read_file tool or 'sed -n' (both allowlisted); never redirect.`,
@@ -128,11 +215,11 @@ export function checkSubagentPolicy(
       // Split by chaining operators (&&, ||, ;, |, newline) and validate each
       // segment against the allowlist independently. This allows legitimate
       // chained commands like "git diff && git status" while still blocking
-      // "git diff; rm -rf /".
-      const segments = cmd
-        .split(/&&|\|\||[;|\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean)
+      // "git diff; rm -rf /". Quote-aware: operators inside quotes are pattern
+      // literals (e.g. grep "foo|bar" file) and must not split the command —
+      // the old naive regex split produced bogus segments like `bar' src/`
+      // and rejected the whole command (false positive).
+      const segments = splitShellSegments(cmd)
       for (const seg of segments) {
         // Normalise `git -C <path> <subcmd>` → `git <subcmd>` so that the
         // allowlist prefix (e.g. "git status") matches regardless of the

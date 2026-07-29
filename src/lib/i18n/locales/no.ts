@@ -1339,6 +1339,7 @@ const no: Messages = {
       updateFailed: "Oppdatering mislyktes",
       retry: "Prøv på nytt",
       downloadingHint: "Vennligst hold appen åpen…",
+      updateBadge: "Oppdatering tilgjengelig — klikk for å se",
     },
     approvalMode: {
       title: "Godkjenningsmodus",

@@ -95,6 +95,53 @@ describe("repairJsonString", () => {
       expect(() => JSON.parse(r)).toThrow()
     }
   })
+
+  // Raw backslashes: the model emits JSON-invalid escapes inside strings
+  // (ANSI codes, truncated \u, lone trailing backslash). String.raw keeps
+  // the backslashes literal, exactly as they arrive in the tool-call input.
+  it("string içi ANSI \\x1b (hex) escape'ini literal yapar", () => {
+    const r = repairJsonString(String.raw`{"cmd":"echo \x1b[31mred"}`)
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).cmd).toBe(String.raw`echo \x1b[31mred`)
+  })
+
+  it("stream backslash-x ile kesilmiş (unexpected end of hex escape)", () => {
+    const r = repairJsonString(String.raw`{"cmd":"echo \x`)
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).cmd).toBe(String.raw`echo \x`)
+  })
+
+  it("yarım backslash-u escape'i literal backslash-u yapar", () => {
+    const r = repairJsonString(String.raw`{"a":"b\u12`)
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).a).toBe(String.raw`b\u12`)
+  })
+
+  it("geçersiz backslash-u hex'i literal yapar", () => {
+    const r = repairJsonString(String.raw`{"a":"x\uZZZZy"}`)
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).a).toBe(String.raw`x\uZZZZy`)
+  })
+
+  it("string sonundaki yalnız backslash'i escape'ler", () => {
+    const r = repairJsonString('{"path":"C:\\')
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).path).toBe("C:\\")
+  })
+
+  it("geçerli backslash-uXXXX escape'ine dokunmaz", () => {
+    const raw = String.raw`{"a":"café"}`
+    const r = repairJsonString(raw)
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).a).toBe("café")
+  })
+
+  it("geçerli escape'ler (\n, \", \\) korunur", () => {
+    const raw = String.raw`{"a":"line1\nline2 \"q\" \\ end"}`
+    const r = repairJsonString(raw)
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!).a).toBe('line1\nline2 "q" \\ end')
+  })
 })
 
 describe("unwrapWrappedToolName", () => {

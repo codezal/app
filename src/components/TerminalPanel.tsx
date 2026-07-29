@@ -296,6 +296,47 @@ function getOrCreateLiveTerm(
   // renderer block glyph'leri piksel-perfect basar → aralıklar kapanır.
   term.loadAddon(new CanvasAddon())
 
+  // Clipboard support. xterm does not copy its (purely visual) selection
+  // itself, and the macOS native Edit menu copies the hidden textarea's
+  // selection — which is empty — so Cmd+C appears to do nothing. Handle the
+  // shortcuts here: Cmd+C/V on macOS, Ctrl+Shift+C/V on Windows/Linux (plain
+  // Ctrl+C must keep reaching the PTY as SIGINT).
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== "keydown") return true
+    const key = e.key.toLowerCase()
+    const mod = e.metaKey || (e.ctrlKey && e.shiftKey)
+    if (mod && key === "c" && term.hasSelection()) {
+      void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+      return false
+    }
+    if (mod && key === "v") {
+      void navigator.clipboard
+        .readText()
+        .then((text) => {
+          if (text) term.paste(text)
+        })
+        .catch(() => {})
+      return false
+    }
+    return true
+  })
+  // Right-click: copy when there is a selection, paste otherwise (Windows
+  // Terminal style). No context menu needed for the common case.
+  host.addEventListener("contextmenu", (e) => {
+    e.preventDefault()
+    if (term.hasSelection()) {
+      void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+      term.clearSelection()
+    } else {
+      void navigator.clipboard
+        .readText()
+        .then((text) => {
+          if (text) term.paste(text)
+        })
+        .catch(() => {})
+    }
+  })
+
   const live: LiveTerm = {
     host,
     workspacePath: opts.workspacePath,

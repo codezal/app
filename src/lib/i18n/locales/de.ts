@@ -1226,6 +1226,7 @@ const de: Messages = {
       updateFailed: "Update fehlgeschlagen",
       retry: "Wiederholen",
       downloadingHint: "Bitte lassen Sie die App geöffnet ...",
+      updateBadge: "Update verfügbar — zum Anzeigen klicken",
     },
     approvalMode: {
       title: "Genehmigungsmodus",

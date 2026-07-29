@@ -74,12 +74,14 @@ const en: Messages = {
     revertConfirm: "File changes made by this message will be reverted and the message will be deleted. Continue?",
     revertFailed: "Revert failed: {message}",
     spendCapReached: "Session spend cap reached (${cap}). Raise it in Settings → General or start a new session.",
+    completionNudgeNote: "⚠️ The model reported completion without modifying any files — sent back to actually apply the changes.",
     revertDone: "Reverted · {restored} restored, {deleted} removed",
     revertUndo: "Undo",
     unrevertDone: "Revert undone",
     agentNameRequired: "/agent <name> [task] — agent name required",
     skillNameRequired: "/skill <name> [task] — skill name required",
     compactFailed: "Compaction failed: {message}",
+    compactPrunedOnly: "✓ Context trimmed: removed ~{tokens} tokens of old tool outputs",
     contextOverflow:
       "Context window is full and automatic compaction couldn't shrink it enough. Try /compact, start a new session, or pick a model with a larger context.",
     localCtxClamped:
@@ -1568,6 +1570,7 @@ const en: Messages = {
       updateFailed: "Update failed",
       retry: "Retry",
       downloadingHint: "Please keep the app open…",
+      updateBadge: "Update available — click to view",
     },
     approvalMode: {
       title: "Approval mode",

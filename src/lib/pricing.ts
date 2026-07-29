@@ -78,6 +78,14 @@ export function contextCap(model: string): number {
   if (model.startsWith("gpt-5")) return 400_000
   if (model.startsWith("deepseek-v4")) return 1_000_000 // v4-pro/flash 1M
   if (model.startsWith("deepseek-")) return 128_000 // legacy chat/reasoner
+  // Kimi / Moonshot: k3 ships a 1M window (marketed as kimi-k3[1m] — the id may
+  // carry the "[1m]" suffix); k2.5, k2.6 and k2-thinking are 256K. Ids appear
+  // both bare — "k3", "k2.6" — and prefixed — "kimi-k3". The original kimi-k2
+  // and moonshot-v1-* legacy ids are 128K.
+  if (/^(kimi-)?k3([-.[]|$)/.test(model)) return 1_000_000
+  if (/^(kimi-)?k2\.[56]/.test(model)) return 256_000
+  if (model.includes("k2-thinking")) return 256_000
+  if (model.startsWith("kimi-") || model.startsWith("moonshot")) return 128_000
   return 200_000
 }
 

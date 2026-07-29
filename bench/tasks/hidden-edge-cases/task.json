@@ -1,0 +1,7 @@
+{
+  "id": "hidden-edge-cases",
+  "difficulty": "hard",
+  "prompt": "Run `node test.js` in this workspace — it fails. Contract: a palindrome reads the same forwards and backwards, ignoring letter case and all non-alphanumeric characters. Fix palindrome.js so test.js passes AND the contract holds for every input, including empty strings, digits and mixed punctuation.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 15
+}

@@ -1339,6 +1339,7 @@ const uk: Messages = {
       updateFailed: "Помилка оновлення",
       retry: "Повторіть спробу",
       downloadingHint: "Будь ласка, тримайте додаток відкритим…",
+      updateBadge: "Доступне оновлення — натисніть, щоб переглянути",
     },
     approvalMode: {
       title: "Режим підтвердження",

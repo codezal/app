@@ -531,3 +531,22 @@
 .cz-sidebar-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Sidebar streaming dot — a deeper opacity swing than Tailwind's default
+   `animate-pulse` (which only dips to 0.5, too subtle to read as "working").
+   Dipping to 0.2 makes the brighten/dim cycle clearly perceptible at a glance.
+   Opacity-only on purpose: no transform, so the row's `-translate-y-1/2`
+   vertical centering is left untouched. Honors data-reduce-motion via the
+   global rule above. */
+@keyframes cz-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+.animate-cz-breathe {
+  animation: cz-breathe 1.5s ease-in-out infinite;
+}

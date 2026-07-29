@@ -1,0 +1,6 @@
+{
+  "id": "fix-default-port",
+  "prompt": "`node server.js` prints `listening on undefined`. The intended default port is 8080. Fix the configuration so it prints `listening on 8080` when no PORT environment variable is set.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

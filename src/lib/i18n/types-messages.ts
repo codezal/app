@@ -67,6 +67,7 @@ export type Messages = {
     revertFailed: string
     // Optional — session spend-cap toast. Non-EN locales fall back to en.
     spendCapReached?: string
+    completionNudgeNote?: string
     // Optional — revert result toast + undo affordance. Non-EN locales fall back
     // to EN via the runtime BASE_MESSAGES lookup.
     revertDone?: string
@@ -75,6 +76,9 @@ export type Messages = {
     agentNameRequired: string
     skillNameRequired: string
     compactFailed: string
+    // Optional — auto-compact dropped old tool outputs only (no summary
+    // needed). Non-EN locales fall back to EN via BASE_MESSAGES lookup.
+    compactPrunedOnly?: string
     // Optional — context-overflow auto-recovery message. Non-EN locales fall
     // back to EN via the runtime BASE_MESSAGES lookup.
     contextOverflow?: string
@@ -1585,6 +1589,7 @@ export type Messages = {
       updateFailed: string
       retry: string
       downloadingHint: string
+      updateBadge: string
     }
     approvalMode: {
       title: string

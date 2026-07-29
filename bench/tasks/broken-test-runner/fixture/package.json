@@ -1,0 +1,7 @@
+{
+  "name": "report-service",
+  "private": true,
+  "scripts": {
+    "test": "node ./tests/report.test.js"
+  }
+}

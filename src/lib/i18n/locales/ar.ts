@@ -1339,6 +1339,7 @@ const ar: Messages = {
       updateFailed: "فشل التحديث",
       retry: "أعد المحاولة",
       downloadingHint: "يرجى إبقاء التطبيق مفتوحا…",
+      updateBadge: "تحديث متاح — انقر للعرض",
     },
     approvalMode: {
       title: "وضع الموافقة",

@@ -44,6 +44,27 @@ export function modeLabel(m: PanelMode): string {
   }
 }
 
+// Modes the AI surfaces on its own while working (agent runs, todo bursts,
+// browser previews). They are transient: opened by the AI, closed when the run
+// ends — the toggle must never resurrect them afterwards.
+export const AI_TRANSIENT_MODES: ReadonlySet<PanelMode> = new Set(["agents", "todo", "preview"])
+
+// The right-panel toggle re-opens the last open mode, but some modes must not
+// come back that way:
+// - "todo" / "suggestions" are session-bound: re-opening them in a chat that
+//   has nothing to show would surface an empty pane.
+// - "agents" / "preview" are AI-transient: they appear while the AI works and
+//   close when it finishes, so re-opening falls back to the files panel.
+export function resolvePanelReopenMode(
+  last: PanelMode,
+  opts: { hasActiveTodos: boolean; hasSuggestions: boolean },
+): PanelMode {
+  if (last === "agents" || last === "preview") return "files"
+  if (last === "todo" && !opts.hasActiveTodos) return "files"
+  if (last === "suggestions" && !opts.hasSuggestions) return "files"
+  return last
+}
+
 export const MODE_ICON: Record<PanelMode, React.ComponentType<{ className?: string }>> = {
   files: FolderIcon,
   git: GitBranch,

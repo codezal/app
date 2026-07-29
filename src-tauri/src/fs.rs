@@ -17,6 +17,43 @@ fn load_roots(state: &tauri::State<WorkspaceRoots>) -> Result<Vec<PathBuf>, Stri
     state.0.lock().map(|g| g.clone()).map_err(|e| e.to_string())
 }
 
+/// Read-only escape hatch: the OS temp dir is readable through the fs bridge
+/// so read-only tooling (e.g. skill bundles staged under /tmp by review
+/// pipelines) can be inspected. Writes stay workspace/home-only — and the
+/// bash tool already runs unsandboxed as the same user, so allowing temp-dir
+/// READS here does not widen real read capability.
+fn temp_read_roots() -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = vec![std::env::temp_dir()];
+    #[cfg(unix)]
+    {
+        // macOS: std::env::temp_dir() is $TMPDIR (/var/folders/...), but tools
+        // also stage under the classic /tmp (a symlink to /private/tmp) — cover
+        // both spellings plus their canonical forms.
+        candidates.push(PathBuf::from("/tmp"));
+        candidates.push(PathBuf::from("/private/tmp"));
+    }
+    candidates
+        .into_iter()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| p.canonicalize().unwrap_or(p))
+        .collect()
+}
+
+fn ensure_read_allowed(path: &str, roots: &[PathBuf]) -> Result<(), String> {
+    match ensure_allowed(path, roots) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let canon = Path::new(path)
+                .canonicalize()
+                .unwrap_or_else(|_| PathBuf::from(path));
+            if temp_read_roots().iter().any(|r| canon.starts_with(r)) {
+                return Ok(());
+            }
+            Err(e)
+        }
+    }
+}
+
 fn ensure_allowed(path: &str, roots: &[PathBuf]) -> Result<(), String> {
     // Windows USERPROFILE, POSIX HOME — Tauri'nin $HOME scope'uyla (dirs::home_dir)
     // Home is OPTIONAL now: a registered workspace root can authorize a path on
@@ -92,7 +129,7 @@ pub fn fs_read_text_file(
     state: tauri::State<WorkspaceRoots>,
 ) -> Result<String, String> {
     let roots = load_roots(&state)?;
-    ensure_allowed(&path, &roots)?;
+    ensure_read_allowed(&path, &roots)?;
     std::fs::read_to_string(&path).map_err(|e| format!("{}: {}", path, e))
 }
 
@@ -102,7 +139,7 @@ pub fn fs_read_file_base64(
     state: tauri::State<WorkspaceRoots>,
 ) -> Result<String, String> {
     let roots = load_roots(&state)?;
-    ensure_allowed(&path, &roots)?;
+    ensure_read_allowed(&path, &roots)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {}", path, e))?;
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
@@ -141,7 +178,7 @@ pub fn fs_write_file_base64(
 #[tauri::command]
 pub fn fs_exists(path: String, state: tauri::State<WorkspaceRoots>) -> Result<bool, String> {
     let roots = load_roots(&state)?;
-    ensure_allowed(&path, &roots)?;
+    ensure_read_allowed(&path, &roots)?;
     Ok(Path::new(&path).exists())
 }
 
@@ -158,7 +195,7 @@ pub fn fs_read_dir(
     state: tauri::State<WorkspaceRoots>,
 ) -> Result<Vec<FsEntry>, String> {
     let roots = load_roots(&state)?;
-    ensure_allowed(&path, &roots)?;
+    ensure_read_allowed(&path, &roots)?;
     let mut out = Vec::new();
     for entry in std::fs::read_dir(&path).map_err(|e| format!("{}: {}", path, e))? {
         let entry = entry.map_err(|e| format!("{}: {}", path, e))?;
@@ -172,7 +209,7 @@ pub fn fs_read_dir(
 #[tauri::command]
 pub fn fs_stat_size(path: String, state: tauri::State<WorkspaceRoots>) -> Result<u64, String> {
     let roots = load_roots(&state)?;
-    ensure_allowed(&path, &roots)?;
+    ensure_read_allowed(&path, &roots)?;
     let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {}", path, e))?;
     Ok(meta.len())
 }

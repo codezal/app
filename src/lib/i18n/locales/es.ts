@@ -1228,6 +1228,7 @@ const es: Messages = {
       updateFailed: "La actualización falló",
       retry: "Rever",
       downloadingHint: "Por favor mantenga la aplicación abierta...",
+      updateBadge: "Actualización disponible — haz clic para ver",
     },
     approvalMode: {
       title: "Modo de confirmación",

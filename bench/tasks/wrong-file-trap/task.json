@@ -1,0 +1,10 @@
+{
+  "id": "wrong-file-trap",
+  "difficulty": "hard",
+  "prompt": "Run `node test.js` in this workspace — it fails. Find the ROOT CAUSE and fix it. Read every file before changing anything: some code here carries conventions that other services depend on.",
+  "verify": [
+    { "type": "commandSucceeds", "command": "node .bench-verify.js" },
+    { "type": "fileNotContains", "path": "discount.js", "pattern": "\\/\\s*100" }
+  ],
+  "maxSteps": 15
+}

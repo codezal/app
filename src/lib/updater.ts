@@ -4,6 +4,9 @@ import { check, type Update } from "@tauri-apps/plugin-updater"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { useSettingsStore } from "@/store/settings"
 
+// How often the running app silently re-checks for updates.
+export const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+
 export async function checkForUpdate(): Promise<Update | null> {
   try {
     return await check()

@@ -1,0 +1,7 @@
+{
+  "id": "shared-state-flake",
+  "difficulty": "hard",
+  "prompt": "Run `node test.js` in this workspace — the last assertion fails: users see stale data after an update. Fix the bug, but keep the caching behavior intact (repeated reads of unchanged data must not hit the database).",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 20
+}

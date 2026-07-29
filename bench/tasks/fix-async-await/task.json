@@ -1,0 +1,6 @@
+{
+  "id": "fix-async-await",
+  "prompt": "`node main.js` prints `CONTENT: [object Promise]` instead of the file contents. Fix the async handling so it prints the actual contents of data.txt.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

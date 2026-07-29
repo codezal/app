@@ -590,7 +590,7 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
               isMacOS() ? "left-[89px]" : "left-[13px]",
             )}
           >
-            <PanelLeftClose className="h-3.5 w-3.5" />
+            <PanelLeftClose className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -1443,7 +1443,7 @@ function SessionItem({
               waiting
                 ? "animate-pulse bg-amber-400"
                 : streaming
-                  ? "animate-pulse bg-codezal-accent"
+                  ? "animate-cz-breathe bg-codezal-accent"
                   : "bg-blue-500",
             )}
           />

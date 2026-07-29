@@ -1339,6 +1339,7 @@ const zh_CN: Messages = {
       updateFailed: "更新失败",
       retry: "重试",
       downloadingHint: "请保持应用程序打开...",
+      updateBadge: "有可用更新 — 点击查看",
     },
     approvalMode: {
       title: "确认模式",

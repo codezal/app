@@ -1,0 +1,12 @@
+const assert = require("node:assert")
+const { isEmail } = require("./validate")
+
+assert.strictEqual(isEmail("user@example.com"), true)
+assert.strictEqual(isEmail("a@b.co"), true)
+assert.strictEqual(isEmail("first.last@sub.domain.org"), true)
+assert.strictEqual(isEmail("a@b"), false)
+assert.strictEqual(isEmail("@x.com"), false)
+assert.strictEqual(isEmail("a@.com"), false)
+assert.strictEqual(isEmail("a b@c.com"), false)
+assert.strictEqual(isEmail("plainstring"), false)
+console.log("verify ok")

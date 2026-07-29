@@ -26,6 +26,7 @@ import {
   stripVisibleToolProtocolMessages,
 } from "@/lib/stream/tool-protocol-filter"
 import { detectStopReason, isUserWaitingTool } from "@/lib/stream/stop-reason"
+import { needsCompletionNudge, COMPLETION_NUDGE_TEXT } from "@/lib/stream/completion-guard"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { modelDetail, resolveContextCap, catalogPricing, modelAcceptsImages } from "@/lib/providers-catalog"
 import { resolveLocalLlm } from "@/lib/local-llm"
@@ -34,6 +35,8 @@ import { useLocalRuntimeStore } from "@/store/local-runtime"
 import { lastToolBeat } from "@/lib/tool-heartbeat"
 import { applyModelToolPolicy, buildAllTools, deferredToolNames, makeToolSearchTool, resetDoomLoop, TOOL_SEARCH_NAME } from "@/lib/tools"
 import { listConnectedMcpInstructions } from "@/lib/mcp"
+import { buildBackgroundJobsNote } from "@/lib/stream/background-note"
+import { useJobsStore } from "@/store/jobs"
 import { buildMemoryPromptSections, buildSystemPrompt } from "@/lib/system-prompt"
 import { buildSkillsPromptSection } from "@/lib/skills"
 import { PrivacyScrubber, privacyActive } from "@/lib/privacy"
@@ -147,6 +150,7 @@ export function makeRunStream(deps: RunStreamDeps) {
     retryCount = 0,
     apiRetryCount = 0,
     autoContinueCount = 0,
+    completionNudged = false,
   ) {
     const cur = useSessionsStore.getState().sessions[sid]
     if (!cur) return
@@ -191,6 +195,7 @@ export function makeRunStream(deps: RunStreamDeps) {
     let reasoningBuf = ""
     let protocolTextFilter: ReturnType<typeof createVisibleToolProtocolFilter> | null = null
     let rafId: number | null = null
+    let flushTimerId: ReturnType<typeof setTimeout> | null = null
     let pendingPatch = false
     let unscrub: ((s: string) => string) | null = null
 
@@ -200,21 +205,39 @@ export function makeRunStream(deps: RunStreamDeps) {
       if (textBuf) next.push({ type: "text", text: unscrub ? unscrub(textBuf) : textBuf })
       return { parts: next, content: collapseText(next) }
     }
+    const flushNow = () => {
+      rafId = null
+      if (flushTimerId !== null) {
+        clearTimeout(flushTimerId)
+        flushTimerId = null
+      }
+      pendingPatch = false
+      patchFor(asstMsgId, computePatch())
+    }
     const cancelRaf = () => {
       if (rafId !== null) {
         cancelAnimationFrame(rafId)
         rafId = null
+      }
+      if (flushTimerId !== null) {
+        clearTimeout(flushTimerId)
+        flushTimerId = null
       }
       pendingPatch = false
     }
     const schedulePatch = () => {
       if (pendingPatch) return
       pendingPatch = true
-      rafId = requestAnimationFrame(() => {
-        rafId = null
-        pendingPatch = false
-        patchFor(asstMsgId, computePatch())
-      })
+      rafId = requestAnimationFrame(flushNow)
+      // rAF callbacks are suspended while the window is occluded or the app is
+      // napped (e.g. the user switched to another app) and the missed callback
+      // is NOT replayed on refocus. Relying on rAF alone would leave
+      // `pendingPatch` stuck true — every later schedulePatch early-returns and
+      // no patch reaches the store, so the message list freezes (while side
+      // stores like todos / write-diffs, which bypass rAF, keep updating). A
+      // timer, unlike rAF, fires its pending callback on resume, releasing the
+      // lock; it also keeps updates flowing (throttled) while backgrounded.
+      flushTimerId = setTimeout(flushNow, 200)
     }
     const syncFlush = () => {
       cancelRaf()
@@ -261,6 +284,7 @@ export function makeRunStream(deps: RunStreamDeps) {
     let streamStalled = false
     let streamTruncated = false
     let stallWatchdog: ReturnType<typeof setInterval> | undefined
+    let streamResult: ReturnType<typeof streamText> | undefined
 
     const effCtxWindow = resolveContextCap(
       settings.providerCatalog?.data as ProvidersCatalog | undefined,
@@ -379,7 +403,7 @@ export function makeRunStream(deps: RunStreamDeps) {
             })
           : ""
       const localSkillsText = localSkillsCatalog ? "\n" + localSkillsCatalog : ""
-      const system =
+      const systemBase =
         localRuntimeProvider
           ? localAgent
             ? "You are a coding assistant running locally inside Codezal. You have a lean set of core tools plus a `tool_search` tool to discover more. EMIT tool calls yourself (do not describe them or ask the user to run them) to read/edit files and run commands, then answer." +
@@ -408,6 +432,15 @@ export function makeRunStream(deps: RunStreamDeps) {
               recentText,
               delegationMode: cur.delegationMode ?? "solo",
             })
+      // While background jobs started by this session are still running, ground
+      // the model with their live status — otherwise a fresh user message
+      // ("bitti mi?") gets answered from the stale transcript and the model
+      // resurrects the previous topic (the "alzheimer" loop).
+      const bgNote = buildBackgroundJobsNote(
+        useJobsStore.getState().list().filter((j) => j.ownerSessionId === sid),
+        { freshUserTurn: history[history.length - 1]?.role === "user" },
+      )
+      const system = bgNote ? systemBase + "\n\n" + bgNote : systemBase
       // Model capabilities (reasoning support, output limit) from the catalog.
       const catalogData = settings.providerCatalog?.data as ProvidersCatalog | undefined
       const detail = modelDetail(catalogData, provider, modelId)
@@ -485,10 +518,34 @@ export function makeRunStream(deps: RunStreamDeps) {
           buildContextBreakdown(system, tools, preCtxTokens),
         )
 
+      // Ground-truth context accounting: ask the SDK to record the exact
+      // messages sent on every step, then derive the popover breakdown from the
+      // provider-reported inputTokens instead of our pre-send estimate.
+      let lastStepEff: number | undefined
+      let lastStepBreakdown: ContextBreakdown | undefined
+      let lastStepInput: number | undefined
+      let toolsJson = ""
+      try {
+        toolsJson = JSON.stringify(tools ?? {})
+      } catch {
+        toolsJson = ""
+      }
+
       const result = streamText({
         model,
         allowSystemInMessages: true,
         messages: outboundMessages,
+        include: { requestMessages: true },
+        onStepEnd: (step) => {
+          const reqMsgs = step.request.messages
+          if (!reqMsgs || reqMsgs.length === 0) return
+          const realInput = step.usage.inputTokens
+          const { eff, breakdown } = breakdownFromStepRequest(reqMsgs, realInput, toolsJson)
+          lastStepEff = eff
+          lastStepBreakdown = breakdown
+          lastStepInput = realInput
+          useSessionsStore.getState().setEffectiveContextTokensFor(sid, eff, breakdown)
+        },
         // Local models can't reliably drive the multi-step agent loop (a 7B
         // spins on junk/empty tool steps), so run them as plain single-turn
         // chat — no tools, one step. Re-enable when a capable local model lands.
@@ -563,6 +620,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           console.error("[streamText] error:", error)
         },
       })
+      streamResult = result
       protocolTextFilter = shouldStripVisibleToolProtocol(
         provider,
         modelId,
@@ -825,10 +883,16 @@ export function makeRunStream(deps: RunStreamDeps) {
       })
 
       const updatedSnap = useSessionsStore.getState().sessions[sid]
-      const effectiveTokens = updatedSnap
-        ? estimateMessagesTokens(updatedSnap.modelMessages ?? [], system)
-        : 0
-      const contextBreakdown = buildContextBreakdown(system, tools, effectiveTokens)
+      // Prefer the last step's provider-reported ground truth (set by
+      // onStepEnd); fall back to the local estimate only when the SDK gave us
+      // no request/usage data (e.g. providers that omit usage).
+      const effectiveTokens =
+        lastStepEff ??
+        (updatedSnap
+          ? estimateMessagesTokens(updatedSnap.modelMessages ?? [], system)
+          : 0)
+      const contextBreakdown =
+        lastStepBreakdown ?? buildContextBreakdown(system, tools, effectiveTokens)
 
       try {
         const usage = await result.usage
@@ -836,6 +900,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           const input = usage.inputTokens ?? 0
           const output = usage.outputTokens ?? 0
           const cacheRead =
+            usage.inputTokenDetails?.cacheReadTokens ??
             (usage as { cachedInputTokens?: number }).cachedInputTokens ??
             (usage as { promptCacheHitTokens?: number }).promptCacheHitTokens ??
             0
@@ -855,7 +920,7 @@ export function makeRunStream(deps: RunStreamDeps) {
                 modelId,
               ),
             ),
-            lastInputTokens: input,
+            lastInputTokens: lastStepInput ?? input,
             effectiveContextTokens: effectiveTokens,
             contextBreakdown,
           })
@@ -879,6 +944,23 @@ export function makeRunStream(deps: RunStreamDeps) {
       streamSucceeded = true
       }
     } catch (e) {
+      // The error path skips the awaits on result.response / result.usage /
+      // etc. below, so those lazy promises reject with the same stream error
+      // and surface as unhandledrejection noise. Consume them silently — the
+      // real error is already handled here.
+      if (streamResult) {
+        for (const p of [
+          streamResult.response,
+          streamResult.usage,
+          streamResult.totalUsage,
+          streamResult.finishReason,
+          streamResult.text,
+          streamResult.content,
+          streamResult.steps,
+        ] as Promise<unknown>[]) {
+          void p.catch(() => {})
+        }
+      }
       if (isCliAgentProvider(provider)) {
         if (!ac.signal.aborted) deps.setError(errorMessage(e), sid)
       } else {
@@ -1179,6 +1261,59 @@ export function makeRunStream(deps: RunStreamDeps) {
           return
         }
       }
+      // ---- Hallucinated-completion guard ----
+      // The turn ended "cleanly" (stopReason undefined) with a confident
+      // "all done" report, yet no file-modifying tool ran — the model claimed
+      // work it never did. Send it back once to actually apply the changes,
+      // with a visible note so the user understands the extra turn.
+      if (streamSucceeded && !finalStopReason && !completionNudged) {
+        const sess = useSessionsStore.getState().sessions[sid]
+        const recentUserTexts = (sess?.messages ?? [])
+          .filter((m) => m.role === "user" && !m.meta)
+          .slice(-2)
+          .map((m) => m.content)
+        const finalText = collapseText(parts)
+        if (
+          sess &&
+          needsCompletionNudge({ parts, finalText, recentUserTexts })
+        ) {
+          useSessionsStore.getState().pushMessageFor(sid, {
+            id: createId("message"),
+            role: "system",
+            content: tStatic("app.completionNudgeNote"),
+          })
+          const contUser: Message = {
+            id: createId("message"),
+            role: "user",
+            content: COMPLETION_NUDGE_TEXT,
+            modelMsgCount: 1,
+          }
+          const contAsst: Message = {
+            id: createId("message"),
+            role: "assistant",
+            content: "",
+            parts: [],
+            pending: true,
+          }
+          useSessionsStore.getState().pushMessageFor(sid, contUser)
+          useSessionsStore.getState().pushMessageFor(sid, contAsst)
+          const contHistory: ModelMessage[] = [
+            ...(sess.modelMessages ?? []),
+            { role: "user", content: COMPLETION_NUDGE_TEXT },
+          ]
+          await runStream(
+            sid,
+            contAsst.id,
+            contHistory,
+            override,
+            0,
+            0,
+            autoContinueCount,
+            true,
+          )
+          return
+        }
+      }
       if (streamSucceeded) fireTurnEnd("end_turn")
       else fireTurnEnd("finish")
       return
@@ -1329,4 +1464,30 @@ function buildContextBreakdown(
     tools: toolsTokens,
     conversation: Math.max(0, promptPlusConv - systemTokens),
   }
+}
+
+// Per-step ground truth (AI SDK v7 `include.requestMessages`): split the
+// SDK-recorded request messages into system / conversation slices and take the
+// tools slice as the remainder of the provider-reported inputTokens — that
+// total also covers tool schemas and provider overhead, so the remainder is
+// the most honest "tool definitions" number we can show. Falls back to the
+// schema-JSON estimate when the provider reports no usage.
+function breakdownFromStepRequest(
+  reqMsgs: readonly ModelMessage[],
+  realInput: number | undefined,
+  toolsJson: string,
+): { eff: number; breakdown: ContextBreakdown } {
+  let system = 0
+  let conversation = 0
+  for (const m of reqMsgs) {
+    const t = estimateMessagesTokens([m])
+    if (m.role === "system") system += t
+    else conversation += t
+  }
+  const tools =
+    realInput != null
+      ? Math.max(0, realInput - system - conversation)
+      : estimateTextTokens(toolsJson)
+  const eff = realInput ?? system + conversation + tools
+  return { eff, breakdown: { system, tools, conversation } }
 }

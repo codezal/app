@@ -1339,6 +1339,7 @@ const pt_BR: Messages = {
       updateFailed: "Falha na atualização",
       retry: "Tentar novamente",
       downloadingHint: "Por favor, mantenha o aplicativo aberto…",
+      updateBadge: "Atualização disponível — clique para ver",
     },
     approvalMode: {
       title: "Modo de aprovação",

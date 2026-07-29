@@ -65,3 +65,6 @@ public/file-icons/
 # === i18n audit temp outputs (scripts/i18n-audit.mts, not committed) ===
 .tmp_translations/
 missing_translations.json
+
+# === Benchmark results (bench/run.ts, bench/optimize.ts outputs) ===
+bench/results/

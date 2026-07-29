@@ -47,6 +47,69 @@ export function looksLikeQuotedSyntax(toolName: string): boolean {
   return /[{}<>"'`\s]/.test(toolName) || toolName.length > 80
 }
 
+// Model output often contains JSON-invalid escapes inside strings — ANSI
+// color codes like \x1b, a \u cut short by a truncated stream, or a lone
+// backslash right before the input ends. JSON.parse rejects all of these
+// ("unexpected end of hex escape"), so escape the backslash itself and keep
+// the text literal. Valid escapes (including \uXXXX) pass through untouched.
+export function fixInvalidEscapes(raw: string): string {
+  let out = ""
+  let inString = false
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (!inString) {
+      out += ch
+      if (ch === '"') inString = true
+      continue
+    }
+    if (ch === '"') {
+      inString = false
+      out += ch
+      continue
+    }
+    if (ch !== "\\") {
+      out += ch
+      continue
+    }
+    const next = raw[i + 1]
+    if (next === undefined) {
+      // Lone backslash right before the string/stream ends.
+      out += "\\\\"
+      continue
+    }
+    if (
+      next === '"' ||
+      next === "\\" ||
+      next === "/" ||
+      next === "b" ||
+      next === "f" ||
+      next === "n" ||
+      next === "r" ||
+      next === "t"
+    ) {
+      out += ch + next
+      i++
+      continue
+    }
+    if (next === "u") {
+      const hex = raw.slice(i + 2, i + 6)
+      if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+        out += ch + next + hex
+        i += 5
+        continue
+      }
+      // Truncated/invalid \u escape → literal backslash-u; hex chars stay literal.
+      out += "\\\\u"
+      i++
+      continue
+    }
+    // Invalid escape (e.g. \x1b ANSI codes) → literal backslash + char.
+    out += "\\\\" + next
+    i++
+  }
+  return out
+}
+
 export function repairJsonString(raw: string): string | null {
   if (!raw || typeof raw !== "string") return null
   const tryParse = (s: string): string | null => {
@@ -69,6 +132,15 @@ export function repairJsonString(raw: string): string | null {
 
   let attempt = tryParse(s)
   if (attempt) return attempt
+
+  // Invalid string escapes (\x1b, truncated \u, lone backslash) — repair
+  // before the single-quote pass so its `\\.` matching sees clean escapes.
+  const escFixed = fixInvalidEscapes(s)
+  if (escFixed !== s) {
+    attempt = tryParse(escFixed)
+    if (attempt) return attempt
+    s = escFixed
+  }
 
   const sqRepaired = s.replace(
     /(?<![A-Za-z0-9_])'([^'\\]*(?:\\.[^'\\]*)*)'(?![A-Za-z0-9_])/g,

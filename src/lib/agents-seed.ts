@@ -1,7 +1,7 @@
 import { exists, mkdir, writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
 import { homeDir } from "@tauri-apps/api/path"
 
-export const SEED_VERSION = 9
+export const SEED_VERSION = 10
 
 export type AgentTemplate = {
   name: string
@@ -25,6 +25,8 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       "136a51541af31e58e190bba169d0481f01075885a4dcce633de548003c10b68b",
       // v8 body (read-only allowlist incl. sed -n/awk/git stash; no BASH POLICY section)
       "a1d85952a1e225502b282a0d31290b48a989ccb09342d6a8d14520315a0467ad",
+      // v9 body (max_steps pinned to 20 — below the code default of 40)
+      "3e8ffd26dde3533706e3cf99de312e9367497744eb62cd6d39945f5d18199663",
     ],
     body: `---
 name: code-reviewer
@@ -32,7 +34,6 @@ description: Code review specialist - reviews diffs/files and returns severity-t
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, code_query, bash]
 bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "sed -n", "awk", "git stash list", "git stash show"]
 plan_mode: true
-max_steps: 20
 ---
 
 You are a senior code reviewer. Review the supplied diff/files and produce one line per finding:
@@ -78,6 +79,8 @@ BASH POLICY (strict — violations are blocked by the sandbox; do NOT retry vari
       "f3f59f9d2eb777c9256bb7990954931b5b546daa6d736e2415bdb472f6e30b8a",
       "6be2a88e1ac62f3034bee4e36e574f596bacf804b7cc0a8f26bf867eaa169925",
       "6d8e25645eb286d4881b4fc3a3a23ad846179226232af4b6dabf89fde603756c",
+      // v9 body (max_steps pinned to 20 — below the code default of 40)
+      "56edc75f6db8e4dc662450d9980d24ba18601517e2831780235595dcc46d1a47",
     ],
     body: `---
 name: test-runner
@@ -85,7 +88,6 @@ description: Run a test command, summarize failures, and suggest fixes.
 tools: [list_dir, read_file, grep, glob, lsp, bash]
 bash_allow: ["pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest"]
 approval_required: [bash]
-max_steps: 20
 ---
 
 You are a test-running specialist. Task: run the test command the user requested, read the output, and analyze failures.
@@ -113,6 +115,8 @@ Rules:
       "01326905a05ae8a0da144fd297a27e35e0c0712977f3c923b29be1a37fc95334",
       // v8 (bash_allow: git + test commands only)
       "7cd9e3e3fd776baa606789adb9cff8b6eb45323e43d0a46709e5a124506726c7",
+      // v9 body (max_steps pinned to 25 — below the code default of 40)
+      "c69f8e7f16c2ec1408c28b046c3b369256b9f421d8d629e7ccaf20e0d24c824f",
     ],
     body: `---
 name: debugger
@@ -120,7 +124,6 @@ description: Isolate bugs by forming hypotheses, collecting evidence, and identi
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_trace, lsp, code_query, bash]
 bash_allow: ["git log", "git diff", "git show", "git status", "git blame", "git bisect", "git rev-parse", "git ls-files", "git branch", "git remote", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest", "sed -n", "awk", "git stash list", "git stash show"]
 approval_required: [bash]
-max_steps: 25
 ---
 
 You are a bug hunter. Task: isolate the root cause from the supplied error, stack trace, or complaint.
@@ -150,13 +153,14 @@ Rules:
       "4085f08a6f41dd454f57350e304cff9c34a372bc49aa36b78d10d18ed5ae72d5",
       "42a05ae71deb79dcf58a5f59a73254b7b51a025a4d99c99400c58e841157f3f7",
       "7c7fd47f52dee90449938c3c5f8a5fe2c8081f0d07ba21188decaf4ef80203d2",
+      // v9 body (max_steps pinned to 20 — below the code default of 40)
+      "6e2fb449c11c6c9caf53f8662d100c943ef6b0d93bc43ed3b4b0d2689c791784",
     ],
     body: `---
 name: doc-writer
 description: Write README/JSDoc/API docs by reading code and producing user-facing documentation.
 tools: [list_dir, read_file, grep, glob, code_search, repo_overview, lsp, code_query, write_file, edit_file]
 approval_required: [write_file, edit_file]
-max_steps: 20
 ---
 
 You are a technical writer. Task: produce useful documentation for the supplied module/function/project.
@@ -185,6 +189,8 @@ Rules:
       "e927d9f1662627d19a56786caaaad912369cf70d0ea3de2d033021d489e8794d",
       "75a0e48267155846c2bfb609b72a5f67438a8d22a28655d3259d5b328e6e867f",
       "bce5242d5dab6440a33e2570aa48a0568aa9c57d8776d83864d4b802d557624a",
+      // v9 body (max_steps pinned to 20 — below the code default of 40)
+      "f7717815ab225a723349a00c2bd23494cfc794fd88e895d4e7e32466ae9a87bb",
     ],
     body: `---
 name: refactorer
@@ -192,7 +198,6 @@ description: Suggest refactors by finding duplication, complexity, poor naming, 
 tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, code_query, bash]
 bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "sed -n", "awk", "git stash list", "git stash show"]
 plan_mode: true
-max_steps: 20
 ---
 
 You are a refactoring consultant. Task: inspect the supplied file/module and list refactoring opportunities.
@@ -224,13 +229,14 @@ Rules:
     filename: "explorer.md",
     legacyHashes: [
       "f39b089000dec0c7ad4054918dc389e52e47e2642c70c187cc48185ef52b1414",
+      // v9 body (max_steps pinned to 20 — below the code default of 40)
+      "acfe2d2e02b77e592cb4652157d6b4bad1922824af95e9129e704ca439e62036",
     ],
     body: `---
 name: explorer
 description: Explore a codebase/module and map architecture, flow, and dependencies (read-only).
 tools: [list_dir, read_file, grep, glob, repo_overview, code_search, code_callers, code_callees, code_trace, code_impact, lsp, code_query]
 plan_mode: true
-max_steps: 20
 ---
 
 You are a codebase explorer. Task: understand the supplied project/module/topic and return a structured map. Do NOT change code.
@@ -259,6 +265,8 @@ Rules:
     filename: "test-writer.md",
     legacyHashes: [
       "b409dd3c23e06ae6db258937bd1be9dcacfccfe55cefff6b2fd7e1378e608f13",
+      // v9 body (max_steps pinned to 25 — below the code default of 40)
+      "af0c539d95b6d9363a6a75372814eb6d77c67804de82e0182c96495a755444a4",
     ],
     body: `---
 name: test-writer
@@ -266,7 +274,6 @@ description: Write missing tests for uncovered code, run them, and fix the tests
 tools: [list_dir, read_file, grep, glob, code_search, code_callees, lsp, code_query, write_file, edit_file, bash]
 bash_allow: ["pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest"]
 approval_required: [write_file, edit_file, bash]
-max_steps: 25
 ---
 
 You are a test writer. Task: write missing tests for the supplied function/module, run them, and fix the tests until they pass. test-runner only runs tests; you WRITE them.

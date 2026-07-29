@@ -74,10 +74,12 @@ const tr: Messages = {
     agentNameRequired: "/agent <name> [görev] — agent adı gerekli",
     skillNameRequired: "/skill <name> [görev] — skill adı gerekli",
     compactFailed: "Sıkıştırma başarısız: {message}",
+    compactPrunedOnly: "✓ Bağlam budandı: eski araç çıktılarından ~{tokens} token kaldırıldı",
     contextOverflow: "Bağlam penceresi doldu ve otomatik sıkıştırma yeterince küçültemedi. /compact deneyin, yeni oturum açın ya da daha geniş bağlamlı bir model seçin.",
     localCtxClamped: "{model}: bellek yetersiz — bağlam {requested} → {effective} token'a düşürüldü ({gb} GB model). Daha küçük quant (Q4) veya daha küçük bir model deneyin.",
     localCtxTooSmall: "Bu yerel model belleğe sığmadığı için bağlam {effective} token'a düştü ve agent araçları sığmıyor. Daha küçük bir model (ör. Qwen3-8B) seç ya da bu model için agent modunu kapat.",
     spendCapReached: "Oturum harcama sınırına ulaşıldı (${cap}). Ayarlar → Genel bölümünden yükseltin veya yeni bir oturum başlatın.",
+    completionNudgeNote: "⚠️ Model hiçbir dosyayı değiştirmeden tamamlandı raporu verdi — değişiklikleri gerçekten uygulaması için geri gönderildi.",
     turnBusyAttachments: "Önceki tur hâlâ sürüyor — ek içeren mesajlar kuyruğa alınamıyor. Tur bitince tekrar gönderin.",
   },
   sidebar: {
@@ -1485,6 +1487,7 @@ const tr: Messages = {
       updateFailed: "Güncelleme başarısız",
       retry: "Tekrar dene",
       downloadingHint: "Lütfen uygulamayı açık tut…",
+      updateBadge: "Güncelleme mevcut — görüntülemek için tıkla",
     },
     approvalMode: {
       title: "Onay modu",

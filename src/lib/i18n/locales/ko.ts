@@ -1339,6 +1339,7 @@ const ko: Messages = {
       updateFailed: "업데이트 실패",
       retry: "재시도",
       downloadingHint: "앱을 계속 열어두세요…",
+      updateBadge: "업데이트 사용 가능 — 클릭하여 보기",
     },
     approvalMode: {
       title: "승인 모드",

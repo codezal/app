@@ -1,0 +1,7 @@
+{
+  "id": "needle-in-haystack",
+  "difficulty": "hard",
+  "prompt": "Run `node test.js` in this workspace — the prorated invoice amount is wrong. The bug is somewhere in this repository. Find it and fix it so the test passes.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 25
+}

@@ -1,34 +1,49 @@
-import { useRef } from "react"
 import { AlertTriangle, RefreshCcw, Sparkles, X } from "@/lib/icons"
 import { useUpdateStore } from "@/store/update"
 import { t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { Dialog } from "@/components/Dialog"
 
 function mb(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(1)
 }
 
-export function UpdateModal() {
-  const { update, phase, downloaded, total, error, beginDownload, dismiss } = useUpdateStore()
-  const primaryRef = useRef<HTMLButtonElement | null>(null)
+// Non-modal update notification: a corner card that collapses to a small
+// persistent badge when dismissed instead of disappearing entirely.
+export function UpdateToast() {
+  const { update, phase, minimized, downloaded, total, error, beginDownload, snooze, reopen } =
+    useUpdateStore()
 
   if (phase === "idle" || !update) return null
 
   const busy = phase === "downloading" || phase === "installing"
   const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : null
-  const canDismiss = phase === "available" || phase === "error"
+  const canSnooze = phase === "available" || phase === "error"
+
+  if (minimized && !busy) {
+    return (
+      <button
+        type="button"
+        onClick={reopen}
+        aria-label={t("settings.about.updateBadge")}
+        title={t("settings.about.updateBadge")}
+        className="fixed bottom-4 right-4 z-[70] flex items-center gap-1.5 rounded-full border border-codezal bg-codezal-panel py-1.5 pl-2.5 pr-3 text-xs font-medium text-codezal-text shadow-lg transition-colors hover:bg-codezal-panel-2"
+      >
+        <span className="relative flex h-4 w-4 items-center justify-center">
+          <Sparkles className="h-3.5 w-3.5 text-codezal-accent" aria-hidden />
+          <span
+            className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-codezal-accent"
+            aria-hidden
+          />
+        </span>
+        v{update.version}
+      </button>
+    )
+  }
 
   return (
-    <Dialog
-      role="dialog"
-      onClose={dismiss}
-      labelledById="update-dialog-title"
-      backdropClassName="z-[70]"
-      panelClassName="w-[440px] max-w-[90vw] overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl"
-      initialFocus={primaryRef}
-      closeOnEscape={canDismiss}
-      closeOnBackdrop={canDismiss}
+    <div
+      role="status"
+      className="fixed bottom-4 right-4 z-[70] w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-codezal bg-codezal-panel shadow-2xl"
     >
       <div className="flex items-start gap-3 p-4">
         <div
@@ -48,7 +63,7 @@ export function UpdateModal() {
           )}
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
-          <h2 id="update-dialog-title" className="text-sm font-semibold text-codezal-text">
+          <h2 className="text-sm font-semibold text-codezal-text">
             {phase === "error"
               ? t("settings.about.updateFailed")
               : t("settings.about.updateTitle")}
@@ -63,10 +78,10 @@ export function UpdateModal() {
                   : t("settings.about.updateSubtitle")}
           </p>
         </div>
-        {canDismiss && (
+        {canSnooze && (
           <button
             type="button"
-            onClick={dismiss}
+            onClick={snooze}
             aria-label={t("settings.about.later")}
             className="rounded-md p-1 text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
           >
@@ -88,11 +103,11 @@ export function UpdateModal() {
               </code>
             </div>
             {update.body && (
-              <div className="max-h-40 overflow-y-auto rounded-md border border-codezal bg-codezal-panel-2 p-2.5">
-                <div className="mb-1 text-sm font-medium uppercase tracking-wide text-codezal-mute">
+              <div className="max-h-32 overflow-y-auto rounded-md border border-codezal bg-codezal-panel-2 p-2.5">
+                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-codezal-mute">
                   {t("settings.about.releaseNotes")}
                 </div>
-                <p className="whitespace-pre-wrap text-sm text-codezal-dim">{update.body}</p>
+                <p className="whitespace-pre-wrap text-xs text-codezal-dim">{update.body}</p>
               </div>
             )}
           </>
@@ -109,7 +124,7 @@ export function UpdateModal() {
                 style={percent !== null ? { width: `${percent}%` } : undefined}
               />
             </div>
-            <div className="mt-1.5 flex justify-between text-sm text-codezal-mute">
+            <div className="mt-1.5 flex justify-between text-xs text-codezal-mute">
               <span>
                 {phase === "installing"
                   ? t("settings.about.installing")
@@ -124,19 +139,17 @@ export function UpdateModal() {
         )}
       </div>
 
-      {/* ── Footer ── */}
       <div className="flex items-center justify-end gap-2 border-t border-codezal px-4 py-3">
         {phase === "available" && (
           <>
             <button
               type="button"
-              onClick={dismiss}
+              onClick={snooze}
               className="rounded-md px-3 py-1.5 text-sm text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
             >
               {t("settings.about.later")}
             </button>
             <button
-              ref={primaryRef}
               type="button"
               onClick={() => void beginDownload()}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
@@ -149,7 +162,7 @@ export function UpdateModal() {
           <>
             <button
               type="button"
-              onClick={dismiss}
+              onClick={snooze}
               className="rounded-md px-3 py-1.5 text-sm text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
             >
               {t("settings.about.later")}
@@ -165,11 +178,9 @@ export function UpdateModal() {
           </>
         )}
         {busy && (
-          <span className="text-sm text-codezal-mute">
-            {t("settings.about.downloadingHint")}
-          </span>
+          <span className="text-xs text-codezal-mute">{t("settings.about.downloadingHint")}</span>
         )}
       </div>
-    </Dialog>
+    </div>
   )
 }

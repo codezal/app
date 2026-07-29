@@ -38,7 +38,9 @@ import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 import { WindowControls } from "./WindowControls"
 import { isMacOS } from "@/lib/platform"
-import { modeLabel, type PanelMode } from "@/lib/panel-modes"
+import { modeLabel, resolvePanelReopenMode, type PanelMode } from "@/lib/panel-modes"
+import { hasActiveTodos } from "@/lib/hooks/useTodoPanelAuto"
+import { useSuggestionsStore } from "@/store/suggestions"
 import { FileTypeIcon } from "@/lib/file-icons"
 import { TerminalCliIcon } from "./TerminalCliIcon"
 
@@ -740,6 +742,16 @@ function PanelToggle({
     if (mode) lastModeRef.current = mode
   }, [mode])
 
+  // Session-bound modes ("todo", "suggestions") must not leak into a chat that
+  // has nothing to show — the toggle falls back to "files" instead of opening
+  // an empty pane left over from another session.
+  const activeId = useSessionsStore((s) => s.activeId)
+  const todos = useSessionsStore((s) => s.active?.todos)
+  const streaming = useSessionsStore((s) => (s.activeId ? !!s.streamingIds[s.activeId] : false))
+  const suggestionCount = useSuggestionsStore((s) =>
+    activeId ? (s.bySession[activeId]?.items.length ?? 0) : 0,
+  )
+
   const label = mode
     ? t("tabBar.rightPanelTitle", { mode: modeLabel(mode) })
     : t("tabBar.rightPanelOpen")
@@ -747,7 +759,16 @@ function PanelToggle({
   return (
     <button
       type="button"
-      onClick={() => onSet(mode ? null : lastModeRef.current)}
+      onClick={() =>
+        onSet(
+          mode
+            ? null
+            : resolvePanelReopenMode(lastModeRef.current, {
+                hasActiveTodos: hasActiveTodos(todos, streaming),
+                hasSuggestions: suggestionCount > 0,
+              }),
+        )
+      }
       title={label}
       aria-label={label}
       aria-pressed={mode != null}

@@ -1339,6 +1339,7 @@ const ja: Messages = {
       updateFailed: "アップデートに失敗しました",
       retry: "再試行",
       downloadingHint: "アプリを開いたままにしてください…",
+      updateBadge: "アップデートがあります — クリックして表示",
     },
     approvalMode: {
       title: "承認モード",

@@ -170,7 +170,23 @@ export async function readFileAbs(
     return `Error: ${abs} is a directory — use list_dir to list its contents.`
   }
 
-  const content = await readTextSafe(abs)
+  let content: string
+  try {
+    content = await readTextSafe(abs)
+  } catch (e) {
+    // Missing file: the raw OS error tells the model nothing about recovery,
+    // so it tends to retry the SAME guessed path in a loop. Point it at the
+    // discovery tools instead. macOS/Linux: "No such file or directory (os
+    // error 2)"; Windows: "The system cannot find the file specified.".
+    const msg = String((e as { message?: string } | undefined)?.message ?? e)
+    if (/no such file|os error 2|cannot find the file/i.test(msg)) {
+      throw new Error(
+        `${msg}\nThe file does not exist at this path — do NOT retry the same path. Use the glob or grep tool to locate the correct file first.`,
+        { cause: e },
+      )
+    }
+    throw e
+  }
   const allLines = content.split("\n")
   const total = allLines.length
   const start = offset && offset > 0 ? offset - 1 : 0

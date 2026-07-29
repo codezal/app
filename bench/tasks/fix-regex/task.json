@@ -1,0 +1,6 @@
+{
+  "id": "fix-regex",
+  "prompt": "`node test.js` fails — the email validation regex in validate.js is too permissive. Fix the regex so all tests pass. Keep the exported function signature.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

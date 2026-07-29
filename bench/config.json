@@ -1,0 +1,7 @@
+{
+  "maxSteps": 15,
+  "repeat": 1,
+  "quickTasks": ["fix-subtract-bug", "fix-off-by-one", "fix-json-config", "fix-regex"],
+  "whitelist": ["src/lib/tools/prompts/", "bench/config.json"],
+  "allowSystemPromptEdit": false
+}

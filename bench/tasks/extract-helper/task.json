@@ -1,0 +1,6 @@
+{
+  "id": "extract-helper",
+  "prompt": "shop/a.js and shop/b.js each contain an identical copy of a `formatPrice` function. Extract it into a shared module `shop/format.js`, import it from both files, and delete the duplicates. `node shop/index.js` must keep printing the exact same output.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 15
+}

@@ -1,0 +1,6 @@
+{
+  "id": "add-cli-flag",
+  "prompt": "Extend `main.js`: when run with the `--verbose` flag it must additionally print the line `verbose mode enabled` (after the existing output). Without the flag, output must stay exactly as before.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

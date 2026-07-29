@@ -1,0 +1,6 @@
+{
+  "id": "add-test",
+  "prompt": "Write `test.js` (using node:assert) that verifies these behaviors of the `slugify` function in slugify.js: slugify(\"Hello World\") === \"hello-world\", slugify(\"A  B\") === \"a-b\", slugify(\"foo_bar baz\") === \"foo-bar-baz\". Then run your test — if slugify.js has bugs, fix them so the tests pass.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 15
+}

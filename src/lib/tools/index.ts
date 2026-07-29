@@ -183,14 +183,26 @@ function formatHits(hits: SearchHit[]): string {
   return out.join("\n")
 }
 
-const SPAWN_OUTPUT_MAX = 8000
+// Subagent reports are returned to the parent as a tool result. 8k truncated
+// real code-review reports mid-findings, so the parent saw "half a report" and
+// redid the work inline — 20k keeps multi-file reviews intact without flooding
+// the parent's context window.
+const SPAWN_OUTPUT_MAX = 20_000
 const WORKER_OUTPUT_MAX = 6000
 
-const AGENT_STALL_MS = 150_000
+// Stall watchdog: abort a subagent whose stream goes silent (provider hang).
+// Slow providers can take >150s to first token on a large context, which the
+// old 150s limit killed mid-review; 300s tolerates that while still catching
+// genuine hangs. Tools with their own heartbeat (e.g. bash) get the full
+// AGENT_DEADLINE_MS while running.
+const AGENT_STALL_MS = 300_000
 const AGENT_DEADLINE_MS = 600_000
 const AGENT_WD_CHECK_MS = 5_000 // watchdog tick
 const MAX_SUBAGENT_RETRIES = 2
-const AGENT_SUMMARY_TIMEOUT_MS = 60_000
+// Last-resort "summarize your findings" call after step-limit/soft-stop. On
+// slow providers a full report takes >60s, so the old timeout aborted the very
+// call meant to rescue the report.
+const AGENT_SUMMARY_TIMEOUT_MS = 180_000
 
 function truncateForContext(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
@@ -2459,7 +2471,11 @@ export function buildTools(
           return `Agent error: ${msg}`
         }
 
-        if (!text && lastResult && !softStopped && !parentSignal?.aborted) {
+        // Run the summary fallback on soft-stop too: when the watchdog kills the
+        // stream the step-limit path would otherwise return raw partial text (or
+        // nothing), and the caller retries/gives up instead of getting the
+        // findings collected so far.
+        if (!text && lastResult && !parentSignal?.aborted) {
           const sumAc = new AbortController()
           const sumTimer = setTimeout(() => sumAc.abort(), AGENT_SUMMARY_TIMEOUT_MS)
           try {

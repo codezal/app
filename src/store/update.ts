@@ -7,27 +7,41 @@ export type UpdatePhase = "idle" | "available" | "downloading" | "installing" | 
 type UpdateState = {
   update: Update | null
   phase: UpdatePhase
+  minimized: boolean // card snoozed to the corner badge
   downloaded: number // byte
   total: number // byte (0 = belirsiz)
   error: string | null
   present: (update: Update) => void
   beginDownload: () => Promise<void>
+  snooze: () => void
+  reopen: () => void
   dismiss: () => void
 }
 
 export const useUpdateStore = create<UpdateState>((set, get) => ({
   update: null,
   phase: "idle",
+  minimized: false,
   downloaded: 0,
   total: 0,
   error: null,
 
-  present: (update) => set({ update, phase: "available", downloaded: 0, total: 0, error: null }),
+  present: (update) =>
+    set({ update, phase: "available", minimized: false, downloaded: 0, total: 0, error: null }),
+
+  // Snooze keeps the update around — the card collapses to a corner badge.
+  snooze: () => {
+    const { phase } = get()
+    if (phase === "downloading" || phase === "installing") return
+    set({ minimized: true })
+  },
+
+  reopen: () => set({ minimized: false }),
 
   beginDownload: async () => {
     const { update } = get()
     if (!update) return
-    set({ phase: "downloading", downloaded: 0, total: 0, error: null })
+    set({ phase: "downloading", minimized: false, downloaded: 0, total: 0, error: null })
     try {
       await downloadAndRelaunch(update, (downloaded, total) => {
         const phase: UpdatePhase = total > 0 && downloaded >= total ? "installing" : "downloading"
@@ -38,5 +52,6 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     }
   },
 
-  dismiss: () => set({ update: null, phase: "idle", downloaded: 0, total: 0, error: null }),
+  dismiss: () =>
+    set({ update: null, phase: "idle", minimized: false, downloaded: 0, total: 0, error: null }),
 }))

@@ -1,0 +1,10 @@
+{
+  "id": "broken-test-runner",
+  "difficulty": "hard",
+  "prompt": "`npm test` is broken in this workspace — it does not even reach the tests. Diagnose from the actual error output and make `npm test` pass.",
+  "verify": [
+    { "type": "commandSucceeds", "command": "npm test" },
+    { "type": "commandSucceeds", "command": "node .bench-verify.js" }
+  ],
+  "maxSteps": 20
+}

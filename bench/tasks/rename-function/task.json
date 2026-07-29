@@ -1,0 +1,6 @@
+{
+  "id": "rename-function",
+  "prompt": "Rename the function `calcTotal` to `computeTotal` everywhere in this workspace (definition and all call sites). The program must keep working: `node main.js` must still print the same output.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 15
+}

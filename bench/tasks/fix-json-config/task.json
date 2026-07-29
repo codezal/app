@@ -1,0 +1,6 @@
+{
+  "id": "fix-json-config",
+  "prompt": "`node start.js` crashes in this workspace. Diagnose why and fix it so it prints the configured port. Do not change start.js or loader.js logic — fix the underlying data problem.",
+  "verify": [{ "type": "commandSucceeds", "command": "node .bench-verify.js" }],
+  "maxSteps": 12
+}

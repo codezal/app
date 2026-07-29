@@ -228,6 +228,41 @@ describe("checkSubagentPolicy", () => {
   })
 
   it.each([
+    ["tırnak içi pipe pattern", 'grep -rn "detailedCalculation|scCondition" src/'],
+    ["tırnak içi > karakteri", 'grep "a > b" file.ts'],
+    ["tırnak içi ; karakteri", 'grep "a;b" file.ts'],
+    ["tek tırnak içi $() (inert literal)", "grep '$(foo)' file.ts"],
+    ["tek tırnak içi backtick (inert literal)", "grep '`id`' file.ts"],
+  ])("bashAllow + %s → izin verilir (quote-aware)", (_label, command) => {
+    const r = checkSubagentPolicy({ bashAllow: ["grep"] }, "bash", { command })
+    expect(r.allowed).toBe(true)
+  })
+
+  it("bashAllow + çift tırnak içi $() → reddedilir (substitution aktif)", () => {
+    const r = checkSubagentPolicy({ bashAllow: ["grep"] }, "bash", {
+      command: 'grep "$(cat /etc/passwd)" file.ts',
+    })
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/redirection or command substitution/)
+  })
+
+  it("bashAllow + gerçek redirection → reddedilir", () => {
+    const r = checkSubagentPolicy({ bashAllow: ["grep"] }, "bash", {
+      command: "grep foo file.ts > out.txt",
+    })
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/redirection or command substitution/)
+  })
+
+  it("bashAllow + tırnak sonrası zincir → segment yine denetlenir", () => {
+    const r = checkSubagentPolicy({ bashAllow: ["grep"] }, "bash", {
+      command: 'grep "a|b" file.ts; rm -rf /',
+    })
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toMatch(/not allowlisted/)
+  })
+
+  it.each([
     ["komut ikamesi $(", "pnpm test $(whoami)"],
     ["backtick", "pnpm test `id`"],
     ["yönlendirme >", "pnpm test > /etc/passwd"],

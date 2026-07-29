@@ -1339,6 +1339,7 @@ const th: Messages = {
       updateFailed: "การอัปเดตล้มเหลว",
       retry: "ลองอีกครั้ง",
       downloadingHint: "โปรดเปิดแอปไว้...",
+      updateBadge: "มีอัปเดต — คลิกเพื่อดู",
     },
     approvalMode: {
       title: "โหมดการอนุมัติ",

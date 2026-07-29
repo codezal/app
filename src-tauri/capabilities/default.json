@@ -28,7 +28,15 @@
     "os:allow-locale",
     "opener:default",
     "opener:allow-reveal-item-in-dir",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME" },
+        { "path": "$HOME/**" },
+        { "path": "/tmp/**" },
+        { "path": "/private/tmp/**" }
+      ]
+    },
     "opener:allow-open-url",
     "dialog:default",
     "dialog:allow-confirm",

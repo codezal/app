@@ -1339,6 +1339,7 @@ const zh_TW: Messages = {
       updateFailed: "更新失敗",
       retry: "重試",
       downloadingHint: "請保持應用程式開啟...",
+      updateBadge: "有可用更新 — 點擊查看",
     },
     approvalMode: {
       title: "確認模式",
