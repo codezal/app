@@ -63,10 +63,12 @@ function isAllowed(rel: string, prefixes: string[]): boolean {
 // Untracked (??) entries are ignored in both guards: they don't affect the
 // whitelist snapshot/revert, and `git add -- <prefixes>` never stages them.
 export async function trackedStatus(): Promise<string[]> {
+  // Never trim the whole output: the leading column of the FIRST porcelain
+  // line is significant (` M path` vs `M  path`), and losing it shifts
+  // line.slice(3) into the path itself. Filter blank lines instead.
   return (await git("status", "--porcelain"))
-    .trim()
     .split("\n")
-    .filter((l) => l && !l.startsWith("??"))
+    .filter((l) => l.trim().length > 0 && !l.startsWith("??"))
 }
 
 // Snapshot every file under the whitelist prefixes so a rejected iteration

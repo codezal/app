@@ -69,3 +69,4 @@ missing_translations.json
 # === Benchmark results (bench/run.ts, bench/optimize.ts outputs) ===
 bench/results/
 vendor/
+bench/obench-adapter/__pycache__/
