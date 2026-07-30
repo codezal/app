@@ -95,6 +95,9 @@ type UsageDelta = {
   reasoningTokens?: number
   costUsd: number
   lastInputTokens?: number
+  lastOutputTokens?: number
+  lastCacheReadTokens?: number
+  lastCacheWriteTokens?: number
   effectiveContextTokens?: number
   contextBreakdown?: ContextBreakdown
   countTurn?: boolean
@@ -1086,6 +1089,9 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
             costUsd: cur.costUsd + delta.costUsd,
             turns: cur.turns + (delta.countTurn === false ? 0 : 1),
             lastInputTokens: delta.lastInputTokens ?? delta.inputTokens,
+            lastOutputTokens: delta.lastOutputTokens ?? delta.outputTokens,
+            lastCacheReadTokens: delta.lastCacheReadTokens ?? delta.cacheReadTokens ?? 0,
+            lastCacheWriteTokens: delta.lastCacheWriteTokens ?? delta.cacheWriteTokens ?? 0,
             effectiveContextTokens: delta.effectiveContextTokens ?? cur.effectiveContextTokens,
             contextBreakdown: delta.contextBreakdown ?? cur.contextBreakdown,
           },

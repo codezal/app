@@ -558,37 +558,29 @@ export function makeRunStream(deps: RunStreamDeps) {
       const guardReserve = outputLimit && outputLimit > 0 ? outputLimit : 20_000
       const guardTrigger = Math.floor(Math.max(0, effCtxWindow - guardReserve) * 0.7)
 
-      const preCtxTokens = estimateMessagesTokens(outboundMessages)
-      // `preCtxTokens` is the honest "how full is the window" number: it counts
-      // everything we put on the wire, including reasoning and the cached
-      // prefix. The per-step provider `inputTokens` is only the *cache-miss*
-      // slice, so using it as the meter made the bar jump from this (large)
-      // value down to tens of K at step end — the "my context shrank / never
-      // fills on a 1M model" illusion the user kept hitting. Keep the meter on
-      // the pre-send estimate; step end only annotates the pruned badge.
-      const preBreakdown = buildContextBreakdown(system, tools, preCtxTokens)
-      useSessionsStore
-        .getState()
-        .setEffectiveContextTokensFor(sid, preCtxTokens, preBreakdown)
+      // pi-style context gauge (port of earendil-works/pi estimateContextTokens):
+      // usageBase = the model's last reported totalTokens (input + cacheRead +
+      // cacheWrite + output); trailing = chars/4 estimate of messages appended
+      // after the last assistant (the new user turn). First turn (no usage yet)
+      // falls back to the outbound estimate. We persist + show the gauge; the
+      // breakdown is derived from it so the composer slices always sum to it.
+      // Crucially, on a fresh turn usageBase still holds the previous step's full
+      // totalTokens, so the meter can NOT collapse to a small estimate the way the
+      // old pre-send-only number did (the 112K -> 32K drop the user kept seeing).
+      const sessUsage = useSessionsStore.getState().sessions[sid]?.usage
+      const usageBase = lastStepTotalTokens(sessUsage)
+      const trailing = usageBase > 0 ? trailingAfterLastAssistant(history) : 0
+      const gauge = usageBase > 0 ? usageBase + trailing : estimateMessagesTokens(outboundMessages)
+      const preCached = usageBase > 0 ? (sessUsage?.lastCacheReadTokens ?? 0) : 0
+      const preBreakdown = buildContextBreakdown(system, tools, gauge, preCached)
+      useSessionsStore.getState().setEffectiveContextTokensFor(sid, gauge, preBreakdown)
 
-      // Ground-truth context accounting: ask the SDK to record the exact
-      // messages sent on every step, then derive the popover breakdown from the
-      // provider-reported inputTokens instead of our pre-send estimate.
-      let lastStepEff: number | undefined
-      let lastStepBreakdown: ContextBreakdown | undefined
+      // Per-step ground truth: lastStepInput feeds the persisted lastInputTokens;
+      // lastStepPruned is set by prepareStep when the intra-turn pruner reclaims
+      // tool output and is folded into the meter's pruned badge. The gauge itself
+      // is pi-style totalTokens (see buildContextBreakdown + helpers below).
       let lastStepInput: number | undefined
-      // Cache hits served on the latest step (read from cache, not recomputed) and
-      // tool-output tokens the intra-turn pruner reclaimed on it. Both are folded
-      // into the meter so it reflects what the model actually saw, not the
-      // cache-miss shadow (which made the meter look like it "shrank" as the cache
-      // warmed up — see DB post-mortem: working history 3.1MB vs 41K cache-miss).
       let lastStepPruned = 0
-      let toolsJson = ""
-      try {
-        toolsJson = JSON.stringify(tools ?? {})
-      } catch {
-        toolsJson = ""
-      }
 
       const result = streamText({
         model,
@@ -596,42 +588,28 @@ export function makeRunStream(deps: RunStreamDeps) {
         messages: outboundMessages,
         include: { requestMessages: true },
         onStepEnd: (step) => {
-          const reqMsgs = step.request.messages
-          if (!reqMsgs || reqMsgs.length === 0) return
           const realInput = step.usage.inputTokens
           const stepCacheRead =
             step.usage.inputTokenDetails?.cacheReadTokens ??
             (step.usage as { cachedInputTokens?: number }).cachedInputTokens ??
             (step.usage as { promptCacheHitTokens?: number }).promptCacheHitTokens ??
             0
-          const { eff, breakdown } = breakdownFromStepRequest(
-            reqMsgs,
-            realInput,
-            toolsJson,
-            stepCacheRead,
-            lastStepPruned,
-          )
-          lastStepEff = eff
-          lastStepBreakdown = breakdown
-          lastStepInput = realInput
-          // Observable accounting: lets us tell, from the console, whether a small
-          // meter is a cache-miss shadow (cacheRead large) or real pruning
-          // (pruned large / req small). No more guessing at runtime.
+          const stepOutput = step.usage.outputTokens ?? 0
+          lastStepInput = realInput ?? undefined
+          // pi-style gauge for this step: totalTokens the model processed
+          // (cache-miss input + cache-read + output). Output is included because
+          // the assistant message lands in history and becomes part of the next
+          // request's prompt. Trailing is 0 — nothing follows a just-finished step.
+          const stepGauge = (realInput ?? 0) + stepCacheRead + stepOutput
           console.info(
-            `[ctx] step input=${realInput ?? "?"} cacheRead=${stepCacheRead} eff=${eff} ` +
-              `req≈${breakdown.system + breakdown.tools + breakdown.conversation} pruned=${lastStepPruned}`,
+            `[ctx] step input=${realInput ?? "?"} cacheRead=${stepCacheRead} output=${stepOutput} ` +
+              `gauge=${stepGauge} pruned=${lastStepPruned}`,
           )
-          // Keep the meter pinned to the pre-send estimate (reasoning + cached
-          // prefix included) so it never collapses to the cache-miss shadow
-          // when a step ends. Only the step's pruned-output badge is folded in
-          // here; cache hits are already inside preCtxTokens, so adding them
-          // again would double-count. `eff`/`breakdown` above stay for the log.
-          useSessionsStore
-            .getState()
-            .setEffectiveContextTokensFor(sid, preCtxTokens, {
-              ...preBreakdown,
-              pruned: lastStepPruned,
-            })
+          useSessionsStore.getState().setEffectiveContextTokensFor(
+            sid,
+            stepGauge,
+            buildContextBreakdown(system, tools, stepGauge, stepCacheRead, lastStepPruned),
+          )
         },
         // Local models can't reliably drive the multi-step agent loop (a 7B
         // spins on junk/empty tool steps), so run them as plain single-turn
@@ -689,9 +667,12 @@ export function makeRunStream(deps: RunStreamDeps) {
             }
             if (imgs.length) out.messages = [...base, ...imgs]
           }
-          useSessionsStore
-            .getState()
-            .setEffectiveContextTokensFor(sid, estimateMessagesTokens(out.messages ?? base))
+          // Do NOT overwrite the gauge here. prepareStep runs on every step of the
+          // multi-step loop; writing a raw estimateMessagesTokens() here collapsed
+          // the pi-style totalTokens gauge (set by turn-start/onStepEnd/turn-end)
+          // back to a small text estimate on every tool-calling turn — the exact
+          // "112K -> 32K drop" the user kept seeing. prunedTokens is already
+          // captured in lastStepPruned above and surfaced via onStepEnd's breakdown.
           return out
         },
         ...(Object.keys(providerOptions).length > 0
@@ -975,16 +956,16 @@ export function makeRunStream(deps: RunStreamDeps) {
       })
 
       const updatedSnap = useSessionsStore.getState().sessions[sid]
-      // Prefer the last step's provider-reported ground truth (set by
-      // onStepEnd); fall back to the local estimate only when the SDK gave us
-      // no request/usage data (e.g. providers that omit usage).
-      const effectiveTokens =
-        lastStepEff ??
-        (updatedSnap
-          ? estimateMessagesTokens(updatedSnap.modelMessages ?? [], system)
-          : 0)
-      const contextBreakdown =
-        lastStepBreakdown ?? buildContextBreakdown(system, tools, effectiveTokens)
+      // The gauge was written per-step by onStepEnd (pi-style totalTokens). For
+      // the final persisted snapshot, recompute it from the aggregate result.usage
+      // when present so it reflects the turn's last-step ground truth; otherwise
+      // keep whatever onStepEnd stored, falling back to a pure estimate only when
+      // the provider reported no usage at all.
+      let effectiveTokens =
+        updatedSnap?.usage?.effectiveContextTokens ??
+        estimateMessagesTokens(updatedSnap?.modelMessages ?? [], system)
+      let contextBreakdown =
+        updatedSnap?.usage?.contextBreakdown ?? buildContextBreakdown(system, tools, effectiveTokens)
 
       try {
         const usage = await result.usage
@@ -996,12 +977,29 @@ export function makeRunStream(deps: RunStreamDeps) {
             (usage as { cachedInputTokens?: number }).cachedInputTokens ??
             (usage as { promptCacheHitTokens?: number }).promptCacheHitTokens ??
             0
+          const cacheWrite =
+            (usage as { cacheWriteTokens?: number }).cacheWriteTokens ??
+            usage.inputTokenDetails?.cacheWriteTokens ??
+            0
           const reasoning =
             (usage as { reasoningTokens?: number }).reasoningTokens ?? 0
+          // pi-style final gauge: last-step totalTokens (cache-miss + cache-read +
+          // cache-write + output). Trailing is 0 at turn end (no pending user msg).
+          const finalGauge = (lastStepInput ?? input) + cacheRead + cacheWrite + output
+          const finalBreakdown = buildContextBreakdown(
+            system,
+            tools,
+            finalGauge,
+            cacheRead,
+            lastStepPruned,
+          )
+          effectiveTokens = finalGauge
+          contextBreakdown = finalBreakdown
           useSessionsStore.getState().addUsageFor(sid, {
             inputTokens: input,
             outputTokens: output,
             cacheReadTokens: cacheRead,
+            cacheWriteTokens: cacheWrite,
             reasoningTokens: reasoning,
             costUsd: costUsd(
               modelId,
@@ -1013,14 +1011,17 @@ export function makeRunStream(deps: RunStreamDeps) {
               ),
             ),
             lastInputTokens: lastStepInput ?? input,
-            effectiveContextTokens: effectiveTokens,
-            contextBreakdown,
+            lastOutputTokens: output,
+            lastCacheReadTokens: cacheRead,
+            lastCacheWriteTokens: cacheWrite,
+            effectiveContextTokens: finalGauge,
+            contextBreakdown: finalBreakdown,
           })
         } else {
           useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens, contextBreakdown)
         }
       } catch {
-        useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens)
+        useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens, contextBreakdown)
       }
 
       if (localStatsProvider) {
@@ -1532,18 +1533,58 @@ export function makeRunStream(deps: RunStreamDeps) {
   return runStream
 }
 
+// pi-style context gauge helpers (port of earendil-works/pi estimateContextTokens /
+// calculateContextTokens). The gauge the composer shows is derived as:
+//   gauge = usageBase + trailing
+// where usageBase = the model's last reported totalTokens (input + cacheRead +
+// cacheWrite + output) and trailing = a chars/4 estimate of the messages appended
+// after the last assistant (the new, not-yet-answered user turn). Because the base
+// is real provider usage, the gauge is immune to history-hygiene / strip / estimate
+// error shrinking it: it can only grow as the conversation grows. This is what
+// kills the "I sent a message and the context dropped from 112K to 32K" illusion —
+// on a fresh turn the base still holds the previous step's full totalTokens.
+
+type GaugeUsage = {
+  lastInputTokens?: number
+  lastOutputTokens?: number
+  lastCacheReadTokens?: number
+  lastCacheWriteTokens?: number
+}
+
+function lastStepTotalTokens(usage: GaugeUsage | undefined): number {
+  if (!usage) return 0
+  return (
+    (usage.lastInputTokens ?? 0) +
+    (usage.lastOutputTokens ?? 0) +
+    (usage.lastCacheReadTokens ?? 0) +
+    (usage.lastCacheWriteTokens ?? 0)
+  )
+}
+
+// chars/4 estimate of every message after the last assistant — i.e. the new user
+// turn that has not been answered yet. If there is no assistant yet (first turn)
+// the whole history is trailing.
+function trailingAfterLastAssistant(history: ModelMessage[]): number {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === "assistant") return estimateMessagesTokens(history.slice(i + 1))
+  }
+  return estimateMessagesTokens(history)
+}
+
 // Snapshot what currently fills the context window so the composer popover can
 // render a real per-category bar (system prompt / tool definitions /
-// conversation). `promptPlusConv` is `estimateMessagesTokens(...)` which already
-// folds the system prompt in, so the conversation slice is the remainder. Tools
-// are sent alongside the prompt but live outside the message list, so they are
-// measured separately from their JSON schema (execute fns are dropped by
-// stringify, which matches what the provider actually receives).
+// conversation / cache). `gauge` is the total context tokens (pi-style, cache +
+// output included); the conversation slice is whatever is left after subtracting
+// the independently-estimated system, tools and cached slices, so the four slices
+// always sum back to `gauge` (the composer adds system+tools+conversation+cached).
+// Tools live outside the message list, so they are measured from their JSON schema
+// (execute fns are dropped by stringify, matching what the provider receives).
 function buildContextBreakdown(
   system: string,
   tools: unknown,
-  promptPlusConv: number,
+  gauge: number,
   cached = 0,
+  pruned = 0,
 ): ContextBreakdown {
   const systemTokens = estimateTextTokens(system)
   let toolsTokens = 0
@@ -1552,41 +1593,12 @@ function buildContextBreakdown(
   } catch {
     // Non-serializable tool bag — leave the slice at 0 rather than crash.
   }
+  const conversation = Math.max(0, gauge - systemTokens - toolsTokens - cached)
   return {
     system: systemTokens,
     tools: toolsTokens,
-    conversation: Math.max(0, promptPlusConv - systemTokens),
+    conversation,
     cached,
+    pruned,
   }
-}
-
-// Per-step ground truth (AI SDK v7 `include.requestMessages`): split the
-// SDK-recorded request messages into system / conversation slices and take the
-// tools slice as the remainder of the provider-reported inputTokens — that
-// total also covers tool schemas and provider overhead, so the remainder is the
-// most honest "tool definitions" number we can show. `cacheRead` (prompt-cache
-// hits) is added on top so `eff` is the full context the model processed this
-// step, not just the cache-miss portion. Falls back to the schema-JSON estimate
-// when the provider reports no usage.
-function breakdownFromStepRequest(
-  reqMsgs: readonly ModelMessage[],
-  realInput: number | undefined,
-  toolsJson: string,
-  cacheRead = 0,
-  pruned = 0,
-): { eff: number; breakdown: ContextBreakdown } {
-  let system = 0
-  let conversation = 0
-  for (const m of reqMsgs) {
-    const t = estimateMessagesTokens([m])
-    if (m.role === "system") system += t
-    else conversation += t
-  }
-  const tools =
-    realInput != null
-      ? Math.max(0, realInput - system - conversation)
-      : estimateTextTokens(toolsJson)
-  const base = realInput ?? system + conversation + tools
-  const eff = base + cacheRead
-  return { eff, breakdown: { system, tools, conversation, cached: cacheRead, pruned } }
 }

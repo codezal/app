@@ -103,6 +103,14 @@ export type SessionUsage = {
   cacheWriteTokens?: number
   reasoningTokens?: number
   lastInputTokens?: number
+  // Last-step (NOT cumulative) usage components. Together with lastInputTokens
+  // these reconstruct the model's last reported totalTokens — the "usage base"
+  // of the pi-style context gauge (see run-stream). Kept per-step so the gauge
+  // can be re-derived as a pure function of (last usage + trailing messages) and
+  // never collapses to a cache-miss shadow on a fresh turn.
+  lastOutputTokens?: number
+  lastCacheReadTokens?: number
+  lastCacheWriteTokens?: number
   effectiveContextTokens?: number
   contextBreakdown?: ContextBreakdown
   costUsd: number
