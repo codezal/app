@@ -261,7 +261,6 @@ export function Composer({
   const model = useSessionsStore((s) => sess(s)?.model)
   const msgCount = useSessionsStore((s) => sess(s)?.messages.length ?? 0)
   const effectiveTok = useSessionsStore((s) => sess(s)?.usage?.effectiveContextTokens)
-  const ctxBreakdown = useSessionsStore((s) => sess(s)?.usage?.contextBreakdown)
   // Each session keeps its own half-typed draft (text + pasted images/pdfs/
   // refs). The Composer is a single instance that survives session switches,
   // so without this the same input leaked into every chat. `composerId` is the
@@ -285,18 +284,7 @@ export function Composer({
     undoIdx.current = 0
     prevComposerId.current = composerId
   }
-  const [ctxOpen, setCtxOpen] = useState(false)
   const [ctxHover, setCtxHover] = useState(false)
-  const ctxRef = useRef<HTMLDivElement | null>(null)
-  // Close the Context Usage popover on outside click.
-  useEffect(() => {
-    if (!ctxOpen) return
-    function onDoc(e: MouseEvent) {
-      if (ctxRef.current && !ctxRef.current.contains(e.target as Node)) setCtxOpen(false)
-    }
-    document.addEventListener("mousedown", onDoc)
-    return () => document.removeEventListener("mousedown", onDoc)
-  }, [ctxOpen])
   // Persist the current draft for this composer identity on every change so a
   // later switch back to this session restores it.
   useEffect(() => {
@@ -996,18 +984,10 @@ export function Composer({
   const metaWs = hasActive ? workspacePath : settings.defaultWorkspacePath
   const metaPct =
     contextCapValue > 0 ? Math.min(100, Math.round((tokenCount / contextCapValue) * 100)) : 0
-  // Footer + popover show the full context picture (tool definitions included),
-  // matching the per-category breakdown; fall back to the message-only estimate
-  // until a stream has produced a breakdown.
-  const ctxTotal = ctxBreakdown
-    ? ctxBreakdown.system +
-      ctxBreakdown.tools +
-      ctxBreakdown.conversation +
-      // Cache reads ARE in the window (the model holds them), so they count toward
-      // the filled bar/percentage. Pruned output is NOT (it was reclaimed), so it is
-      // listed for transparency but excluded from the total and the bar.
-      (ctxBreakdown.cached ?? 0)
-    : tokenCount
+  // The meter shows the model's own reported context size (effectiveContextTokens,
+  // falling back to the last reported input tokens). No per-category breakdown —
+  // the model-reported number is the single source of truth shown to the user.
+  const ctxTotal = tokenCount
   const ctxPct =
     contextCapValue > 0 ? Math.min(100, Math.round((ctxTotal / contextCapValue) * 100)) : metaPct
   const metaDeprecated =
@@ -1569,8 +1549,8 @@ export function Composer({
                 <span aria-hidden>⚠</span>
               </span>
             )}
-            <div ref={ctxRef} className="relative">
-              {ctxHover && !ctxOpen && (
+            <div className="relative">
+              {ctxHover && (
                 <div className="pointer-events-none absolute bottom-[30px] right-0 z-50 w-max rounded-lg border border-codezal-strong bg-codezal-panel px-2.5 py-1.5 text-right shadow-lg">
                   <div className="text-sm font-medium text-codezal-text">
                     {ctxPct}% {t("composer.ctxUsed")}
@@ -1582,12 +1562,10 @@ export function Composer({
               )}
               <button
                 type="button"
-                onClick={() => setCtxOpen((v) => !v)}
                 onMouseEnter={() => setCtxHover(true)}
                 onMouseLeave={() => setCtxHover(false)}
-                aria-haspopup="dialog"
-                aria-expanded={ctxOpen}
-                title={t("composer.contextUsedTitle")}
+                onFocus={() => setCtxHover(true)}
+                onBlur={() => setCtxHover(false)}
                 aria-label={`${ctxPct}% ${t("composer.ctxUsed")}`}
                 className={cn(
                   "flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-codezal-panel-2",
@@ -1613,15 +1591,6 @@ export function Composer({
                   />
                 </svg>
               </button>
-              {ctxOpen && (
-                <ContextUsagePopover
-                  pct={ctxPct}
-                  used={ctxTotal}
-                  cap={contextCapValue}
-                  breakdown={ctxBreakdown}
-                  onClose={() => setCtxOpen(false)}
-                />
-              )}
             </div>
             {costUsd != null && costUsd > 0 && (
               <span className="hidden text-codezal-mute md:inline">${costUsd.toFixed(4)}</span>
@@ -2610,117 +2579,4 @@ function formatK(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + "M"
   if (n >= 1000) return (n / 1000).toFixed(1) + "K"
   return String(n)
-}
-
-// Cursor-style "Context Usage" popover: a stacked segment bar plus a per-category
-// list, all from the real per-stream breakdown (system prompt / tool definitions
-// / conversation). Segment widths are relative to the model context cap so the
-// filled portion of the bar equals the used percentage.
-function ContextUsagePopover({
-  pct,
-  used,
-  cap,
-  breakdown,
-  onClose,
-}: {
-  pct: number
-  used: number
-  cap: number
-  breakdown:
-    | {
-        system: number
-        tools: number
-        conversation: number
-        cached?: number
-        pruned?: number
-      }
-    | undefined
-  onClose: () => void
-}) {
-  const t = useT()
-  const rows = [
-    { key: "system", color: "#a1a1aa", label: t("composer.ctxSystem"), value: breakdown?.system ?? 0 },
-    { key: "tools", color: "#a78bfa", label: t("composer.ctxTools"), value: breakdown?.tools ?? 0 },
-    {
-      key: "conversation",
-      color: "#fb7185",
-      label: t("composer.ctxConversation"),
-      value: breakdown?.conversation ?? 0,
-    },
-    // Cache hits: real context the model saw (served from cache). Showing this is
-    // what fixes the "my context shrank to 40K" illusion — the meter now reflects
-    // cache-miss + cache-read, i.e. the full prompt the model processed.
-    ...((breakdown?.cached ?? 0) > 0
-      ? [
-          {
-            key: "cached",
-            color: "#34d399",
-            label: t("composer.ctxCached"),
-            value: breakdown!.cached ?? 0,
-          },
-        ]
-      : []),
-    // Pruned output: reclaimed this step, so the model did NOT see it. Listed (not
-    // added to the bar) so a sudden meter drop is explainable instead of alarming.
-    ...((breakdown?.pruned ?? 0) > 0
-      ? [
-          {
-            key: "pruned",
-            color: "#f59e0b",
-            label: t("composer.ctxPruned"),
-            value: breakdown!.pruned ?? 0,
-          },
-        ]
-      : []),
-  ]
-  return (
-    <div className="absolute bottom-[30px] right-0 z-50 w-[420px] rounded-xl border border-codezal-strong bg-codezal-panel p-3 shadow-xl">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-medium text-codezal-text">{t("composer.contextUsage")}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t("common.close")}
-          className="flex h-5 w-5 items-center justify-center rounded text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="mb-1.5 flex items-center justify-between text-xs tabular-nums">
-        <span className="text-codezal-mute">
-          {pct}% {t("composer.ctxFull")}
-        </span>
-        <span className="text-codezal-mute">
-          ≈{formatK(used)} / {formatK(cap)} {t("composer.tokens")}
-        </span>
-      </div>
-      <div className="mb-3 flex h-1.5 w-full overflow-hidden rounded-full bg-codezal-hair">
-        {cap > 0 &&
-          // Pruned output is not in the window anymore, so it must not paint a
-          // segment — only the slices the model actually holds fill the bar.
-          rows
-            .filter((r) => r.key !== "pruned")
-            .map((r) => (
-              <span
-                key={r.key}
-                className="h-full"
-                style={{ width: `${(r.value / cap) * 100}%`, backgroundColor: r.color }}
-              />
-            ))}
-      </div>
-      <div className="flex flex-col gap-1.5">
-        {rows.map((r) => (
-          <div key={r.key} className="flex items-center gap-2 text-sm">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ backgroundColor: r.color }}
-              aria-hidden
-            />
-            <span className="flex-1 truncate text-codezal-dim">{r.label}</span>
-            <span className="tabular-nums text-codezal-text">{formatK(r.value)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
 }

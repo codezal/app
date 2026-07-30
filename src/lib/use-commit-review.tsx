@@ -27,6 +27,7 @@ import { hasCritical, reviewDiff, type ReviewResult } from "@/lib/git-review"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { useSessionsStore } from "@/store/sessions"
 import { useSettingsStore } from "@/store/settings"
+import { buildFixPrompt, pickTargetSession } from "@/lib/review-fix"
 import { useT } from "@/lib/i18n/useT"
 
 export type { GateMode, GateVerdict }
@@ -103,6 +104,32 @@ export function useCommitReview(workspace: string | undefined): {
     })
   }
 
+  // Hand the findings to the chat so the model fixes them. The commit is aborted
+  // (the gate resolves "abort"); App.tsx listens for the event and runs the
+  // prompt in the producing session — or a fresh one when none matches, so an
+  // unrelated chat is never touched.
+  const fixWithAI = () => {
+    if (state?.phase !== "results") return
+    const { result } = state
+    const changedFiles = Array.from(
+      new Set([
+        ...(result.files ?? []),
+        ...result.findings.map((f) => f.file).filter((x): x is string => !!x),
+      ]),
+    )
+    const targetId = pickTargetSession(
+      useSessionsStore.getState().sessions,
+      workspace ?? "",
+      changedFiles,
+    )
+    window.dispatchEvent(
+      new CustomEvent("codezal:fix-review-findings", {
+        detail: { prompt: buildFixPrompt(result), targetSessionId: targetId, workspace },
+      }),
+    )
+    finish("abort")
+  }
+
   const cancelReviewing = () => {
     abortedRef.current = true
     setState(null)
@@ -124,6 +151,7 @@ export function useCommitReview(workspace: string | undefined): {
         blocking={state.blocking}
         onProceed={() => finish("proceed")}
         onAbort={() => finish("abort")}
+        onFixWithAI={fixWithAI}
       />
     )
   }

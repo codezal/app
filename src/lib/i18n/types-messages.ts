@@ -873,6 +873,10 @@ export type Messages = {
     continue?: string
     cancel?: string
     blockedHint?: string
+    fixWithAI?: string
+    proceedWithFindingsCommit?: string
+    proceedWithFindingsPush?: string
+    proceedHint?: string
     severityCritical?: string
     severityWarning?: string
     severityInfo?: string

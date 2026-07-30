@@ -32,6 +32,10 @@ export type ReviewResult = {
   // True when there was nothing to review (empty diff) — callers treat this as
   // a clean pass without bothering the model.
   skipped?: boolean
+  // Repo-relative paths touched by the reviewed diff (parsed from the diff
+  // headers, not the model). Used to route an "AI fix" back to the session that
+  // produced the change. Always present (empty array when nothing to review).
+  files?: string[]
 }
 
 const SYSTEM =
@@ -113,6 +117,53 @@ export function hasCritical(result: ReviewResult): boolean {
   return result.findings.some((f) => f.severity === "critical")
 }
 
+// Reverse git's C-style quoting of a path (used when a path contains spaces or
+// unusual chars): strip the surrounding quotes and unescape \n \t \r \\ \".
+function unquoteGitPath(s: string): string {
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    return s.slice(1, -1).replace(/\\(.)/g, (_m, c: string) => {
+      if (c === "n") return "\n"
+      if (c === "t") return "\t"
+      if (c === "r") return "\r"
+      return c
+    })
+  }
+  return s
+}
+
+// Repo-relative paths a diff touches, parsed purely from the `diff --git`
+// headers (the b/ side = the resulting path, correct for renames too). Never
+// throws; malformed lines are skipped. Forward-slash normalized so the result
+// can be matched against tool-call paths. Exported for unit testing.
+export function diffFiles(diff: string): string[] {
+  const files: string[] = []
+  const seen = new Set<string>()
+  const re = /^diff --git (.+)$/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(diff)) !== null) {
+    const rest = m[1]
+    let bPath: string | null = null
+    if (rest.startsWith('"')) {
+      // Quoted form: "a/..." "b/..."
+      const firstEnd = rest.indexOf('"', 1)
+      const secondStart = firstEnd === -1 ? -1 : rest.indexOf('"', firstEnd + 1)
+      const secondEnd = secondStart === -1 ? -1 : rest.indexOf('"', secondStart + 1)
+      if (secondEnd !== -1) bPath = unquoteGitPath(rest.slice(secondStart, secondEnd + 1))
+    } else {
+      const idx = rest.indexOf(" b/")
+      if (idx !== -1) bPath = rest.slice(idx + 3)
+    }
+    if (bPath) {
+      const norm = bPath.replace(/^b\//, "").replace(/\\/g, "/")
+      if (norm && !seen.has(norm)) {
+        seen.add(norm)
+        files.push(norm)
+      }
+    }
+  }
+  return files
+}
+
 // Review the staged diff (mode "commit") or the commits about to be pushed
 // (mode "push"). Returns a clean, skipped result when there is nothing to review
 // or no model can be built — the gate treats both as "proceed".
@@ -127,8 +178,9 @@ export async function reviewDiff(opts: {
     opts.mode === "push"
       ? await gitDiffAhead(opts.workspace)
       : (await gitDiffStaged(opts.workspace)) || (await gitDiffAll(opts.workspace))
+  const files = diffFiles(diff)
   if (!diff.trim() || diff.startsWith("# git diff")) {
-    return { findings: [], summary: "", skipped: true }
+    return { findings: [], summary: "", skipped: true, files }
   }
 
   const model = await buildLanguageModel({
@@ -153,5 +205,5 @@ export async function reviewDiff(opts: {
     stopWhen: isStepCount(1),
   })
 
-  return parseReviewJson(result.text ?? "")
+  return { ...parseReviewJson(result.text ?? ""), files }
 }

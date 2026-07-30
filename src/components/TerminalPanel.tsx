@@ -301,15 +301,23 @@ function getOrCreateLiveTerm(
   // selection — which is empty — so Cmd+C appears to do nothing. Handle the
   // shortcuts here: Cmd+C/V on macOS, Ctrl+Shift+C/V on Windows/Linux (plain
   // Ctrl+C must keep reaching the PTY as SIGINT).
+  // IMPORTANT: e.preventDefault() is required on the paste branch. `return
+  // false` only stops xterm.js from processing the keystroke; it does NOT stop
+  // the browser from firing its native `paste` event on xterm's hidden
+  // textarea. Without preventDefault the clipboard is pasted twice — once by
+  // term.paste() below and once by xterm's native paste handler. Do not remove
+  // these preventDefault calls or double-paste will regress.
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== "keydown") return true
     const key = e.key.toLowerCase()
     const mod = e.metaKey || (e.ctrlKey && e.shiftKey)
     if (mod && key === "c" && term.hasSelection()) {
+      e.preventDefault()
       void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
       return false
     }
     if (mod && key === "v") {
+      e.preventDefault()
       void navigator.clipboard
         .readText()
         .then((text) => {

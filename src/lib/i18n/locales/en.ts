@@ -878,6 +878,11 @@ const en: Messages = {
     continue: "Continue",
     cancel: "Cancel",
     blockedHint: "Critical findings block this action. Review them, or override to continue.",
+    fixWithAI: "Fix with AI",
+    proceedWithFindingsCommit: "Commit with findings",
+    proceedWithFindingsPush: "Push with findings",
+    proceedHint:
+      "Proceeding will commit these findings unresolved. Use “Fix with AI” or fix them by hand first.",
     severityCritical: "Critical",
     severityWarning: "Warning",
     severityInfo: "Info",

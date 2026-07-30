@@ -3,7 +3,7 @@
 // The driving hook lives in lib/use-commit-review.tsx (kept separate so this file
 // only exports components, as react-refresh requires). See lib/git-review.ts for
 // the review engine itself.
-import { AlertTriangle, CheckCircle2, Info, Loader2, ShieldAlert } from "@/lib/icons"
+import { AlertTriangle, CheckCircle2, Info, Loader2, ShieldAlert, Sparkles } from "@/lib/icons"
 import { Dialog } from "@/components/Dialog"
 import type {
   ReviewCategory,
@@ -66,12 +66,14 @@ export function ReviewResultsDialog({
   blocking,
   onProceed,
   onAbort,
+  onFixWithAI,
 }: {
   mode: GateMode
   result: ReviewResult
   blocking: boolean
   onProceed: () => void
   onAbort: () => void
+  onFixWithAI?: () => void
 }) {
   const t = useT()
   const severityLabel: Record<ReviewSeverity, string> = {
@@ -87,11 +89,20 @@ export function ReviewResultsDialog({
     style: t("codeReview.categoryStyle"),
   }
   const title = mode === "commit" ? t("codeReview.titleCommit") : t("codeReview.titlePush")
+  // A warning/critical finding the user is about to ship past — the proceed
+  // button must make clear the commit will include unresolved findings.
+  const hasActionable = result.findings.some(
+    (f) => f.severity === "critical" || f.severity === "warning",
+  )
   const proceedLabel = blocking
     ? mode === "commit"
       ? t("codeReview.commitAnyway")
       : t("codeReview.pushAnyway")
-    : t("codeReview.continue")
+    : hasActionable
+      ? mode === "commit"
+        ? t("codeReview.proceedWithFindingsCommit")
+        : t("codeReview.proceedWithFindingsPush")
+      : t("codeReview.continue")
 
   return (
     <Dialog
@@ -133,6 +144,11 @@ export function ReviewResultsDialog({
             {t("codeReview.blockedHint")}
           </p>
         )}
+        {hasActionable && !blocking && (
+          <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+            {t("codeReview.proceedHint")}
+          </p>
+        )}
         <ul className="flex flex-col gap-2">
           {result.findings.map((f: ReviewFinding, i: number) => (
             <li
@@ -160,24 +176,40 @@ export function ReviewResultsDialog({
         </ul>
       </div>
 
-      <div className="flex justify-end gap-2 border-t border-codezal px-4 py-3">
-        <button
-          type="button"
-          onClick={onAbort}
-          className="rounded-md px-3 py-1.5 text-sm text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
-        >
-          {t("codeReview.cancel")}
-        </button>
-        <button
-          type="button"
-          onClick={onProceed}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90",
-            blocking ? "bg-destructive text-white" : "bg-codezal-text text-codezal-bg",
-          )}
-        >
-          {proceedLabel}
-        </button>
+      <div className="flex items-center gap-2 border-t border-codezal px-4 py-3">
+        {onFixWithAI && (
+          <button
+            type="button"
+            onClick={onFixWithAI}
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-codezal-accent transition-colors hover:bg-codezal-accent/10"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden />
+            {t("codeReview.fixWithAI")}
+          </button>
+        )}
+        <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={onAbort}
+            className="rounded-md px-3 py-1.5 text-sm text-codezal-dim transition-colors hover:bg-codezal-panel-2 hover:text-codezal-text"
+          >
+            {t("codeReview.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={onProceed}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90",
+              blocking
+                ? "bg-destructive text-white"
+                : hasActionable
+                  ? "bg-amber-500 text-black"
+                  : "bg-codezal-text text-codezal-bg",
+            )}
+          >
+            {proceedLabel}
+          </button>
+        </div>
       </div>
     </Dialog>
   )

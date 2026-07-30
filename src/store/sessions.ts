@@ -49,7 +49,7 @@ import { createId } from "@/lib/id"
 import { t as tStatic } from "@/lib/i18n"
 import type { ModelMessage } from "ai"
 import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
-import type { AgentMode, ContextBreakdown, Message, Part, ProjectMeta, Session, SessionGoal, SessionMeta, SideChatMessage, SideChatThread, TodoItem } from "./types"
+import type { AgentMode, Message, Part, ProjectMeta, Session, SessionGoal, SessionMeta, SideChatMessage, SideChatThread, TodoItem } from "./types"
 
 
 function makeEmptySession(
@@ -99,7 +99,6 @@ type UsageDelta = {
   lastCacheReadTokens?: number
   lastCacheWriteTokens?: number
   effectiveContextTokens?: number
-  contextBreakdown?: ContextBreakdown
   countTurn?: boolean
 }
 
@@ -217,7 +216,7 @@ type SessionsState = {
   replaceModelMessagesFor: (sessionId: string, msgs: ModelMessage[]) => void
 
   setEffectiveContextTokens: (n: number) => void
-  setEffectiveContextTokensFor: (sessionId: string, n: number, breakdown?: ContextBreakdown) => void
+  setEffectiveContextTokensFor: (sessionId: string, n: number) => void
 
   forkAt: (messageId: string) => Promise<string>
 
@@ -1093,7 +1092,6 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
             lastCacheReadTokens: delta.lastCacheReadTokens ?? delta.cacheReadTokens ?? 0,
             lastCacheWriteTokens: delta.lastCacheWriteTokens ?? delta.cacheWriteTokens ?? 0,
             effectiveContextTokens: delta.effectiveContextTokens ?? cur.effectiveContextTokens,
-            contextBreakdown: delta.contextBreakdown ?? cur.contextBreakdown,
           },
           updatedAt: Date.now(),
         }
@@ -1110,7 +1108,7 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
       if (id) get().replaceModelMessagesFor(id, msgs)
     },
 
-    setEffectiveContextTokensFor: (sessionId, n, breakdown) =>
+    setEffectiveContextTokensFor: (sessionId, n) =>
       mut(sessionId, (s) => {
         const cur = s.usage ?? {
           inputTokens: 0,
@@ -1126,7 +1124,6 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
           usage: {
             ...cur,
             effectiveContextTokens: n,
-            ...(breakdown ? { contextBreakdown: breakdown } : {}),
           },
           updatedAt: Date.now(),
         }

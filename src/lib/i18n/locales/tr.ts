@@ -819,6 +819,11 @@ const tr: Messages = {
     continue: "Devam et",
     cancel: "Vazgeç",
     blockedHint: "Kritik bulgular bu işlemi engelliyor. İnceleyin ya da devam etmek için override edin.",
+    fixWithAI: "AI ile düzelt",
+    proceedWithFindingsCommit: "Bulgularla commit et",
+    proceedWithFindingsPush: "Bulgularla push et",
+    proceedHint:
+      "Devam edersen bu bulgular düzeltilmeden commit edilecek. Önce “AI ile düzelt”i kullan veya elle düzelt.",
     severityCritical: "Kritik",
     severityWarning: "Uyarı",
     severityInfo: "Bilgi",

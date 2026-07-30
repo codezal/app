@@ -906,7 +906,15 @@ export default function App() {
       ),
       output: modelDetail(compactCatalog, snap.provider, snap.model)?.limit?.output,
     }
-    const eff = estimateMessagesTokens(msgs)
+    // Compact decision follows the SAME number the gauge shows the user — the
+    // model's last reported context size (pi-style totalTokens, cacheRead
+    // included, because cached tokens really do occupy the context window). The
+    // old code used estimateMessagesTokens() here, a cache-blind 4-char/token
+    // guess that read the context as far emptier than the model saw it, so the
+    // gauge could read "full" while compaction refused to fire — the overflow
+    // the user kept hitting. Heuristic stays only as a cold-start fallback for
+    // the very first turn / a reloaded session whose gauge isn't populated yet.
+    const eff = snap.usage?.effectiveContextTokens || estimateMessagesTokens(msgs)
     if (!force && !shouldCompact(eff, snap.model, settings.autoCompact, limits)) {
       return false
     }
@@ -915,9 +923,14 @@ export default function App() {
     const { messages: pruned, prunedTokens } = pruneToolOutputs(msgs)
     if (prunedTokens > 0) {
       working = pruned
-      const afterPrune = estimateMessagesTokens(pruned)
+      // afterPrune drives ONLY the compact decision. We deliberately do NOT
+      // overwrite the persisted gauge here: the model's reported gauge still
+      // includes prefix-cache reads that pruning can't invalidate until the
+      // next step re-evaluates the cache, so stamping a heuristic guess would
+      // recreate the fake drop-then-reinflate flicker the gauge exists to
+      // avoid. The next step's onStepEnd writes the true post-prune size.
+      const afterPrune = Math.max(0, eff - prunedTokens)
       useSessionsStore.getState().replaceModelMessagesFor(sid, pruned)
-      useSessionsStore.getState().setEffectiveContextTokensFor(sid, afterPrune)
       if (!force && !shouldCompact(afterPrune, snap.model, settings.autoCompact, limits)) {
         console.info(`[compact] prune yeterli: ${eff} → ${afterPrune} (~${prunedTokens} tok budandı)`)
         // Surface the prune — previously this path was silent, so old tool
@@ -1118,6 +1131,41 @@ export default function App() {
     }
     window.addEventListener("codezal:terminal-to-ai", onTermAi as EventListener)
     return () => window.removeEventListener("codezal:terminal-to-ai", onTermAi as EventListener)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Pre-commit review "Fix with AI" → run the fix prompt in the session that
+  // produced the change (open it first), or a brand-new session when no session
+  // overlaps the diff, so an unrelated chat is never mutated.
+  useEffect(() => {
+    const onFix = (e: Event) => {
+      const d = (
+        e as CustomEvent<{
+          prompt?: string
+          targetSessionId?: string | null
+          workspace?: string
+        }>
+      ).detail
+      if (!d?.prompt) return
+      setPanelMode(null)
+      void (async () => {
+        const store = useSessionsStore.getState()
+        if (d.targetSessionId && store.sessions[d.targetSessionId]) {
+          await store.open(d.targetSessionId)
+        } else {
+          const cur = store.active
+          await create(
+            cur?.provider ?? settings.defaultProvider,
+            cur?.model ?? settings.defaultModel,
+            d.workspace ?? settings.defaultWorkspacePath,
+          )
+        }
+        await onSend(d.prompt as string)
+      })()
+    }
+    window.addEventListener("codezal:fix-review-findings", onFix as EventListener)
+    return () =>
+      window.removeEventListener("codezal:fix-review-findings", onFix as EventListener)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
