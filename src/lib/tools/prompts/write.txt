@@ -7,3 +7,4 @@ Usage:
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if the user explicitly requests it.
 - Only write emojis to a file if the user explicitly requests it.
 - Parent directories are created automatically when they do not exist.
+- Compose the complete final content before calling: write the whole file in one call. Do not write a skeleton or partial version and then flesh it out with follow-up edit_file calls feature by feature — incremental authoring multiplies round trips. If several new files are needed, write each one fully, back to back.
