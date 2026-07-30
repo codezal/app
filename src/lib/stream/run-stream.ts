@@ -559,13 +559,17 @@ export function makeRunStream(deps: RunStreamDeps) {
       const guardTrigger = Math.floor(Math.max(0, effCtxWindow - guardReserve) * 0.7)
 
       const preCtxTokens = estimateMessagesTokens(outboundMessages)
+      // `preCtxTokens` is the honest "how full is the window" number: it counts
+      // everything we put on the wire, including reasoning and the cached
+      // prefix. The per-step provider `inputTokens` is only the *cache-miss*
+      // slice, so using it as the meter made the bar jump from this (large)
+      // value down to tens of K at step end — the "my context shrank / never
+      // fills on a 1M model" illusion the user kept hitting. Keep the meter on
+      // the pre-send estimate; step end only annotates the pruned badge.
+      const preBreakdown = buildContextBreakdown(system, tools, preCtxTokens)
       useSessionsStore
         .getState()
-        .setEffectiveContextTokensFor(
-          sid,
-          preCtxTokens,
-          buildContextBreakdown(system, tools, preCtxTokens),
-        )
+        .setEffectiveContextTokensFor(sid, preCtxTokens, preBreakdown)
 
       // Ground-truth context accounting: ask the SDK to record the exact
       // messages sent on every step, then derive the popover breakdown from the
@@ -617,7 +621,17 @@ export function makeRunStream(deps: RunStreamDeps) {
             `[ctx] step input=${realInput ?? "?"} cacheRead=${stepCacheRead} eff=${eff} ` +
               `req≈${breakdown.system + breakdown.tools + breakdown.conversation} pruned=${lastStepPruned}`,
           )
-          useSessionsStore.getState().setEffectiveContextTokensFor(sid, eff, breakdown)
+          // Keep the meter pinned to the pre-send estimate (reasoning + cached
+          // prefix included) so it never collapses to the cache-miss shadow
+          // when a step ends. Only the step's pruned-output badge is folded in
+          // here; cache hits are already inside preCtxTokens, so adding them
+          // again would double-count. `eff`/`breakdown` above stay for the log.
+          useSessionsStore
+            .getState()
+            .setEffectiveContextTokensFor(sid, preCtxTokens, {
+              ...preBreakdown,
+              pruned: lastStepPruned,
+            })
         },
         // Local models can't reliably drive the multi-step agent loop (a 7B
         // spins on junk/empty tool steps), so run them as plain single-turn
