@@ -66,7 +66,10 @@ function parseArgs(argv: string[]): ObenchArgs {
     model: process.env.OBENCH_MODEL ?? "qwen3.8-max",
     tasks: DEFAULT_TASKS,
     trials: 1,
-    timeout: 600,
+    // Agent wall-clock cap per task. 600s starved webcore (a 7-part framework
+    // build needs ~10-25 min) and made every suite cap at 7/8 — the optimizer
+    // kept proposing prompt fixes for what was purely a time budget problem.
+    timeout: 1800,
     maxIterations: 10,
     dryRun: false,
     allowSystemPrompt: false,
