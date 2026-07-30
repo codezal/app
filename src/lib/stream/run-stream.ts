@@ -569,9 +569,29 @@ export function makeRunStream(deps: RunStreamDeps) {
       // old pre-send-only number did (the 112K -> 32K drop the user kept seeing).
       const sessUsage = useSessionsStore.getState().sessions[sid]?.usage
       const usageBase = lastStepTotalTokens(sessUsage)
-      const trailing = usageBase > 0 ? trailingAfterLastAssistant(history) : 0
-      const gauge = usageBase > 0 ? usageBase + trailing : estimateMessagesTokens(outboundMessages)
-      const preCached = usageBase > 0 ? (sessUsage?.lastCacheReadTokens ?? 0) : 0
+      const trailing = trailingAfterLastAssistant(history)
+      // usageBase > 0  -> pi-style totalTokens + trailing (a step has reported).
+      // usageBase == 0 but a gauge is already persisted (typical right after an
+      //   app reload / DMG install, before the first step reports usage, or on a
+      //   resumed session whose last* fields aren't populated yet): KEEP that
+      //   persisted gauge and just add the new user turn's trailing. The old code
+      //   fell through to estimateMessagesTokens() here, a cache-blind text guess
+      //   that dropped the meter from ~124K to ~62K the instant a new turn opened
+      //   (the "124K -> 62K drop" the user kept seeing). The persisted gauge already
+      //   includes cacheRead, so the green "Önbellek (okunan)" slice survives too.
+      // only on the very first turn ever (no persisted gauge at all) do we fall
+      //   back to the pure estimate.
+      const persistedGauge = sessUsage?.effectiveContextTokens ?? 0
+      const gauge =
+        usageBase > 0
+          ? usageBase + trailing
+          : persistedGauge > 0
+            ? persistedGauge + trailing
+            : estimateMessagesTokens(outboundMessages)
+      const preCached =
+        usageBase > 0
+          ? (sessUsage?.lastCacheReadTokens ?? 0)
+          : (sessUsage?.contextBreakdown?.cached ?? 0)
       const preBreakdown = buildContextBreakdown(system, tools, gauge, preCached)
       useSessionsStore.getState().setEffectiveContextTokensFor(sid, gauge, preBreakdown)
 
