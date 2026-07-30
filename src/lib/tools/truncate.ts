@@ -10,15 +10,22 @@ import {
   writeTextFile,
 } from "@tauri-apps/plugin-fs"
 import { useSettingsStore } from "@/store/settings"
+import { estimateTextTokens } from "@/lib/tokens"
 
 export const DEFAULT_MAX_LINES = 2000
 export const DEFAULT_MAX_BYTES = 50 * 1024
+// Token-based ceiling (~10k tokens) so a single tool result can't blow past the
+// model's working memory even when the byte/line limits would allow more (e.g.
+// dense, low-byte-per-token output). Kept as a hard default; callers can raise
+// it per-call via TruncateOptions.maxTokens.
+export const DEFAULT_MAX_TOKENS = 10_000
 const TOOL_OUTPUT_DIR = "tool-output"
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 export type TruncateOptions = {
   maxLines?: number
   maxBytes?: number
+  maxTokens?: number
   direction?: "head" | "tail" | "middle"
 }
 
@@ -44,11 +51,12 @@ async function archiveOutput(text: string): Promise<string> {
   return filename
 }
 
-function getLimits(opts: TruncateOptions): { maxLines: number; maxBytes: number } {
+function getLimits(opts: TruncateOptions): { maxLines: number; maxBytes: number; maxTokens: number } {
   const cfg = useSettingsStore.getState().settings.toolOutput
   return {
     maxLines: opts.maxLines ?? cfg?.maxLines ?? DEFAULT_MAX_LINES,
     maxBytes: opts.maxBytes ?? cfg?.maxBytes ?? DEFAULT_MAX_BYTES,
+    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
   }
 }
 
@@ -57,37 +65,50 @@ function getLimits(opts: TruncateOptions): { maxLines: number; maxBytes: number 
  * Returns the full text unchanged when within limits.
  * On truncation: returns preview + "archived at <path>" hint for the LLM.
  * direction="head" (default) shows the top; "tail" shows the bottom.
+ *
+ * Three independent ceilings are enforced — lines, bytes and tokens — and the
+ * first one to trip wins. The token ceiling keeps dense output from overflowing
+ * the model's context even when it stays under the byte/line limits.
  */
 export async function truncateOutput(text: string, opts: TruncateOptions = {}): Promise<TruncateResult> {
-  const { maxLines, maxBytes } = getLimits(opts)
+  const { maxLines, maxBytes, maxTokens } = getLimits(opts)
   const direction = opts.direction ?? "head"
   const enc = new TextEncoder()
   const lines = text.split("\n")
   const totalBytes = enc.encode(text).length
+  const totalTokens = estimateTextTokens(text)
 
-  if (lines.length <= maxLines && totalBytes <= maxBytes) {
+  if (lines.length <= maxLines && totalBytes <= maxBytes && totalTokens <= maxTokens) {
     return { content: text, truncated: false }
   }
 
   if (direction === "middle") {
     const headBudgetBytes = Math.floor(maxBytes * 0.6)
     const headBudgetLines = Math.floor(maxLines * 0.6)
+    const headBudgetTokens = Math.floor(maxTokens * 0.6)
     const head: string[] = []
     let hb = 0
+    let ht = 0
     for (let i = 0; i < lines.length && head.length < headBudgetLines; i++) {
       const size = enc.encode(lines[i]).length + (i > 0 ? 1 : 0)
-      if (hb + size > headBudgetBytes) break
+      const tok = estimateTextTokens(lines[i])
+      if (hb + size > headBudgetBytes || ht + tok > headBudgetTokens) break
       head.push(lines[i])
       hb += size
+      ht += tok
     }
     const tail: string[] = []
     let tb = 0
+    let tt = 0
     const tailBudgetBytes = maxBytes - hb
+    const tailBudgetTokens = maxTokens - ht
     for (let i = lines.length - 1; i >= head.length && tail.length < maxLines - head.length; i--) {
       const size = enc.encode(lines[i]).length + 1
-      if (tb + size > tailBudgetBytes && tail.length > 0) break
+      const tok = estimateTextTokens(lines[i])
+      if ((tb + size > tailBudgetBytes || tt + tok > tailBudgetTokens) && tail.length > 0) break
       tail.unshift(lines[i])
       tb += size
+      tt += tok
     }
     const removed = lines.length - head.length - tail.length
     const outputPath = await archiveOutput(text)
@@ -100,26 +121,38 @@ export async function truncateOutput(text: string, opts: TruncateOptions = {}): 
 
   const out: string[] = []
   let bytes = 0
+  let tokens = 0
   let hitBytes = false
+  let hitTokens = false
 
   if (direction === "head") {
     for (let i = 0; i < lines.length && i < maxLines; i++) {
       const size = enc.encode(lines[i]).length + (i > 0 ? 1 : 0)
+      const tok = estimateTextTokens(lines[i])
       if (bytes + size > maxBytes) { hitBytes = true; break }
+      if (tokens + tok > maxTokens) { hitTokens = true; break }
       out.push(lines[i])
       bytes += size
+      tokens += tok
     }
   } else {
     for (let i = lines.length - 1; i >= 0 && out.length < maxLines; i--) {
       const size = enc.encode(lines[i]).length + (out.length > 0 ? 1 : 0)
+      const tok = estimateTextTokens(lines[i])
       if (bytes + size > maxBytes) { hitBytes = true; break }
+      if (tokens + tok > maxTokens) { hitTokens = true; break }
       out.unshift(lines[i])
       bytes += size
+      tokens += tok
     }
   }
 
-  const removed = hitBytes ? totalBytes - bytes : lines.length - out.length
-  const unit = hitBytes ? "bytes" : "lines"
+  const removed = hitBytes
+    ? totalBytes - bytes
+    : hitTokens
+      ? totalTokens - tokens
+      : lines.length - out.length
+  const unit = hitBytes ? "bytes" : hitTokens ? "tokens" : "lines"
   const preview = out.join("\n")
   const outputPath = await archiveOutput(text)
 

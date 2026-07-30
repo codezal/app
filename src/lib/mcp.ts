@@ -533,12 +533,18 @@ export async function buildMcpTools(servers: McpServerConfig[]): Promise<{
   // blocks the rest (each is bounded by its own withTimeout), and many servers
   // no longer spawn all connections at once.
   const results = await pooledMap(8, uniqueServers, buildOne)
-  const tools: ToolSet = {}
+  const merged: ToolSet = {}
   const statuses: McpStatus[] = []
   for (const r of results) {
-    if (r.tools) Object.assign(tools, r.tools)
+    if (r.tools) Object.assign(merged, r.tools)
     statuses.push(r.status)
   }
+  // Stable, deterministic tool order across starts. pooledMap may return server
+  // results out of order and a server's listTools order is not guaranteed, so
+  // sort the final merged set by its fully-qualified `server__tool` key. A fixed
+  // tool order keeps the prompt prefix byte-identical for prompt-cache hits.
+  const tools: ToolSet = {}
+  for (const k of Object.keys(merged).sort()) tools[k] = merged[k]
   return { tools, statuses }
 }
 

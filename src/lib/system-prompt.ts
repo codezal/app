@@ -78,7 +78,7 @@ const FAMILY_OVERLAY: Record<ModelFamily, string> = {
   claude:
     "## Narration style\n" +
     "You tend to be thorough — keep each progress note to ONE short line, and don't restate what a tool already returned; give just the takeaway.",
-  // GPT does well with commentary-style updates — frame them as what + why.
+  // GPT does well with commentary-style updates — frame each update as what + why.
   gpt:
     "## Narration style\n" +
     "Frame each progress note as what you are doing AND why, in a single line — not just a status label.",
@@ -99,9 +99,10 @@ export type SystemPromptInput = {
   // Token-saver toggles — when Brief Mode is enabled, an extra directive is
   // injected so the model responds in compressed style.
   tokenSavers?: TokenSaverSettings
-  // Active persistent goal — when set, an autonomous-loop directive with the
-  // [GOAL_DONE] sentinel is injected so the harness can decide whether to
-  // auto-continue after each turn.
+  // Active persistent goal — kept in the type for backward compatibility with
+  // callers, but the goal directive is now emitted per-turn via
+  // buildDynamicContext() (its iteration counter changes every turn, so it must
+  // not live in the cache-stable system prompt). Ignored here.
   activeGoal?: { text: string; iter: number; maxIter: number; paused?: boolean }
   // Effective memory settings (global + sanitized project override). Drives the
   // memory read engine: extra instruction sources + byte budget. Absent →
@@ -113,12 +114,19 @@ export type SystemPromptInput = {
   mcpInstructions?: { server: string; text: string }[]
   peers?: Array<{ id: string; title: string; handle: string }>
   ownHandle?: string
+  // Kept for backward compatibility; the system prompt no longer reads the
+  // latest user message (that would change the prefix every turn and break
+  // prompt caching). Recall/auto-context now run in buildDynamicContext().
   recentText?: string
   delegationMode?: "inherit" | "solo" | "adaptive"
 }
 
 type MemoryPromptMode = "full" | "lean"
 
+// STATIC memory sections — content that does NOT depend on the latest user
+// message or the wall clock, so it is safe to keep in the cache-stable system
+// prompt (the priority preamble + the user-authored rule files). The dynamic,
+// query-dependent recall lives in buildDynamicContext() below.
 export async function buildMemoryPromptSections(args: {
   workspacePath?: string
   memory?: MemorySettings
@@ -130,9 +138,6 @@ export async function buildMemoryPromptSections(args: {
   const lean = args.mode === "lean"
   const fileBudget = lean ? Math.min(mem.maxFileBytes, 8_000) : mem.maxFileBytes
   const totalBudget = lean ? Math.min(mem.totalBudgetBytes, 16_000) : mem.totalBudgetBytes
-  const learnedBudget = lean
-    ? Math.min(mem.memoryStoreBudgetTokens, 400)
-    : mem.memoryStoreBudgetTokens
 
   sections.push(
     "\n## Memory Priority\n" +
@@ -154,15 +159,35 @@ export async function buildMemoryPromptSections(args: {
     // Memory files are advisory; read failures must never break prompt assembly.
   }
 
+  return sections.length === 1 ? [] : sections
+}
+
+// Per-turn DYNAMIC context — everything that depends on the latest user message
+// (learned-memory recall, method recall, semantic auto-context) or on the live
+// goal iteration counter. This is deliberately kept OUT of the system prompt so
+// the prompt prefix stays byte-for-byte identical across turns and the prompt
+// cache keeps hitting. The harness (run-stream) appends the returned string to
+// the latest user message as a <system-reminder> instead. Returns "" when there
+// is nothing dynamic to add.
+export async function buildDynamicContext(args: {
+  workspacePath?: string
+  memory?: MemorySettings
+  recentText?: string
+  activeGoal?: { text: string; iter: number; maxIter: number; paused?: boolean }
+}): Promise<string> {
+  const sections: string[] = []
+  const mem = args.memory ?? DEFAULT_MEMORY
+  const recentText = args.recentText
+
   if (mem.memoryStoreEnabled !== false) {
     try {
       const block = await loadMemoryContextBlock({
         workspace: args.workspacePath,
         now: Date.now(),
-        query: args.recentText,
-        budgetTokens: learnedBudget,
+        query: recentText,
+        budgetTokens: mem.memoryStoreBudgetTokens,
       })
-      if (block) sections.push("\n" + block)
+      if (block) sections.push(block)
     } catch {
       // Learned-memory recall is best-effort.
     }
@@ -170,16 +195,56 @@ export async function buildMemoryPromptSections(args: {
     try {
       const methodsBlock = await loadMethodsCatalog({
         workspace: args.workspacePath,
-        query: args.recentText,
+        query: recentText,
         now: Date.now(),
       })
-      if (methodsBlock) sections.push("\n" + methodsBlock)
+      if (methodsBlock) sections.push(methodsBlock)
     } catch {
       // Method recall is best-effort.
     }
   }
 
-  return sections.length === 1 ? [] : sections
+  const sem = useSettingsStore.getState().settings.semantic
+  if (sem?.enabled && sem.autoContext && args.workspacePath && (recentText?.trim().length ?? 0) >= 8) {
+    try {
+      const index = await loadIndex(args.workspacePath)
+      if (index) {
+        const hits = await queryIndex({
+          index,
+          cfg: { provider: sem.provider, baseUrl: sem.baseUrl, model: sem.model, apiKey: sem.apiKey },
+          query: recentText!,
+          topK: Math.min(sem.topK ?? 5, 6),
+        })
+        const relevant = hits.filter((h) => h.score > 0.2)
+        if (relevant.length > 0) {
+          const block: string[] = [
+            "## Relevant code (auto-retrieved from the semantic index)",
+            "Retrieved by similarity to your latest message — a starting point, not authoritative. Open the real files with read_file before editing.",
+          ]
+          let budget = 4000
+          for (const h of relevant) {
+            const snip =
+              h.chunk.text.length > 1200
+                ? sliceCharsSafe(h.chunk.text, 1200) + "\n… [truncated]"
+                : h.chunk.text
+            const entry = `\n### ${h.chunk.path}:${h.chunk.line0}-${h.chunk.line1}\n\`\`\`\n${snip}\n\`\`\``
+            if (budget - entry.length < 0) break
+            budget -= entry.length
+            block.push(entry)
+          }
+          sections.push(block.join("\n"))
+        }
+      }
+    } catch {
+      // Intentionally ignored.
+    }
+  }
+
+  // Goal directive carries the live iteration counter (changes every turn) so it
+  // belongs here, not in the cache-stable system prompt.
+  if (args.activeGoal) sections.push(buildGoalBlock(args.activeGoal))
+
+  return sections.join("\n\n")
 }
 
 // Persistent goal directive. Model continues autonomously across turns and
@@ -279,7 +344,7 @@ function buildPeerCatalog(
     "## PEER SESSIONS",
     ownHandle
       ? `This session's handle is **@${ownHandle}** — other agents reach it with send_to_session({ to: "${ownHandle}", ... }).`
-      : 'This session has no handle yet. Call set_session_handle({ handle: "..." }) so peers can address you.',
+      : 'This session has no handle yet. Call set_session_handle({ handle: "..." }) so peers can address it.',
     "",
     "You can message these peer sessions directly — each wakes in the background and acts on your message:",
     "",
@@ -331,13 +396,11 @@ export async function buildSystemPrompt({
   sddRequirementPath,
   orchestra,
   tokenSavers,
-  activeGoal,
   memory,
   deferredTools,
   mcpInstructions,
   peers,
   ownHandle,
-  recentText,
   delegationMode,
 }: SystemPromptInput): Promise<string> {
   const parts: string[] = [BASE_SYSTEM]
@@ -366,10 +429,6 @@ export async function buildSystemPrompt({
   // later section (memory blocks, catalogs). Falls through cleanly when disabled.
   const brief = briefModeSection(tokenSavers?.briefMode)
   if (brief) parts.push("\n" + brief)
-
-  // Active goal directive — placed before mode blocks so the autonomous-loop
-  // protocol frames everything that follows.
-  if (activeGoal) parts.push("\n" + buildGoalBlock(activeGoal))
 
   if (workspacePath) {
     parts.push(`\nWorking directory: ${workspacePath}`)
@@ -435,49 +494,14 @@ export async function buildSystemPrompt({
     parts.push("\n" + sddAssistantPreamble(sddStage, sddRequirementPath))
   }
 
-  parts.push(...(await buildMemoryPromptSections({ workspacePath, memory, recentText, mode: "full" })))
+  // Static memory only (priority preamble + rule files). Query-dependent recall
+  // and the goal directive are emitted per-turn via buildDynamicContext().
+  parts.push(...(await buildMemoryPromptSections({ workspacePath, memory, mode: "full" })))
 
   const skillsCatalog = await buildSkillsPromptSection(workspacePath, {
-    recentText,
     disabledSkills: useSettingsStore.getState().settings.disabledSkills,
   })
   if (skillsCatalog) parts.push("\n" + skillsCatalog)
-
-  const sem = useSettingsStore.getState().settings.semantic
-  if (sem?.enabled && sem.autoContext && workspacePath && (recentText?.trim().length ?? 0) >= 8) {
-    try {
-      const index = await loadIndex(workspacePath)
-      if (index) {
-        const hits = await queryIndex({
-          index,
-          cfg: { provider: sem.provider, baseUrl: sem.baseUrl, model: sem.model, apiKey: sem.apiKey },
-          query: recentText!,
-          topK: Math.min(sem.topK ?? 5, 6),
-        })
-        const relevant = hits.filter((h) => h.score > 0.2)
-        if (relevant.length > 0) {
-          const block: string[] = [
-            "\n## Relevant code (auto-retrieved from the semantic index)",
-            "Retrieved by similarity to the user's message — a starting point, not authoritative. Open the real files with read_file before editing.",
-          ]
-          let budget = 4000
-          for (const h of relevant) {
-            const snip =
-              h.chunk.text.length > 1200
-                ? sliceCharsSafe(h.chunk.text, 1200) + "\n… [truncated]"
-                : h.chunk.text
-            const entry = `\n### ${h.chunk.path}:${h.chunk.line0}-${h.chunk.line1}\n\`\`\`\n${snip}\n\`\`\``
-            if (budget - entry.length < 0) break
-            budget -= entry.length
-            block.push(entry)
-          }
-          parts.push(block.join("\n"))
-        }
-      }
-    } catch {
-      // Intentionally ignored.
-    }
-  }
 
   // Agents katalogu (workspace + user + plugin)
   try {

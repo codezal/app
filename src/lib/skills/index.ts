@@ -3,13 +3,14 @@ import { listPluginSkills } from "./plugin"
 import { listMcpSkills } from "./mcp"
 import { dedupSkillsByName } from "./dedup"
 import { buildSkillsCatalog } from "./parse"
-import { relevanceScore } from "../methods"
 import type { Skill } from "./types"
 
-const SKILLS_RAG_THRESHOLD = 8
-const SKILLS_RAG_TOPK = 6
-
 export type SkillsPromptOptions = {
+  // Accepted for backward compatibility with existing callers but intentionally
+  // unused: the catalog order is now fixed (declaration order) so the prompt
+  // prefix stays byte-identical across turns (prompt-cache friendly). The old
+  // relevance re-ranking by the latest user message mutated the order every
+  // turn and broke the cache.
   recentText?: string
   disabledSkills?: string[]
 }
@@ -46,24 +47,7 @@ export async function buildSkillsPromptSection(
   try {
     const all = await listAllSkills(workspace)
     const disabled = new Set(options.disabledSkills ?? [])
-    let visible = all.filter((skill) => !disabled.has(skill.name))
-    const recentText = options.recentText?.trim()
-
-    if (recentText && visible.length > SKILLS_RAG_THRESHOLD) {
-      const ranked = visible
-        .map((skill) => ({
-          skill,
-          score: relevanceScore(
-            `${skill.name} ${skill.description} ${(skill.triggers ?? []).join(" ")}`,
-            recentText,
-          ),
-        }))
-        .sort((a, b) => b.score - a.score)
-      if (ranked.some((entry) => entry.score > 0)) {
-        visible = ranked.slice(0, SKILLS_RAG_TOPK).map((entry) => entry.skill)
-      }
-    }
-
+    const visible = all.filter((skill) => !disabled.has(skill.name))
     return buildSkillsCatalog(visible)
   } catch {
     return ""

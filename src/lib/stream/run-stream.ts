@@ -37,7 +37,7 @@ import { applyModelToolPolicy, buildAllTools, deferredToolNames, makeToolSearchT
 import { listConnectedMcpInstructions } from "@/lib/mcp"
 import { buildBackgroundJobsNote } from "@/lib/stream/background-note"
 import { useJobsStore } from "@/store/jobs"
-import { buildMemoryPromptSections, buildSystemPrompt } from "@/lib/system-prompt"
+import { buildMemoryPromptSections, buildSystemPrompt, buildDynamicContext } from "@/lib/system-prompt"
 import { buildSkillsPromptSection } from "@/lib/skills"
 import { PrivacyScrubber, privacyActive } from "@/lib/privacy"
 
@@ -56,6 +56,40 @@ function lastUserText(history: ModelMessage[]): string | undefined {
     }
   }
   return undefined
+}
+
+// Append a per-turn <system-reminder> to the LATEST user message only — never to
+// already-sent history. This is how dynamic, turn-dependent context (learned-
+// memory recall, semantic auto-context, the live goal iteration counter, the
+// background-jobs grounding note) reaches the model without mutating the
+// cache-stable system prompt. Append-only: every past message stays byte-
+// identical, so the prompt prefix keeps hitting the cache.
+function appendSystemReminder(history: ModelMessage[], reminder: string): ModelMessage[] {
+  if (!reminder) return history
+  const wrapped = `\n\n<system-reminder>\n${reminder}\n</system-reminder>`
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i]
+    if (m.role !== "user") continue
+    const out = history.slice()
+    if (typeof m.content === "string") {
+      out[i] = { ...m, content: m.content + wrapped }
+    } else if (Array.isArray(m.content)) {
+      const arr = m.content.slice()
+      let added = false
+      for (let k = 0; k < arr.length; k++) {
+        if ((arr[k] as { type?: string }).type === "text") {
+          const tp = arr[k] as { type: "text"; text?: string }
+          arr[k] = { ...tp, text: (tp.text ?? "") + wrapped } as (typeof arr)[number]
+          added = true
+          break
+        }
+      }
+      if (!added) arr.push({ type: "text", text: wrapped.trimStart() } as (typeof arr)[number])
+      out[i] = { ...m, content: arr }
+    }
+    return out
+  }
+  return history
 }
 import { useSddStore } from "@/store/sdd"
 import { sddRequirementPath } from "@/lib/sdd-store"
@@ -436,11 +470,23 @@ export function makeRunStream(deps: RunStreamDeps) {
       // the model with their live status — otherwise a fresh user message
       // ("bitti mi?") gets answered from the stale transcript and the model
       // resurrects the previous topic (the "alzheimer" loop).
+      // Dynamic, turn-dependent context (learned-memory recall, semantic
+      // auto-context, the live goal iteration counter) and the background-jobs
+      // grounding note are NOT folded into the system prompt — that would change
+      // the cache-stable prefix on every turn. They are appended to the latest
+      // user message as a <system-reminder> further below (append-only).
       const bgNote = buildBackgroundJobsNote(
         useJobsStore.getState().list().filter((j) => j.ownerSessionId === sid),
         { freshUserTurn: history[history.length - 1]?.role === "user" },
       )
-      const system = bgNote ? systemBase + "\n\n" + bgNote : systemBase
+      const dynamicCtx = await buildDynamicContext({
+        workspacePath: cur.workspacePath,
+        memory: eff.memory,
+        recentText,
+        activeGoal: cur.goal,
+      })
+      const systemReminder = [dynamicCtx, bgNote].filter(Boolean).join("\n\n")
+      const system = systemBase
       // Model capabilities (reasoning support, output limit) from the catalog.
       const catalogData = settings.providerCatalog?.data as ProvidersCatalog | undefined
       const detail = modelDetail(catalogData, provider, modelId)
@@ -467,6 +513,9 @@ export function makeRunStream(deps: RunStreamDeps) {
           recordSavings("historyHygiene", r.saved)
         }
       }
+      // Append the per-turn dynamic context to the latest user message (never to
+      // already-sent history) so the system-prompt prefix stays cache-stable.
+      if (systemReminder) outgoingHistory = appendSystemReminder(outgoingHistory, systemReminder)
       // System prompt is injected into the message list (stable cache breakpoint),
       // then the whole history is surrogate/toolCallId-normalized + cache-stamped
       // for this provider (prompt caching → big cost/latency win on Anthropic).

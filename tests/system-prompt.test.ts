@@ -39,7 +39,7 @@ vi.mock("@/store/settings", () => ({
   },
 }))
 
-import { buildMemoryPromptSections, buildSystemPrompt } from "@/lib/system-prompt"
+import { buildMemoryPromptSections, buildSystemPrompt, buildDynamicContext } from "@/lib/system-prompt"
 import { useI18nStore } from "@/lib/i18n"
 import { useSettingsStore } from "@/store/settings"
 import { briefModeSection } from "@/lib/token-savers"
@@ -178,29 +178,32 @@ describe("buildSystemPrompt", () => {
     expect(r).toContain("worker-0")
   })
 
-  it("activeGoal → ACTIVE GOAL bloğu + sentinel açıklaması", async () => {
-    const r = await buildSystemPrompt({
-      activeGoal: { text: "Refactor auth module", iter: 0, maxIter: 5 },
-    })
-    expect(r).toContain("ACTIVE GOAL")
-    expect(r).toContain("Refactor auth module")
-    expect(r).toContain("[GOAL_DONE]")
-    expect(r).toContain("1/5")
+  it("activeGoal → ACTIVE GOAL bloğu buildDynamicContext'te, cache-stable system prompt'ta DEĞİL", async () => {
+    const goal = { text: "Refactor auth module", iter: 0, maxIter: 5 }
+    const sys = await buildSystemPrompt({ activeGoal: goal })
+    expect(sys).not.toContain("ACTIVE GOAL")
+    const dyn = await buildDynamicContext({ activeGoal: goal })
+    expect(dyn).toContain("ACTIVE GOAL")
+    expect(dyn).toContain("Refactor auth module")
+    expect(dyn).toContain("[GOAL_DONE]")
+    expect(dyn).toContain("1/5")
   })
 
-  it("activeGoal yok → ACTIVE GOAL bloğu yok", async () => {
-    const r = await buildSystemPrompt({})
-    expect(r).not.toContain("ACTIVE GOAL")
+  it("activeGoal yok → ne system prompt ne dynamic context ACTIVE GOAL üretir", async () => {
+    const sys = await buildSystemPrompt({})
+    expect(sys).not.toContain("ACTIVE GOAL")
+    const dyn = await buildDynamicContext({})
+    expect(dyn).not.toContain("ACTIVE GOAL")
   })
 
-  it("activeGoal paused → PAUSED bloğu, autonomous-loop framing'i yok", async () => {
-    const r = await buildSystemPrompt({
+  it("activeGoal paused → PAUSED bloğu buildDynamicContext'te, autonomous-loop framing'i yok", async () => {
+    const dyn = await buildDynamicContext({
       activeGoal: { text: "Refactor auth module", iter: 2, maxIter: 5, paused: true },
     })
-    expect(r).toContain("ACTIVE GOAL (PAUSED)")
-    expect(r).toContain("Refactor auth module")
-    expect(r).not.toContain("the harness will automatically send")
-    expect(r).toContain("2/5")
+    expect(dyn).toContain("ACTIVE GOAL (PAUSED)")
+    expect(dyn).toContain("Refactor auth module")
+    expect(dyn).not.toContain("the harness will automatically send")
+    expect(dyn).toContain("2/5")
   })
 
   it("mcpInstructions toplam bütçe → fazlası atlanır + not düşülür", async () => {
