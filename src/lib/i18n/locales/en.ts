@@ -238,6 +238,8 @@ const en: Messages = {
     ctxSystem: "System prompt",
     ctxTools: "Tool definitions",
     ctxConversation: "Conversation",
+    ctxCached: "Cache read",
+    ctxPruned: "Pruned tool output",
     tokens: "tokens",
     cost: "Cost",
     sessionCost: "Session cost",

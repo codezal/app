@@ -235,6 +235,8 @@ export type Messages = {
     ctxSystem?: string
     ctxTools?: string
     ctxConversation?: string
+    ctxCached?: string
+    ctxPruned?: string
     tokens: string
     cost: string
     sessionCost: string

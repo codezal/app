@@ -86,6 +86,14 @@ export type ContextBreakdown = {
   system: number
   tools: number
   conversation: number
+  // Prompt-cache hits the provider served from cache this step (read, not
+  // recomputed). Added on top of the cache-miss slices so the composer shows the
+  // real context the model saw — without it the meter only reflects the cache-miss
+  // shadow and looks like context "shrank" as the cache warms up.
+  cached?: number
+  // Tool-output tokens reclaimed by intra-turn pruning on this step (the model did
+  // NOT see them). Surfaced so a sudden drop in the meter is explainable, not scary.
+  pruned?: number
 }
 
 export type SessionUsage = {

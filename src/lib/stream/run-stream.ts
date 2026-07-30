@@ -573,6 +573,12 @@ export function makeRunStream(deps: RunStreamDeps) {
       let lastStepEff: number | undefined
       let lastStepBreakdown: ContextBreakdown | undefined
       let lastStepInput: number | undefined
+      // Cache hits served on the latest step (read from cache, not recomputed) and
+      // tool-output tokens the intra-turn pruner reclaimed on it. Both are folded
+      // into the meter so it reflects what the model actually saw, not the
+      // cache-miss shadow (which made the meter look like it "shrank" as the cache
+      // warmed up — see DB post-mortem: working history 3.1MB vs 41K cache-miss).
+      let lastStepPruned = 0
       let toolsJson = ""
       try {
         toolsJson = JSON.stringify(tools ?? {})
@@ -589,10 +595,28 @@ export function makeRunStream(deps: RunStreamDeps) {
           const reqMsgs = step.request.messages
           if (!reqMsgs || reqMsgs.length === 0) return
           const realInput = step.usage.inputTokens
-          const { eff, breakdown } = breakdownFromStepRequest(reqMsgs, realInput, toolsJson)
+          const stepCacheRead =
+            step.usage.inputTokenDetails?.cacheReadTokens ??
+            (step.usage as { cachedInputTokens?: number }).cachedInputTokens ??
+            (step.usage as { promptCacheHitTokens?: number }).promptCacheHitTokens ??
+            0
+          const { eff, breakdown } = breakdownFromStepRequest(
+            reqMsgs,
+            realInput,
+            toolsJson,
+            stepCacheRead,
+            lastStepPruned,
+          )
           lastStepEff = eff
           lastStepBreakdown = breakdown
           lastStepInput = realInput
+          // Observable accounting: lets us tell, from the console, whether a small
+          // meter is a cache-miss shadow (cacheRead large) or real pruning
+          // (pruned large / req small). No more guessing at runtime.
+          console.info(
+            `[ctx] step input=${realInput ?? "?"} cacheRead=${stepCacheRead} eff=${eff} ` +
+              `req≈${breakdown.system + breakdown.tools + breakdown.conversation} pruned=${lastStepPruned}`,
+          )
           useSessionsStore.getState().setEffectiveContextTokensFor(sid, eff, breakdown)
         },
         // Local models can't reliably drive the multi-step agent loop (a 7B
@@ -612,14 +636,19 @@ export function makeRunStream(deps: RunStreamDeps) {
 
           let base = stepMessages
           if (estimateMessagesTokens(stepMessages) >= guardTrigger) {
+            // tailTurns left at the default (PRUNE_TAIL_TURNS) on purpose: 0 here
+            // used to prune the *latest* turn's tool evidence too, leaving the model
+            // with almost no working memory on long sessions (the "alzheimer" the
+            // user kept hitting). Keeping the last couple of turns intact preserves
+            // recent tool context while still reclaiming older, large outputs.
             const { messages: pruned, prunedTokens } = pruneToolOutputs(stepMessages, {
-              tailTurns: 0,
               protectTokens: protectBudget,
               minGain: 1,
             })
             if (prunedTokens > 0) {
               base = pruned
               out.messages = pruned
+              lastStepPruned = prunedTokens
               console.info(
                 `[stream-guard] intra-turn prune ~${prunedTokens} tok (eşik ${guardTrigger})`,
               )
@@ -1500,6 +1529,7 @@ function buildContextBreakdown(
   system: string,
   tools: unknown,
   promptPlusConv: number,
+  cached = 0,
 ): ContextBreakdown {
   const systemTokens = estimateTextTokens(system)
   let toolsTokens = 0
@@ -1512,19 +1542,24 @@ function buildContextBreakdown(
     system: systemTokens,
     tools: toolsTokens,
     conversation: Math.max(0, promptPlusConv - systemTokens),
+    cached,
   }
 }
 
 // Per-step ground truth (AI SDK v7 `include.requestMessages`): split the
 // SDK-recorded request messages into system / conversation slices and take the
 // tools slice as the remainder of the provider-reported inputTokens — that
-// total also covers tool schemas and provider overhead, so the remainder is
-// the most honest "tool definitions" number we can show. Falls back to the
-// schema-JSON estimate when the provider reports no usage.
+// total also covers tool schemas and provider overhead, so the remainder is the
+// most honest "tool definitions" number we can show. `cacheRead` (prompt-cache
+// hits) is added on top so `eff` is the full context the model processed this
+// step, not just the cache-miss portion. Falls back to the schema-JSON estimate
+// when the provider reports no usage.
 function breakdownFromStepRequest(
   reqMsgs: readonly ModelMessage[],
   realInput: number | undefined,
   toolsJson: string,
+  cacheRead = 0,
+  pruned = 0,
 ): { eff: number; breakdown: ContextBreakdown } {
   let system = 0
   let conversation = 0
@@ -1537,6 +1572,7 @@ function breakdownFromStepRequest(
     realInput != null
       ? Math.max(0, realInput - system - conversation)
       : estimateTextTokens(toolsJson)
-  const eff = realInput ?? system + conversation + tools
-  return { eff, breakdown: { system, tools, conversation } }
+  const base = realInput ?? system + conversation + tools
+  const eff = base + cacheRead
+  return { eff, breakdown: { system, tools, conversation, cached: cacheRead, pruned } }
 }

@@ -215,6 +215,8 @@ const tr: Messages = {
     ctxSystem: "Sistem istemi",
     ctxTools: "Araç tanımları",
     ctxConversation: "Konuşma",
+    ctxCached: "Önbellek (okunan)",
+    ctxPruned: "Budanan araç çıktısı",
     tokens: "token",
     cost: "Maliyet",
     sessionCost: "Oturum maliyeti",

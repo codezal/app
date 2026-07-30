@@ -1000,7 +1000,13 @@ export function Composer({
   // matching the per-category breakdown; fall back to the message-only estimate
   // until a stream has produced a breakdown.
   const ctxTotal = ctxBreakdown
-    ? ctxBreakdown.system + ctxBreakdown.tools + ctxBreakdown.conversation
+    ? ctxBreakdown.system +
+      ctxBreakdown.tools +
+      ctxBreakdown.conversation +
+      // Cache reads ARE in the window (the model holds them), so they count toward
+      // the filled bar/percentage. Pruned output is NOT (it was reclaimed), so it is
+      // listed for transparency but excluded from the total and the bar.
+      (ctxBreakdown.cached ?? 0)
     : tokenCount
   const ctxPct =
     contextCapValue > 0 ? Math.min(100, Math.round((ctxTotal / contextCapValue) * 100)) : metaPct
@@ -2620,7 +2626,15 @@ function ContextUsagePopover({
   pct: number
   used: number
   cap: number
-  breakdown: { system: number; tools: number; conversation: number } | undefined
+  breakdown:
+    | {
+        system: number
+        tools: number
+        conversation: number
+        cached?: number
+        pruned?: number
+      }
+    | undefined
   onClose: () => void
 }) {
   const t = useT()
@@ -2633,6 +2647,31 @@ function ContextUsagePopover({
       label: t("composer.ctxConversation"),
       value: breakdown?.conversation ?? 0,
     },
+    // Cache hits: real context the model saw (served from cache). Showing this is
+    // what fixes the "my context shrank to 40K" illusion — the meter now reflects
+    // cache-miss + cache-read, i.e. the full prompt the model processed.
+    ...((breakdown?.cached ?? 0) > 0
+      ? [
+          {
+            key: "cached",
+            color: "#34d399",
+            label: t("composer.ctxCached"),
+            value: breakdown!.cached ?? 0,
+          },
+        ]
+      : []),
+    // Pruned output: reclaimed this step, so the model did NOT see it. Listed (not
+    // added to the bar) so a sudden meter drop is explainable instead of alarming.
+    ...((breakdown?.pruned ?? 0) > 0
+      ? [
+          {
+            key: "pruned",
+            color: "#f59e0b",
+            label: t("composer.ctxPruned"),
+            value: breakdown!.pruned ?? 0,
+          },
+        ]
+      : []),
   ]
   return (
     <div className="absolute bottom-[30px] right-0 z-50 w-[420px] rounded-xl border border-codezal-strong bg-codezal-panel p-3 shadow-xl">
@@ -2657,13 +2696,17 @@ function ContextUsagePopover({
       </div>
       <div className="mb-3 flex h-1.5 w-full overflow-hidden rounded-full bg-codezal-hair">
         {cap > 0 &&
-          rows.map((r) => (
-            <span
-              key={r.key}
-              className="h-full"
-              style={{ width: `${(r.value / cap) * 100}%`, backgroundColor: r.color }}
-            />
-          ))}
+          // Pruned output is not in the window anymore, so it must not paint a
+          // segment — only the slices the model actually holds fill the bar.
+          rows
+            .filter((r) => r.key !== "pruned")
+            .map((r) => (
+              <span
+                key={r.key}
+                className="h-full"
+                style={{ width: `${(r.value / cap) * 100}%`, backgroundColor: r.color }}
+              />
+            ))}
       </div>
       <div className="flex flex-col gap-1.5">
         {rows.map((r) => (
