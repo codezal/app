@@ -5,7 +5,6 @@ import { DEFAULT_LOCALE, detectOsLocale, useI18nStore } from "@/lib/i18n"
 // avoid a cycle: the barrel re-exports ./effective, which imports this store.
 import { migrateSettings } from "@/lib/config/migrate"
 import { parseSettings } from "@/lib/config/schema"
-import { syncInferenceServer } from "@/lib/inference-server"
 // Canonical defaults live in a pure module so the JSON Schema generator can
 // read them without pulling in this store's runtime graph.
 import { DEFAULT_SETTINGS as DEFAULT } from "@/lib/config/defaults"
@@ -198,7 +197,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     _syncCustomProviders(merged.customProviders)
 
     set({ settings: merged, loaded: true })
-    void syncInferenceServer(merged.inferenceServer)
     // If the file still held plaintext secrets, rewrite it stripped so they
     // don't linger on disk after the keychain migration.
     if (hadDiskSecrets) await persistSettings(merged)

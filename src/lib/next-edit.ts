@@ -71,7 +71,7 @@ export async function predictNextEdit(args: NextEditArgs): Promise<string> {
   const providerId = (sess?.provider ?? settings.defaultProvider) as ProviderId
   const catalog = settings.providerCatalog?.data as ProvidersCatalog | undefined
   const small = pickSmallModel(catalog, providerId)
-  const modelId = small ?? (providerId === "local" ? (sess?.model ?? settings.defaultModel) : null)
+  const modelId = small ?? null
   if (!modelId) return ""
 
   const model = await buildLanguageModel({ providerId, modelId, settings })

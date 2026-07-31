@@ -233,37 +233,6 @@ export function makeSchema(d: Settings) {
           keepLast: z.number().catch(d.autoCompact.keepLast),
         })
         .catch(d.autoCompact),
-      localLlm: z
-        .object({
-          contextWindow: z.number().catch(32768),
-          flashAttention: z.enum(["enabled", "auto", "disabled"]).catch("enabled"),
-          batchSize: z.number().catch(2048),
-          threads: z.number().catch(0),
-          batchThreads: z.number().catch(0),
-          speculativeMode: z.enum(["off", "mtp"]).catch("off"),
-          draftTokens: z.number().catch(4),
-          draftModel: z.string().catch(""),
-          agentMode: z.boolean().catch(true),
-        })
-        .optional()
-        .catch(undefined),
-      localLlmByModel: z
-        .record(
-          z.string(),
-          z.object({
-            contextWindow: z.number().catch(32768),
-            flashAttention: z.enum(["enabled", "auto", "disabled"]).catch("enabled"),
-            batchSize: z.number().catch(2048),
-            threads: z.number().catch(0),
-            batchThreads: z.number().catch(0),
-            speculativeMode: z.enum(["off", "mtp"]).catch("off"),
-            draftTokens: z.number().catch(4),
-            draftModel: z.string().catch(""),
-            agentMode: z.boolean().catch(true),
-          }),
-        )
-        .optional()
-        .catch(undefined),
       webSearch: z
         .object({
           provider: z.enum(["tavily", "brave", "exa", "duckduckgo"]),
@@ -326,14 +295,6 @@ export function makeSchema(d: Settings) {
       tokenSavers: looseRecord.optional().catch(d.tokenSavers as Record<string, unknown>),
       memory: looseRecord.optional().catch(d.memory as Record<string, unknown>),
       privacy: looseRecord.optional().catch(d.privacy as unknown as Record<string, unknown>),
-      inferenceServer: z
-        .object({
-          enabled: z.boolean().catch(false),
-          port: z.number().int().min(1).max(65535).catch(1456),
-          expose: z.boolean().catch(false),
-        })
-        .optional()
-        .catch(d.inferenceServer),
       credentials: looseRecord.optional(),
       providerConfigs: looseRecord.optional(),
       agentProviders: z

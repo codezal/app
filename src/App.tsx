@@ -63,7 +63,6 @@ import {
 } from "@/lib/providers"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { modelDetail, modelAcceptsPdf, modelAcceptsImages, resolveContextCap, catalogPricing } from "@/lib/providers-catalog"
-import { resolveLocalLlm } from "@/lib/local-llm"
 import { loadPdfBytes, loadPdfDataUrl } from "@/lib/pdf-store"
 import { extractPdfText } from "@/lib/pdf"
 import { resolveSessionDefaults } from "@/lib/session-defaults"
@@ -901,19 +900,13 @@ export default function App() {
         compactCatalog,
         snap.provider,
         snap.model,
-        resolveLocalLlm(settings, snap.model).contextWindow,
         settings.customProviders,
       ),
       output: modelDetail(compactCatalog, snap.provider, snap.model)?.limit?.output,
     }
-    // Compact decision follows the SAME number the gauge shows the user — the
-    // model's last reported context size (pi-style totalTokens, cacheRead
-    // included, because cached tokens really do occupy the context window). The
-    // old code used estimateMessagesTokens() here, a cache-blind 4-char/token
-    // guess that read the context as far emptier than the model saw it, so the
-    // gauge could read "full" while compaction refused to fire — the overflow
-    // the user kept hitting. Heuristic stays only as a cold-start fallback for
-    // the very first turn / a reloaded session whose gauge isn't populated yet.
+    // Compact decision follows the SAME number the gauge shows the user
+    // (effectiveContextTokens from context-gauge). Cold-start / reloaded
+    // sessions without a stamped gauge fall back to the local estimate.
     const eff = snap.usage?.effectiveContextTokens || estimateMessagesTokens(msgs)
     if (!force && !shouldCompact(eff, snap.model, settings.autoCompact, limits)) {
       return false

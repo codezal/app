@@ -7,7 +7,6 @@ import type { Appearance } from "@/lib/theme"
 import type { TokenSaverSettings } from "@/lib/token-savers/types"
 import type { MemorySettings } from "@/lib/memory-settings"
 import type { PrivacySettings } from "@/lib/privacy"
-import type { InferenceServerSettings } from "@/lib/inference-server"
 import type { PermissionRule } from "@/lib/permission/types"
 import type { AgentProvidersSettings, NativeAgentHandle } from "@/lib/agent-providers/types"
 import type { SupervisorSettings } from "@/lib/agents/runtime"
@@ -70,7 +69,6 @@ export type Message = {
   // render the Codex-style "worked for 4m 24s" collapsed work log. Absent on
   // messages written before this field existed.
   endedAt?: number
-  localStats?: { tokPerSec: number; tokens: number; ttftMs: number }
   meta?: boolean
   compacting?: boolean
   snapshotBase?: string
@@ -104,31 +102,6 @@ export type AutoCompactSettings = {
   targetPct: number
   model?: string
   keepLast: number
-}
-
-// Local in-process LLM profile.
-export type LocalLlmSettings = {
-  // Persistent chat context window (tokens). Rust auto-picks the KV cache type
-  // from this, and compaction/fill gauges use the effective window.
-  contextWindow: number
-  // Flash attention policy ("enabled" | "auto" | "disabled").
-  flashAttention: "enabled" | "auto" | "disabled"
-  // Prompt prefill batch size. Larger values reduce llama_decode calls for long
-  // prompts; Rust clamps this to a safe range.
-  batchSize: number
-  // Decode threads. 0 means Rust auto-selects a bounded value for the machine.
-  threads: number
-  // Prefill/batch threads. 0 means Rust auto-selects a bounded value.
-  batchThreads: number
-  // Speculative decoding engine. "off" is current stable path; "mtp" is wired
-  // as an explicit opt-in while the engine loop lands.
-  speculativeMode: "off" | "mtp"
-  // Maximum draft tokens per target verification step.
-  draftTokens: number
-  // Optional MTP GGUF basename/path. Empty means discover `mtp-*` sibling.
-  draftModel: string
-  // Agent mode gives the model tools + multi-step loop. Off means single-turn chat.
-  agentMode: boolean
 }
 
 export type AgentMode = "build" | "plan" | "orchestra"
@@ -349,9 +322,6 @@ export type Settings = {
   // MCP HTTP/SSE sunucu konfigleri
   mcpServers: McpServerConfig[]
   autoCompact: AutoCompactSettings
-  // Yerel in-process LLM VARSAYILAN profili (context penceresi, flash attention,
-  localLlm?: LocalLlmSettings
-  localLlmByModel?: Record<string, LocalLlmSettings>
   webSearch?: WebSearchConfig
   firecrawl?: FirecrawlConfig
   // Optional image generation — enables the generate_image tool when configured.
@@ -368,7 +338,6 @@ export type Settings = {
   tokenSavers?: TokenSaverSettings
   memory?: MemorySettings
   privacy?: PrivacySettings
-  inferenceServer?: InferenceServerSettings
   // OAuth + extended provider credentials (token, refresh, expiry).
   // Plain apiKeys[] continues to hold simple API key strings.
   credentials?: Partial<Record<ProviderId, OAuthCredential>>

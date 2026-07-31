@@ -5,14 +5,6 @@ mod db;
 mod editors;
 mod exec;
 mod fs;
-mod inference;
-mod mlx_native;
-mod server;
-// chat_render_check example can diff it against the oai-compat reference.
-#[cfg(feature = "local-llm")]
-pub mod chat_render;
-// serde_json (no feature gate) so its unit tests run in a plain `cargo test`.
-pub mod chat_parse;
 mod pty;
 mod secrets;
 
@@ -96,8 +88,6 @@ pub fn run() {
         .manage(fs::WorkspaceRoots::default())
         .manage(browser::BrowserManager::default())
         .manage(KeepAwakeState::default())
-        .manage(inference::LlmManager::default())
-        .manage(server::ServerState::default())
         .invoke_handler(tauri::generate_handler![
             pty::pty_spawn,
             pty::pty_write,
@@ -107,27 +97,6 @@ pub fn run() {
             pty::pty_ensure_rcfiles,
             read_env_var,
             set_keep_awake,
-            inference::llm_load,
-            inference::llm_generate_stream,
-            inference::llm_cancel,
-            inference::llm_chat,
-            inference::llm_list_models,
-            inference::llm_download,
-            inference::llm_cancel_download,
-            inference::llm_delete_model,
-            inference::llm_models_info,
-            inference::hf_list_gguf,
-            inference::hf_search_gguf,
-            inference::llm_system_ram,
-            mlx_native::mlx_chat,
-            mlx_native::mlx_cancel,
-            mlx_native::mlx_download,
-            mlx_native::mlx_status,
-            mlx_native::mlx_list_models,
-            mlx_native::mlx_delete_model,
-            server::inference_server_start,
-            server::inference_server_stop,
-            server::inference_server_status,
             code_map::codemap_build,
             code_map::codemap_reindex_file,
             code_map::codemap_reindex_files,

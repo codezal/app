@@ -42,8 +42,7 @@
     "targets": "all",
     "resources": {
       "resources/agent-runtime": "agent-runtime",
-      "resources/git": "git",
-      "resources/mlx": "mlx"
+      "resources/git": "git"
     },
     "icon": [
       "icons/32x32.png",

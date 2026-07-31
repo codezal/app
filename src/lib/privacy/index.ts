@@ -25,8 +25,8 @@ export const DEFAULT_PRIVACY: PrivacySettings = {
   scrubAssistant: false,
 }
 
-export function isCloudProvider(providerId: string): boolean {
-  return providerId !== "local"
+export function isCloudProvider(_providerId: string): boolean {
+  return true
 }
 
 export function privacyActive(settings: PrivacySettings | undefined, providerId: string): boolean {

@@ -11,7 +11,6 @@ import { DEFAULT_APPEARANCE } from "@/lib/theme"
 import { DEFAULT_TOKEN_SAVERS } from "@/lib/token-savers/types"
 import { DEFAULT_MEMORY } from "@/lib/memory-settings"
 import { DEFAULT_PRIVACY } from "@/lib/privacy"
-import { DEFAULT_INFERENCE_SERVER } from "@/lib/inference-server"
 import { defaultAgentProvidersSettings } from "@/lib/agent-providers"
 import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
 import { CURRENT_SCHEMA_VERSION } from "./migrate"
@@ -40,17 +39,6 @@ export const DEFAULT_SETTINGS: Settings = {
     targetPct: 40,
     keepLast: 10,
   },
-  localLlm: {
-    contextWindow: 32768,
-    flashAttention: "enabled",
-    batchSize: 2048,
-    threads: 0,
-    batchThreads: 0,
-    speculativeMode: "off",
-    draftTokens: 4,
-    draftModel: "",
-    agentMode: true,
-  },
   hooks: [],
   semantic: {
     enabled: false,
@@ -64,7 +52,6 @@ export const DEFAULT_SETTINGS: Settings = {
   tokenSavers: DEFAULT_TOKEN_SAVERS,
   memory: DEFAULT_MEMORY,
   privacy: DEFAULT_PRIVACY,
-  inferenceServer: DEFAULT_INFERENCE_SERVER,
   credentials: {},
   providerConfigs: {},
   agentProviders: defaultAgentProvidersSettings(),

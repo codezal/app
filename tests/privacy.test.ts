@@ -105,7 +105,6 @@ describe("PrivacyScrubber", () => {
 describe("privacyActive", () => {
   it("returns true only for enabled settings and cloud providers", () => {
     expect(privacyActive(ON, "anthropic")).toBe(true)
-    expect(privacyActive(ON, "local")).toBe(false)
     expect(privacyActive({ enabled: false }, "anthropic")).toBe(false)
     expect(privacyActive(undefined, "anthropic")).toBe(false)
   })

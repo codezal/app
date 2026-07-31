@@ -925,16 +925,6 @@ function BubbleImpl({
           <SecurityFollowupActions onPrompt={onQuickPrompt} />
         )}
 
-        {!isUser && !streaming && !m.pending && m.localStats && (
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-codezal-mute">
-            <span>⚡ {m.localStats.tokPerSec.toFixed(1)} tok/s</span>
-            {m.localStats.tokens > 0 && <span>· {m.localStats.tokens.toLocaleString()} token</span>}
-            {m.localStats.ttftMs > 0 && (
-              <span>· ilk token {(m.localStats.ttftMs / 1000).toFixed(1)}s</span>
-            )}
-          </div>
-        )}
-
         {showActions && (
           <div
             className={cn(

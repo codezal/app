@@ -22,8 +22,6 @@ import { azureAdapter } from "./azure"
 import { googleVertexAdapter } from "./google-vertex"
 import { vercelAdapter } from "./vercel"
 import { alibabaAdapter } from "./alibaba"
-import { localAdapter } from "./local"
-import { mlxAdapter } from "./mlx"
 import type {
   ApiKeys,
   CustomProvider,
@@ -59,8 +57,6 @@ const BUILTIN: ProviderAdapter[] = [
   googleVertexAdapter,
   vercelAdapter,
   alibabaAdapter,
-  localAdapter,
-  mlxAdapter,
 ]
 
 const pluginAdapters: ProviderAdapter[] = []
@@ -254,6 +250,3 @@ export type { ParsedError } from "./error"
 
 export { probeModels, LOCAL_PRESETS } from "./discovery"
 export type { LocalPreset } from "./discovery"
-
-// Local in-process provider (llama.cpp via localLlmFetch — no TCP server).
-export { _syncLocalModels, refreshLocalModels } from "./local"

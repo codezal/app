@@ -29,16 +29,13 @@ import { detectStopReason, isUserWaitingTool } from "@/lib/stream/stop-reason"
 import { needsCompletionNudge, COMPLETION_NUDGE_TEXT } from "@/lib/stream/completion-guard"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { modelDetail, resolveContextCap, catalogPricing, modelAcceptsImages } from "@/lib/providers-catalog"
-import { resolveLocalLlm } from "@/lib/local-llm"
 import { logError } from "@/lib/error-log"
-import { useLocalRuntimeStore } from "@/store/local-runtime"
 import { lastToolBeat } from "@/lib/tool-heartbeat"
 import { applyModelToolPolicy, buildAllTools, deferredToolNames, makeToolSearchTool, resetDoomLoop, TOOL_SEARCH_NAME } from "@/lib/tools"
 import { listConnectedMcpInstructions } from "@/lib/mcp"
 import { buildBackgroundJobsNote } from "@/lib/stream/background-note"
 import { useJobsStore } from "@/store/jobs"
-import { buildMemoryPromptSections, buildSystemPrompt, buildDynamicContext } from "@/lib/system-prompt"
-import { buildSkillsPromptSection } from "@/lib/skills"
+import { buildSystemPrompt, buildDynamicContext } from "@/lib/system-prompt"
 import { PrivacyScrubber, privacyActive } from "@/lib/privacy"
 
 function lastUserText(history: ModelMessage[]): string | undefined {
@@ -98,6 +95,15 @@ import { recordSavings } from "@/store/token-savings"
 import { costUsd } from "@/lib/pricing"
 import { compactMessages, pruneToolOutputs, RECENT_TOOL_PROTECT_TOKENS } from "@/lib/compact"
 import { estimateMessagesTokens } from "@/lib/tokens"
+import {
+  extractProviderStepUsage,
+  isTrustworthyProviderTotal,
+  lastStepTotalTokens,
+  providerContextTotal,
+  resolveContextTokens,
+  streamStartContextTokens,
+  type ProviderStepUsage,
+} from "@/lib/context-gauge"
 import { runHooks } from "@/lib/hooks"
 import { makeToolCallRepair, looksLikeQuotedSyntax } from "@/lib/tool-repair"
 import { setStreamAbort, clearStreamAbort } from "@/lib/run-registry"
@@ -207,16 +213,9 @@ export function makeRunStream(deps: RunStreamDeps) {
     // Per-turn override (slash command `model:` frontmatter); session stays unchanged.
     const provider = override?.provider ?? cur.provider
     const modelId = override?.model ?? cur.model
-    const localStatsProvider = provider === "local" || provider === "mlx"
-    const localRuntimeProvider = provider === "local" || provider === "mlx"
-    // Local agent mode (per-model profil → global default localLlm, default ON):
-    // local models get the shared lean tool core + tool_search and run a multi-step
-    // tool loop, so they can explore the project. Off → clean single-turn chat.
-    const localAgent = localRuntimeProvider && resolveLocalLlm(settings, modelId).agentMode
     const ac = new AbortController()
     setStreamAbort(sid, ac)
     useSessionsStore.getState().setStreamingFor(sid, true)
-    if (localStatsProvider) useLocalRuntimeStore.getState().setLastStats(null)
     const patchFor = (mid: string, p: Partial<Message>) =>
       useSessionsStore.getState().patchMessageFor(sid, mid, p)
 
@@ -324,7 +323,6 @@ export function makeRunStream(deps: RunStreamDeps) {
       settings.providerCatalog?.data as ProvidersCatalog | undefined,
       provider,
       modelId,
-      resolveLocalLlm(settings, modelId).contextWindow,
       settings.customProviders,
     )
     const maxReadChars = Math.floor(effCtxWindow * 4 * 0.4)
@@ -360,7 +358,6 @@ export function makeRunStream(deps: RunStreamDeps) {
         sid,
         undefined,
         maxReadChars,
-        localRuntimeProvider ? 400 : undefined,
       )
       // Tailor editing tools to the model (apply_patch vs edit/write) — opencode parity.
       applyModelToolPolicy(tools, modelId)
@@ -387,20 +384,6 @@ export function makeRunStream(deps: RunStreamDeps) {
         tools[TOOL_SEARCH_NAME] = makeToolSearchTool(tools, deferred, activeSet)
         initialActiveTools = [...activeSet]
       }
-      const CODE_INTEL_TOOLS = [
-        "code_search",
-        "code_query",
-        "code_callers",
-        "code_callees",
-        "code_trace",
-        "code_impact",
-      ]
-      const localCodeIntel =
-        localRuntimeProvider && localAgent ? CODE_INTEL_TOOLS.filter((n) => tools[n]) : []
-      if (initialActiveTools && localCodeIntel.length > 0) {
-        for (const n of localCodeIntel) activeSet.add(n)
-        initialActiveTools = [...activeSet]
-      }
       if (settings.tokenSavers?.compressToolDescriptions) {
         const countFor = initialActiveTools ? new Set(initialActiveTools) : undefined
         const saved = compactToolDescriptionsInPlace(tools, countFor)
@@ -411,43 +394,8 @@ export function makeRunStream(deps: RunStreamDeps) {
       const sddDraft = Object.values(useSddStore.getState().drafts).find(
         (d) => d.assistantSessionId === sid,
       )
-      // Local in-process models get a LEAN system prompt. The full agent
-      // preamble (tools, skills, agent names) overwhelms small local models and
-      // makes them ramble — e.g. answering "which model are you?" with the skill
-      const localCodeHint =
-        localCodeIntel.length > 0
-          ? " A code index IS available: prefer `code_search`/`code_query` (and `code_callers`/`code_callees`/`code_trace`) to locate symbols and understand the codebase BEFORE reading whole files — it is far cheaper than reading many files. For a LARGE file, call `read_summary` first to see its outline (symbols + line numbers), then `read_file` with offset/limit on the part you need — reading the whole file can overflow the context window."
-          : ""
       const recentText = lastUserText(history)
-      const localMemory =
-        localRuntimeProvider
-          ? await buildMemoryPromptSections({
-              workspacePath: cur.workspacePath,
-              memory: eff.memory,
-              recentText,
-              mode: "lean",
-            })
-          : []
-      const localMemoryText = localMemory.length ? "\n" + localMemory.join("\n") : ""
-      const localSkillsCatalog =
-        localRuntimeProvider && localAgent
-          ? await buildSkillsPromptSection(cur.workspacePath, {
-              recentText,
-              disabledSkills: settings.disabledSkills,
-            })
-          : ""
-      const localSkillsText = localSkillsCatalog ? "\n" + localSkillsCatalog : ""
-      const systemBase =
-        localRuntimeProvider
-          ? localAgent
-            ? "You are a coding assistant running locally inside Codezal. You have a lean set of core tools plus a `tool_search` tool to discover more. EMIT tool calls yourself (do not describe them or ask the user to run them) to read/edit files and run commands, then answer." +
-              localCodeHint +
-              " For plain questions, just answer directly. Reply in the user's language." +
-              localMemoryText +
-              localSkillsText
-            : "You are a helpful, concise assistant running locally inside Codezal. Reply directly, in the user's language." +
-              localMemoryText
-          : await buildSystemPrompt({
+      const systemBase = await buildSystemPrompt({
               activeGoal: cur.goal,
               workspacePath: cur.workspacePath,
               modelLabel: `${provider}/${modelId}`,
@@ -558,43 +506,36 @@ export function makeRunStream(deps: RunStreamDeps) {
       const guardReserve = outputLimit && outputLimit > 0 ? outputLimit : 20_000
       const guardTrigger = Math.floor(Math.max(0, effCtxWindow - guardReserve) * 0.7)
 
-      // pi-style context gauge (port of earendil-works/pi estimateContextTokens):
-      // usageBase = the model's last reported totalTokens (input + cacheRead +
-      // cacheWrite + output); trailing = chars/4 estimate of messages appended
-      // after the last assistant (the new user turn). First turn (no usage yet)
-      // falls back to the outbound estimate. We persist + show the gauge; the
-      // breakdown is derived from it so the composer slices always sum to it.
-      // Crucially, on a fresh turn usageBase still holds the previous step's full
-      // totalTokens, so the meter can NOT collapse to a small estimate the way the
-      // old pre-send-only number did (the 112K -> 32K drop the user kept seeing).
+      // Context gauge — single resolver (src/lib/context-gauge.ts).
+      // Estimate of the outbound request is always known and RECOMPUTED each
+      // step (tool loops grow the prompt). Provider step usage is accepted only
+      // when trustworthy vs that live estimate. Billing counters never drive
+      // the meter. Final gauge = last trusted step, never cumulative result.usage.
       const sessUsage = useSessionsStore.getState().sessions[sid]?.usage
       const usageBase = lastStepTotalTokens(sessUsage)
+      const effectivePrev = sessUsage?.effectiveContextTokens ?? 0
       const trailing = trailingAfterLastAssistant(history)
-      // usageBase > 0  -> pi-style totalTokens + trailing (a step has reported).
-      // usageBase == 0 but a gauge is already persisted (typical right after an
-      //   app reload / DMG install, before the first step reports usage, or on a
-      //   resumed session whose last* fields aren't populated yet): KEEP that
-      //   persisted gauge and just add the new user turn's trailing. The old code
-      //   fell through to estimateMessagesTokens() here, a cache-blind text guess
-      //   that dropped the meter from ~124K to ~62K the instant a new turn opened
-      //   (the "124K -> 62K drop" the user kept seeing). The persisted gauge already
-      //   includes cacheRead, so it stays accurate across reloads.
-      // only on the very first turn ever (no persisted gauge at all) do we fall
-      //   back to the pure estimate.
-      const persistedGauge = sessUsage?.effectiveContextTokens ?? 0
-      const gauge =
-        usageBase > 0
-          ? usageBase + trailing
-          : persistedGauge > 0
-            ? persistedGauge + trailing
-            : estimateMessagesTokens(outboundMessages)
-      useSessionsStore.getState().setEffectiveContextTokensFor(sid, gauge)
+      // Prefer the displayed occupancy (effective) over a partial last* rebuild.
+      // Taking only usageBase when last* < effective is what made the meter
+      // jump down the instant the user hit send (e.g. 36.3K → 29.2K).
+      const base = Math.max(usageBase, effectivePrev)
+      const previousOccupancy = base > 0 ? base + trailing : 0
+      const estimatedOutbound = estimateMessagesTokens(outboundMessages)
+      const startGauge = streamStartContextTokens(estimatedOutbound, previousOccupancy)
+      useSessionsStore.getState().setEffectiveContextTokensFor(sid, startGauge)
 
-      // Per-step ground truth: lastStepInput feeds the persisted lastInputTokens;
-      // lastStepPruned is set by prepareStep when the intra-turn pruner reclaims
-      // tool output. The gauge itself is the model-reported pi-style totalTokens.
-      let lastStepInput: number | undefined
-      let lastStepPruned = 0
+      // Live gauge state held on an object so TS control-flow analysis does not
+      // narrow `let x = null` to literal null across streamText callbacks (which
+      // made post-stream reads type as `never` in the trusted branch).
+      const gauge = {
+        /** Messages currently on the wire (recomputed each prepareStep). */
+        liveEstimate: estimatedOutbound,
+        lastStepInput: undefined as number | undefined,
+        lastStepPruned: 0,
+        /** Only usage that passed isTrustworthyProviderTotal. */
+        lastTrustedProvider: null as ProviderStepUsage | null,
+        lastTrustedGauge: startGauge,
+      }
 
       const result = streamText({
         model,
@@ -602,29 +543,35 @@ export function makeRunStream(deps: RunStreamDeps) {
         messages: outboundMessages,
         include: { requestMessages: true },
         onStepEnd: (step) => {
-          const realInput = step.usage.inputTokens
-          const stepCacheRead =
-            step.usage.inputTokenDetails?.cacheReadTokens ??
-            (step.usage as { cachedInputTokens?: number }).cachedInputTokens ??
-            (step.usage as { promptCacheHitTokens?: number }).promptCacheHitTokens ??
-            0
-          const stepOutput = step.usage.outputTokens ?? 0
-          lastStepInput = realInput ?? undefined
-          // pi-style gauge for this step: totalTokens the model processed
-          // (cache-miss input + cache-read + output). Output is included because
-          // the assistant message lands in history and becomes part of the next
-          // request's prompt. Trailing is 0 — nothing follows a just-finished step.
-          const stepGauge = (realInput ?? 0) + stepCacheRead + stepOutput
+          const extracted = extractProviderStepUsage(step.usage)
+          const realInput = extracted?.inputTokens ?? step.usage.inputTokens
+          gauge.lastStepInput = typeof realInput === "number" ? realInput : undefined
+
+          const stepTotal = extracted ? providerContextTotal(extracted) : 0
+          const trusted =
+            extracted != null &&
+            stepTotal > 0 &&
+            isTrustworthyProviderTotal(stepTotal, gauge.liveEstimate, extracted.cacheReadTokens)
+          if (trusted && extracted) gauge.lastTrustedProvider = extracted
+
+          // Floor only applies when the step is untrusted / missing — trusted
+          // totals may correct the meter down so effective and last* stay aligned.
+          const stepGauge = resolveContextTokens({
+            estimate: gauge.liveEstimate,
+            provider: extracted,
+            floor: gauge.lastTrustedGauge,
+          })
+          if (trusted || stepGauge >= gauge.lastTrustedGauge) {
+            gauge.lastTrustedGauge = stepGauge
+          }
           console.info(
-            `[ctx] step input=${realInput ?? "?"} cacheRead=${stepCacheRead} output=${stepOutput} ` +
-              `gauge=${stepGauge} pruned=${lastStepPruned}`,
+            `[ctx] step input=${extracted?.inputTokens ?? "?"} cacheRead=${extracted?.cacheReadTokens ?? 0} ` +
+              `output=${extracted?.outputTokens ?? 0} gauge=${gauge.lastTrustedGauge} estimate=${gauge.liveEstimate} ` +
+              `trusted=${trusted} pruned=${gauge.lastStepPruned}`,
           )
-          useSessionsStore.getState().setEffectiveContextTokensFor(sid, stepGauge)
+          useSessionsStore.getState().setEffectiveContextTokensFor(sid, gauge.lastTrustedGauge)
         },
-        // Local models can't reliably drive the multi-step agent loop (a 7B
-        // spins on junk/empty tool steps), so run them as plain single-turn
-        // chat — no tools, one step. Re-enable when a capable local model lands.
-        tools: localRuntimeProvider && !localAgent ? {} : tools,
+        tools,
         ...(initialActiveTools
           ? { activeTools: initialActiveTools as (keyof typeof tools)[] }
           : {}),
@@ -650,7 +597,7 @@ export function makeRunStream(deps: RunStreamDeps) {
             if (prunedTokens > 0) {
               base = pruned
               out.messages = pruned
-              lastStepPruned = prunedTokens
+              gauge.lastStepPruned = prunedTokens
               console.info(
                 `[stream-guard] intra-turn prune ~${prunedTokens} tok (eşik ${guardTrigger})`,
               )
@@ -677,12 +624,14 @@ export function makeRunStream(deps: RunStreamDeps) {
             }
             if (imgs.length) out.messages = [...base, ...imgs]
           }
-          // Do NOT overwrite the gauge here. prepareStep runs on every step of the
-          // multi-step loop; writing a raw estimateMessagesTokens() here collapsed
-          // the pi-style totalTokens gauge (set by turn-start/onStepEnd/turn-end)
-          // back to a small text estimate on every tool-calling turn — the exact
-          // "112K -> 32K drop" the user kept seeing. prunedTokens is already
-          // captured in lastStepPruned above and surfaced via onStepEnd's breakdown.
+          // Refresh the live estimate against the messages this step will send
+          // (post-prune, plus any injected screenshots). Assignment is direct
+          // (not max-with-previous) so a large intra-turn prune lowers the trust
+          // gate and the next provider total can be accepted. Floor on resolve
+          // still prevents untrusted reports from yanking the UI mid-turn.
+          // Do NOT write the gauge here — only onStepEnd / turn-end stamp it.
+          const wireMessages = out.messages ?? base
+          gauge.liveEstimate = estimateMessagesTokens(wireMessages)
           return out
         },
         ...(Object.keys(providerOptions).length > 0
@@ -691,7 +640,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         // Reasoning models need the full output window for thinking + answer;
         // only cap output (OpenCode-style 32k) when reasoning is off.
         ...(reasoningActive ? {} : { maxOutputTokens: maxOutputTokens(outputLimit) }),
-        stopWhen: isStepCount(localRuntimeProvider ? (localAgent ? 12 : 1) : 200),
+        stopWhen: isStepCount(200),
         abortSignal: stallController.signal,
         experimental_transform: smoothStream({
           delayInMs: 3,
@@ -707,7 +656,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       protocolTextFilter = shouldStripVisibleToolProtocol(
         provider,
         modelId,
-        !(localRuntimeProvider && !localAgent) && Object.keys(tools).length > 0,
+        Object.keys(tools).length > 0,
       )
         ? createVisibleToolProtocolFilter()
         : null
@@ -966,35 +915,35 @@ export function makeRunStream(deps: RunStreamDeps) {
       })
 
       const updatedSnap = useSessionsStore.getState().sessions[sid]
-      // The gauge was written per-step by onStepEnd (pi-style totalTokens). For
-      // the final persisted snapshot, recompute it from the aggregate result.usage
-      // when present so it reflects the turn's last-step ground truth; otherwise
-      // keep whatever onStepEnd stored, falling back to a pure estimate only when
-      // the provider reported no usage at all.
-      let effectiveTokens =
-        updatedSnap?.usage?.effectiveContextTokens ??
-        estimateMessagesTokens(updatedSnap?.modelMessages ?? [], system)
+      // Final gauge = last trusted step gauge (onStepEnd). NEVER re-resolve from
+      // result.usage / totalUsage — those are multi-step aggregates and inflate
+      // the meter (or fail the trust gate and wipe a correct last* snapshot).
+      const effectiveTokens =
+        gauge.lastTrustedGauge ||
+        updatedSnap?.usage?.effectiveContextTokens ||
+        Math.max(
+          gauge.liveEstimate,
+          estimateMessagesTokens(updatedSnap?.modelMessages ?? outboundMessages),
+        )
 
       try {
+        // Prefer per-step usage for billing when available; fall back to aggregate.
+        // Gauge occupancy still comes only from gauge.lastTrustedGauge above.
         const usage = await result.usage
         if (usage) {
-          const input = usage.inputTokens ?? 0
-          const output = usage.outputTokens ?? 0
-          const cacheRead =
-            usage.inputTokenDetails?.cacheReadTokens ??
-            (usage as { cachedInputTokens?: number }).cachedInputTokens ??
-            (usage as { promptCacheHitTokens?: number }).promptCacheHitTokens ??
-            0
-          const cacheWrite =
-            (usage as { cacheWriteTokens?: number }).cacheWriteTokens ??
-            usage.inputTokenDetails?.cacheWriteTokens ??
-            0
+          const extracted = extractProviderStepUsage(usage)
+          const input = extracted?.inputTokens ?? usage.inputTokens ?? 0
+          const output = extracted?.outputTokens ?? usage.outputTokens ?? 0
+          const cacheRead = extracted?.cacheReadTokens ?? 0
+          const cacheWrite = extracted?.cacheWriteTokens ?? 0
           const reasoning =
-            (usage as { reasoningTokens?: number }).reasoningTokens ?? 0
-          // pi-style final gauge: last-step totalTokens (cache-miss + cache-read +
-          // cache-write + output). Trailing is 0 at turn end (no pending user msg).
-          const finalGauge = (lastStepInput ?? input) + cacheRead + cacheWrite + output
-          effectiveTokens = finalGauge
+            (usage as { reasoningTokens?: number; outputTokenDetails?: { reasoningTokens?: number } })
+              .reasoningTokens ??
+            (usage as { outputTokenDetails?: { reasoningTokens?: number } }).outputTokenDetails
+              ?.reasoningTokens ??
+            0
+          // last* only from a step that passed the trust gate in onStepEnd.
+          const trustedStep = gauge.lastTrustedProvider
           useSessionsStore.getState().addUsageFor(sid, {
             inputTokens: input,
             outputTokens: output,
@@ -1010,26 +959,28 @@ export function makeRunStream(deps: RunStreamDeps) {
                 modelId,
               ),
             ),
-            lastInputTokens: lastStepInput ?? input,
-            lastOutputTokens: output,
-            lastCacheReadTokens: cacheRead,
-            lastCacheWriteTokens: cacheWrite,
-            effectiveContextTokens: finalGauge,
+            ...(trustedStep
+              ? {
+                  lastInputTokens: gauge.lastStepInput ?? trustedStep.inputTokens,
+                  lastOutputTokens: trustedStep.outputTokens,
+                  lastCacheReadTokens: trustedStep.cacheReadTokens,
+                  lastCacheWriteTokens: trustedStep.cacheWriteTokens,
+                }
+              : {
+                  // Explicit clear — addUsageFor would otherwise leave stale last*
+                  // or invent last* from billing deltas.
+                  lastInputTokens: undefined,
+                  lastOutputTokens: undefined,
+                  lastCacheReadTokens: undefined,
+                  lastCacheWriteTokens: undefined,
+                }),
+            effectiveContextTokens: effectiveTokens,
           })
         } else {
           useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens)
         }
       } catch {
         useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens)
-      }
-
-      if (localStatsProvider) {
-        const st = useLocalRuntimeStore.getState().lastStats
-        if (st) {
-          useSessionsStore.getState().patchMessageFor(sid, asstMsgId, {
-            localStats: { tokPerSec: st.tokPerSec, tokens: st.tokens, ttftMs: st.ttftMs },
-          })
-        }
       }
 
       await useSessionsStore.getState().persistSession(sid)
@@ -1203,6 +1154,12 @@ export function makeRunStream(deps: RunStreamDeps) {
       }
       if (compactedOk) {
         useSessionsStore.getState().replaceModelMessagesFor(sid, working)
+        // Stamp the post-compact size and invalidate stale last* so the retry's
+        // stream-start gauge (usageBase + trailing) cannot resurrect the
+        // pre-overflow full-window number.
+        useSessionsStore
+          .getState()
+          .setEffectiveContextTokensFor(sid, estimateMessagesTokens(working))
         const retryHistory = useSessionsStore.getState().sessions[sid]?.modelMessages ?? history
         // Reuse the same (now-empty) assistant bubble for the retry — avoids an
         // orphan blank message. Reset it to pending and re-stream into it.
@@ -1217,15 +1174,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         await runStream(sid, asstMsgId, retryHistory, override, retryCount + 1)
       } else {
         useSessionsStore.getState().setStreamingFor(sid, false)
-        const effCtx =
-          localRuntimeProvider ? useLocalRuntimeStore.getState().effectiveCtx[modelId] : undefined
-        const settingCtx = resolveLocalLlm(settings, modelId).contextWindow
-        deps.setError(
-          effCtx && effCtx < settingCtx
-            ? tStatic("app.localCtxTooSmall", { effective: String(effCtx) })
-            : tStatic("app.contextOverflow"),
-          sid,
-        )
+        deps.setError(tStatic("app.contextOverflow"), sid)
         fireTurnEnd("finish")
       }
       return
@@ -1532,40 +1481,12 @@ export function makeRunStream(deps: RunStreamDeps) {
   return runStream
 }
 
-// pi-style context gauge helpers (port of earendil-works/pi estimateContextTokens /
-// calculateContextTokens). The gauge the composer shows is derived as:
-//   gauge = usageBase + trailing
-// where usageBase = the model's last reported totalTokens (input + cacheRead +
-// cacheWrite + output) and trailing = a chars/4 estimate of the messages appended
-// after the last assistant (the new, not-yet-answered user turn). Because the base
-// is real provider usage, the gauge is immune to history-hygiene / strip / estimate
-// error shrinking it: it can only grow as the conversation grows. This is what
-// kills the "I sent a message and the context dropped from 112K to 32K" illusion —
-// on a fresh turn the base still holds the previous step's full totalTokens.
-
-type GaugeUsage = {
-  lastInputTokens?: number
-  lastOutputTokens?: number
-  lastCacheReadTokens?: number
-  lastCacheWriteTokens?: number
-}
-
-function lastStepTotalTokens(usage: GaugeUsage | undefined): number {
-  if (!usage) return 0
-  return (
-    (usage.lastInputTokens ?? 0) +
-    (usage.lastOutputTokens ?? 0) +
-    (usage.lastCacheReadTokens ?? 0) +
-    (usage.lastCacheWriteTokens ?? 0)
-  )
-}
-
-// chars/4 estimate of every message after the last assistant — i.e. the new user
-// turn that has not been answered yet. If there is no assistant yet (first turn)
-// the whole history is trailing.
+// Stream-start occupancy helpers. previousOccupancy = max(last-step total,
+// effectiveContextTokens) + trailing user turn estimate. The max keeps the
+// meter from jumping down when last* is a partial rebuild of a higher gauge.
 function trailingAfterLastAssistant(history: ModelMessage[]): number {
   for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role === "assistant") return estimateMessagesTokens(history.slice(i + 1))
+    if (history[i]!.role === "assistant") return estimateMessagesTokens(history.slice(i + 1))
   }
   return estimateMessagesTokens(history)
 }

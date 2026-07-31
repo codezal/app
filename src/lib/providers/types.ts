@@ -22,7 +22,6 @@ export type BuiltinProviderId =
   | "azure"
   | "google-vertex"
   | "vercel"
-  | "mlx"
   | "alibaba"
 export type ProviderId = BuiltinProviderId | (string & { _brand?: "ProviderId" })
 

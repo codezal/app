@@ -182,19 +182,8 @@ export function resolveContextCap(
   catalog: ProvidersCatalog | undefined,
   provider: ProviderId | undefined,
   model: string,
-  // Local runtimes have no catalog entry — their real window is the configured
-  // local context, passed in here so the fill gauge + compaction target match
-  // the actual runtime window, not a cloud-model fallback.
-  localContextWindow?: number,
   customProviders?: CustomProvider[],
 ): number {
-  if (
-    (provider === "local" || provider === "mlx") &&
-    typeof localContextWindow === "number" &&
-    localContextWindow > 0
-  ) {
-    return localContextWindow
-  }
   const customContextWindow = customProviders
     ?.find((candidate) => candidate.id === provider)
     ?.models.find((candidate) => candidate.id === model)?.contextWindow

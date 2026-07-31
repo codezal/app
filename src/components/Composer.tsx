@@ -48,6 +48,7 @@ import { PromptHistorySearch } from "./PromptHistorySearch"
 import { pushPrompt } from "@/lib/prompt-history"
 import {
   listProviderAdapters,
+  getProviderAdapter,
   modelsFor,
   defaultModelFor,
   isConnectedSync,
@@ -57,15 +58,15 @@ import {
   type ProviderId,
   type ReasoningEffort,
 } from "@/lib/providers"
+import { isModelEnabled } from "@/lib/providers/model-status"
 import { modelDetail, modelAcceptsImages, modelAcceptsPdf, resolveContextCap, type ProvidersCatalog } from "@/lib/providers-catalog"
+import { lastStepTotalTokens } from "@/lib/context-gauge"
 import {
   defaultModelForAgentProvider,
   isCliAgentProvider,
   listVisibleAgentProviders,
   modelsForAgentProvider,
 } from "@/lib/agent-providers"
-import { resolveLocalLlm, displayModelName } from "@/lib/local-llm"
-import { useLocalRuntimeStore } from "@/store/local-runtime"
 import { toast } from "@/store/toast"
 import { errorMessage } from "@/lib/errors"
 import { enhancePrompt } from "@/lib/prompt-enhance"
@@ -100,8 +101,6 @@ import { CommitBar } from "./CommitBar"
 import { filterCommands, filterMentions } from "@/lib/menu-filters"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
-import { refreshLocalModels } from "@/lib/providers/local"
-import { refreshMlxModels } from "@/lib/providers/mlx"
 
 const MAX_TEXTAREA_PX = 400
 
@@ -261,6 +260,10 @@ export function Composer({
   const model = useSessionsStore((s) => sess(s)?.model)
   const msgCount = useSessionsStore((s) => sess(s)?.messages.length ?? 0)
   const effectiveTok = useSessionsStore((s) => sess(s)?.usage?.effectiveContextTokens)
+  const lastInputTok = useSessionsStore((s) => sess(s)?.usage?.lastInputTokens)
+  const lastOutputTok = useSessionsStore((s) => sess(s)?.usage?.lastOutputTokens)
+  const lastCacheReadTok = useSessionsStore((s) => sess(s)?.usage?.lastCacheReadTokens)
+  const lastCacheWriteTok = useSessionsStore((s) => sess(s)?.usage?.lastCacheWriteTokens)
   // Each session keeps its own half-typed draft (text + pasted images/pdfs/
   // refs). The Composer is a single instance that survives session switches,
   // so without this the same input leaked into every chat. `composerId` is the
@@ -291,7 +294,6 @@ export function Composer({
     if (composerId == null) return
     useComposerDraftStore.getState().set(composerId, { text, images, pdfs, fileRefs })
   }, [text, images, pdfs, fileRefs, composerId])
-  const lastInputTok = useSessionsStore((s) => sess(s)?.usage?.lastInputTokens)
   const costUsd = useSessionsStore((s) => sess(s)?.usage?.costUsd)
   const settings = useSettingsStore((s) => s.settings)
   const updateSettings = useSettingsStore((s) => s.update)
@@ -969,24 +971,31 @@ export function Composer({
     menuOpen: (slashOpen && filteredCount > 0) || (mentionState.open && mentionFilteredCount > 0),
   })
 
-  // (her stream frame'inde re-render tetikliyordu).
-  const tokenCount = effectiveTok ?? lastInputTok ?? 0
-  const localEff = useLocalRuntimeStore((s) => (model ? s.effectiveCtx[model] : undefined))
-  const localWin = resolveLocalLlm(settings, model ?? "").contextWindow
+  // Single occupancy number: effectiveContextTokens from context-gauge.
+  // Cold-start / pre-gauge sessions may only have last* from an older build —
+  // reconstruct via lastStepTotalTokens (same formula as stream-start). Never
+  // fall back to raw lastInputTokens alone (cache-miss shadow → 239K→20K).
+  const tokenCount =
+    effectiveTok && effectiveTok > 0
+      ? effectiveTok
+      : lastStepTotalTokens({
+          lastInputTokens: lastInputTok,
+          lastOutputTokens: lastOutputTok,
+          lastCacheReadTokens: lastCacheReadTok,
+          lastCacheWriteTokens: lastCacheWriteTok,
+        })
   const contextCapValue = resolveContextCap(
     settings.providerCatalog?.data as ProvidersCatalog | undefined,
     provider,
     model ?? "",
-    localEff && localEff > 0 ? Math.min(localEff, localWin) : localWin,
     settings.customProviders,
   )
   // Composer'ın altındaki meta şeridi (eski global alt-barın taşınmış hâli).
   const metaWs = hasActive ? workspacePath : settings.defaultWorkspacePath
   const metaPct =
     contextCapValue > 0 ? Math.min(100, Math.round((tokenCount / contextCapValue) * 100)) : 0
-  // The meter shows the model's own reported context size (effectiveContextTokens,
-  // falling back to the last reported input tokens). No per-category breakdown —
-  // the model-reported number is the single source of truth shown to the user.
+  // One number, one source. No category popover — and no billing counters
+  // mixed into the meter.
   const ctxTotal = tokenCount
   const ctxPct =
     contextCapValue > 0 ? Math.min(100, Math.round((ctxTotal / contextCapValue) * 100)) : metaPct
@@ -2285,18 +2294,20 @@ function modelsForPickerProvider(
   providerId: ProviderId,
   catalog: ProvidersCatalog | undefined,
   settings: Settings,
-  runtimeModels: { local: string[]; mlx: string[] },
 ): string[] {
   if (isCliAgentProvider(providerId)) return modelsForAgentProvider(providerId, settings)
-  if (providerId === "local" || providerId === "mlx") {
-    const runtimeProvider = providerId === "local" ? "local" : "mlx"
-    const raw = runtimeModels[runtimeProvider]
-    const status = settings.modelStatus?.[runtimeProvider]
-    if (!status) return raw
-    const filtered = raw.filter((model) => status[model] !== false)
-    return filtered.length > 0 ? filtered : raw
-  }
-  return modelsFor(providerId, catalog, settings.modelStatus)
+  // The picker must mirror the Settings → Providers enabled-state exactly.
+  // `isModelEnabled` falls back to the provider's recommended models when the
+  // user has never toggled a model (no `modelStatus` entry yet), whereas a
+  // plain `status[m] !== false` check would treat those untouched models as
+  // enabled and leak every catalog model into the picker. Filter with the
+  // same helper the settings page uses so the two stay in sync. An empty
+  // result intentionally drops the provider from the picker (the caller
+  // already hides providers whose model list is empty).
+  const adapter = getProviderAdapter(providerId, catalog)
+  const raw = modelsFor(providerId, catalog)
+  if (!adapter) return raw
+  return raw.filter((model) => isModelEnabled(adapter, model, settings))
 }
 
 function ModelPicker({
@@ -2324,10 +2335,6 @@ function ModelPicker({
   // popover closes (handled in the event handlers, not an effect, to avoid
   // setState-in-effect).
   const [browseTab, setBrowseTab] = useState<ProviderId | null>(null)
-  const [runtimeModels, setRuntimeModels] = useState<{ local: string[]; mlx: string[] }>({
-    local: [],
-    mlx: [],
-  })
 
   function closePopover() {
     setOpen(false)
@@ -2351,16 +2358,6 @@ function ModelPicker({
     if (unique.length === 0) return
     void probeEnvVars(unique).then(setEnvHits)
   }, [open, adapters])
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    void Promise.all([refreshLocalModels(), refreshMlxModels()]).then(([local, mlx]) => {
-      if (!cancelled) setRuntimeModels({ local, mlx })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [open])
   const connected = useMemo(
     () => {
       const apiProviders = adapters
@@ -2377,9 +2374,9 @@ function ModelPicker({
     () =>
       connected.filter(
         (provider) =>
-          modelsForPickerProvider(provider.id, catalog, settings, runtimeModels).length > 0,
+          modelsForPickerProvider(provider.id, catalog, settings).length > 0,
       ),
-    [connected, catalog, settings, runtimeModels],
+    [connected, catalog, settings],
   )
   const requestedTab = browseTab ?? providerId
   const activeTab = visibleProviders.some((provider) => provider.id === requestedTab)
@@ -2389,8 +2386,8 @@ function ModelPicker({
   // Use the tab provider for the model list. If the user clicked a tab
   // without committing, this lets them search within it.
   const models = useMemo(
-    () => modelsForPickerProvider(activeTab, catalog, settings, runtimeModels),
-    [activeTab, catalog, settings, runtimeModels],
+    () => modelsForPickerProvider(activeTab, catalog, settings),
+    [activeTab, catalog, settings],
   )
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -2405,14 +2402,13 @@ function ModelPicker({
   const [hovered, setHovered] = useState(false)
   const nativeProvider = isCliAgentProvider(providerId)
   const detail = nativeProvider ? undefined : modelDetail(catalog, providerId, modelId)
-  const activeDisplay = detail?.name || displayModelName(modelId)
+  const activeDisplay = detail?.name || modelId
   const ctxCap = nativeProvider
     ? 0
     : resolveContextCap(
         catalog,
         providerId,
         modelId,
-        resolveLocalLlm(settings, modelId).contextWindow,
         settings.customProviders,
       )
   const ctxLabel = nativeProvider
@@ -2427,7 +2423,7 @@ function ModelPicker({
     <div ref={wrapRef} className="relative">
       {hovered && !open && (
         <div className="absolute bottom-[34px] right-0 z-50 w-56 rounded-lg border border-codezal-strong bg-codezal-panel p-2.5 shadow-lg text-sm text-codezal-dim pointer-events-none">
-          <div className="mb-1.5 font-medium text-codezal-text">{detail?.name ?? displayModelName(modelId)}</div>
+          <div className="mb-1.5 font-medium text-codezal-text">{detail?.name ?? modelId}</div>
             <div className="flex flex-col gap-1">
               <div className="flex justify-between">
                 <span className="text-codezal-mute">Context</span>
@@ -2529,7 +2525,7 @@ function ModelPicker({
                   )}
                   {filtered.map((m) => {
                     const name = isCliAgentProvider(activeTab) ? undefined : modelDetail(catalog, activeTab, m)?.name?.trim()
-                    const display = name || displayModelName(m)
+                    const display = name || m
                     const isActive = m === modelId && activeTab === providerId
                     return (
                       <button
