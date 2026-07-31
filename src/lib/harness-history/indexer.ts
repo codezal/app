@@ -6,14 +6,11 @@ import { discoverClaude } from "./readers/claude-code"
 import { discoverCodex } from "./readers/codex"
 import { discoverOpencode } from "./readers/opencode"
 import { discoverCursor } from "./readers/cursor"
-import { embedMany, type EmbeddingConfig } from "@/lib/embedding"
 import {
   ensureHistorySchema,
   getIndexedMtimes,
   pruneMissing,
-  threadEmbedText,
   upsertThread,
-  upsertThreadVector,
 } from "./store"
 
 export type IndexableHarness = HarnessKind
@@ -37,21 +34,14 @@ export type ReindexResult = {
   failed: number // load/parse null
 }
 
-export type ReindexOptions = {
-  embed?: EmbeddingConfig
-  onEmbedProgress?: (done: number, total: number) => void
-}
-
 export async function reindexHistory(
   harnesses: IndexableHarness[] = ["claude-code", "codex", "opencode", "cursor"],
-  opts: ReindexOptions = {},
 ): Promise<ReindexResult> {
   await ensureHistorySchema(db)
   const home = (await homeDir()).replace(/[\\/]+$/, "")
   const os = await currentOS()
   const known = await getIndexedMtimes(db)
   const seen = new Set<string>()
-  const toEmbed: { id: string; text: string }[] = []
   const res: ReindexResult = { indexed: 0, skipped: 0, removed: 0, failed: 0 }
   const now = Date.now()
 
@@ -73,19 +63,6 @@ export async function reindexHistory(
       }
       await upsertThread(db, thread, s.mtime, now)
       res.indexed++
-      if (opts.embed) toEmbed.push({ id: thread.id, text: threadEmbedText(thread) })
-    }
-  }
-
-  if (opts.embed && toEmbed.length > 0) {
-    const vecs = await embedMany(
-      opts.embed,
-      toEmbed.map((t) => t.text),
-      64,
-      opts.onEmbedProgress,
-    )
-    for (let i = 0; i < toEmbed.length; i++) {
-      if (vecs[i]) await upsertThreadVector(db, toEmbed[i].id, vecs[i])
     }
   }
 

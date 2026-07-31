@@ -1253,7 +1253,6 @@ function toolIcon(toolName: string): typeof Wrench {
 }
 
 const CODE_TOOLS = new Set([
-  "code_query",
   "code_search",
   "code_callers",
   "code_callees",
@@ -2664,7 +2663,7 @@ function describeCall(
   if (tool === "webfetch" || tool === "clone_repo") {
     return { label, name: String(input.url ?? "") }
   }
-  if (tool === "websearch" || tool === "code_query" || tool === "code_search") {
+  if (tool === "websearch" || tool === "code_search") {
     return { label, name: String(input.query ?? "") }
   }
   if (tool === "apply_patch") {
@@ -2733,7 +2732,6 @@ const TOOL_VERB_KEYS: Record<string, { pastKey: string; ingKey: string }> = {
   webfetch: { pastKey: "messageList.toolWebfetch", ingKey: "messageList.toolWebfetchIng" },
   websearch: { pastKey: "messageList.toolWebsearch", ingKey: "messageList.toolWebsearchIng" },
   apply_patch: { pastKey: "messageList.toolPatch", ingKey: "messageList.toolPatchIng" },
-  code_query: { pastKey: "messageList.toolCode", ingKey: "messageList.toolCodeIng" },
   code_search: { pastKey: "messageList.toolCode", ingKey: "messageList.toolCodeIng" },
   code_callers: { pastKey: "messageList.toolCode", ingKey: "messageList.toolCodeIng" },
   code_callees: { pastKey: "messageList.toolCode", ingKey: "messageList.toolCodeIng" },

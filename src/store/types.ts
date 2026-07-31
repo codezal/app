@@ -216,16 +216,6 @@ export type HookConfig = {
   pluginId?: string
 }
 
-export type SemanticIndexConfig = {
-  enabled: boolean
-  provider: "openai" | "ollama" | "custom"
-  baseUrl?: string
-  model: string
-  apiKey?: string
-  topK?: number
-  autoContext?: boolean
-}
-
 export type ToolOutputSettings = {
   maxLines?: number
   maxBytes?: number
@@ -328,7 +318,6 @@ export type Settings = {
   imageGeneration?: ImageGenerationConfig
   providerCatalog?: CachedProviderCatalog
   hooks?: HookConfig[]
-  semantic?: SemanticIndexConfig
   // Theme/typography/UX flags — managed by the Appearance settings tab.
   // Optional for back-compat: old settings files fall back to DEFAULT_APPEARANCE
   // and the legacy `theme` field is migrated into `appearance.mode` on load.

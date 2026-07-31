@@ -1,5 +1,4 @@
 import type { Db } from "@/lib/db/driver"
-import { cosine } from "@/lib/embedding"
 import type { HarnessKind, HarnessMessage, HarnessThread, ThreadHit } from "./types"
 
 const DDL: string[] = [
@@ -30,12 +29,6 @@ const DDL: string[] = [
   `CREATE VIRTUAL TABLE IF NOT EXISTS hh_fts USING fts5(
     text, title, thread_id UNINDEXED, harness UNINDEXED,
     tokenize = 'unicode61 remove_diacritics 2'
-  )`,
-  `CREATE TABLE IF NOT EXISTS hh_vec (
-    thread_id TEXT PRIMARY KEY,
-    dim INTEGER NOT NULL,
-    vec TEXT NOT NULL,
-    FOREIGN KEY (thread_id) REFERENCES hh_thread (id) ON DELETE CASCADE
   )`,
 ]
 
@@ -260,122 +253,4 @@ export async function historyStats(
 }
 
 
-export function threadEmbedText(thread: HarnessThread): string {
-  const parts = [thread.title]
-  let len = thread.title.length
-  for (const m of thread.messages) {
-    parts.push(m.text)
-    len += m.text.length
-    if (len > 2000) break
-  }
-  return parts.join("\n").slice(0, 2000)
-}
 
-export async function upsertThreadVector(db: Db, threadId: string, vec: number[]): Promise<void> {
-  await db.exec(
-    `INSERT INTO hh_vec (thread_id, dim, vec) VALUES (?, ?, ?)
-     ON CONFLICT(thread_id) DO UPDATE SET dim = excluded.dim, vec = excluded.vec`,
-    [threadId, vec.length, JSON.stringify(vec)],
-  )
-}
-
-export async function hasVectors(db: Db): Promise<boolean> {
-  const r = await db.select<{ n: number }>(`SELECT COUNT(*) AS n FROM hh_vec`)
-  return (r[0]?.n ?? 0) > 0
-}
-
-export async function semanticRank(
-  db: Db,
-  queryVec: number[],
-  opts: SearchOpts = {},
-): Promise<{ threadId: string; score: number }[]> {
-  let sql = `SELECT v.thread_id AS threadId, v.vec AS vec FROM hh_vec v`
-  const params: unknown[] = []
-  const conds: string[] = []
-  if (opts.harness || opts.projectContains) {
-    sql += ` JOIN hh_thread t ON t.id = v.thread_id`
-    if (opts.harness) {
-      conds.push(`t.harness = ?`)
-      params.push(opts.harness)
-    }
-    if (opts.projectContains) {
-      conds.push(`t.project_path LIKE ? ESCAPE '\\'`)
-      params.push(`%${escapeLike(opts.projectContains)}%`)
-    }
-  }
-  if (conds.length) sql += ` WHERE ${conds.join(" AND ")}`
-  const rows = await db.select<{ threadId: string; vec: string }>(sql, params)
-  const scored: { threadId: string; score: number }[] = []
-  for (const r of rows) {
-    let v: number[]
-    try {
-      v = JSON.parse(r.vec) as number[]
-    } catch {
-      continue
-    }
-    scored.push({ threadId: r.threadId, score: cosine(queryVec, v) })
-  }
-  scored.sort((a, b) => b.score - a.score)
-  return scored.slice(0, opts.limit ?? 50)
-}
-
-async function threadMeta(
-  db: Db,
-  threadId: string,
-): Promise<Omit<ThreadHit, "score"> | null> {
-  const t = await db.select<{
-    harness: HarnessKind
-    title: string
-    projectPath: string | null
-    updatedAt: number | null
-  }>(
-    `SELECT harness, title, project_path AS projectPath, updated_at AS updatedAt
-     FROM hh_thread WHERE id = ?`,
-    [threadId],
-  )
-  if (!t[0]) return null
-  const m = await db.select<{ text: string }>(
-    `SELECT text FROM hh_message WHERE thread_id = ? ORDER BY idx LIMIT 1`,
-    [threadId],
-  )
-  return {
-    threadId,
-    harness: t[0].harness,
-    title: t[0].title,
-    projectPath: t[0].projectPath ?? undefined,
-    updatedAt: t[0].updatedAt ?? undefined,
-    snippet: (m[0]?.text ?? "").slice(0, 120),
-  }
-}
-
-export async function hybridSearch(
-  db: Db,
-  query: string,
-  queryVec: number[] | null,
-  opts: SearchOpts = {},
-): Promise<ThreadHit[]> {
-  const limit = opts.limit ?? 30
-  const wide = Math.max(limit * 2, 50)
-  const kw = await searchThreads(db, query, { ...opts, limit: wide })
-  if (!queryVec) return kw.slice(0, limit)
-
-  const sem = await semanticRank(db, queryVec, { ...opts, limit: wide })
-  const k = 60
-  const rrf = new Map<string, number>()
-  kw.forEach((h, i) => rrf.set(h.threadId, (rrf.get(h.threadId) ?? 0) + 1 / (k + i)))
-  sem.forEach((s, i) => rrf.set(s.threadId, (rrf.get(s.threadId) ?? 0) + 1 / (k + i)))
-
-  const byId = new Map(kw.map((h) => [h.threadId, h]))
-  const ranked = [...rrf.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit)
-  const out: ThreadHit[] = []
-  for (const [tid, r] of ranked) {
-    const kwHit = byId.get(tid)
-    if (kwHit) {
-      out.push({ ...kwHit, score: -r })
-      continue
-    }
-    const meta = await threadMeta(db, tid)
-    if (meta) out.push({ ...meta, score: -r })
-  }
-  return out
-}

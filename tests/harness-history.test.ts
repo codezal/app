@@ -13,10 +13,6 @@ import {
   ensureHistorySchema,
   upsertThread,
   searchThreads,
-  hybridSearch,
-  semanticRank,
-  upsertThreadVector,
-  threadEmbedText,
   listThreads,
   getThreadMessages,
   getIndexedMtimes,
@@ -349,37 +345,4 @@ describe("store / search", () => {
     db.close()
   })
 
-  it("threadEmbedText — başlık + mesaj başı, 2000 char tavanı", () => {
-    const txt = threadEmbedText(claude)
-    expect(txt).toContain(claude.title)
-    expect(txt.length).toBeLessThanOrEqual(2000)
-  })
-
-  it("semanticRank — cosine'e göre sıralı", async () => {
-    const db = await seeded()
-    await upsertThreadVector(db, "claude-code:abc", [1, 0, 0])
-    await upsertThreadVector(db, "codex:cx1", [0, 1, 0])
-    const ranked = await semanticRank(db, [1, 0, 0])
-    expect(ranked[0].threadId).toBe("claude-code:abc")
-    expect(ranked[0].score).toBeGreaterThan(ranked[1].score)
-    db.close()
-  })
-
-  it("hybridSearch — keyword + semantik RRF ile birleşir", async () => {
-    const db = await seeded()
-    await upsertThreadVector(db, "claude-code:abc", [1, 0, 0])
-    await upsertThreadVector(db, "codex:cx1", [0, 1, 0])
-    const hits = await hybridSearch(db, "oauth", [0, 1, 0], { limit: 10 })
-    const ids = hits.map((h) => h.threadId)
-    expect(ids).toContain("claude-code:abc")
-    expect(ids).toContain("codex:cx1")
-    db.close()
-  })
-
-  it("hybridSearch — queryVec null → keyword-only", async () => {
-    const db = await seeded()
-    const hits = await hybridSearch(db, "oauth", null, { limit: 10 })
-    expect(hits.every((h) => h.threadId === "claude-code:abc")).toBe(true)
-    db.close()
-  })
 })

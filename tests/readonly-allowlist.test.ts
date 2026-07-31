@@ -26,7 +26,6 @@ describe("READONLY_ALLOW drift guard", () => {
   it("keeps orientation and code-intel tools in the eager core set", () => {
     const expectedCore = [
       "repo_overview",
-      "code_query",
       "code_search",
       "code_callers",
       "code_callees",

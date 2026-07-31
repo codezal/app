@@ -57,7 +57,7 @@ function lastUserText(history: ModelMessage[]): string | undefined {
 
 // Append a per-turn <system-reminder> to the LATEST user message only — never to
 // already-sent history. This is how dynamic, turn-dependent context (learned-
-// memory recall, semantic auto-context, the live goal iteration counter, the
+// memory recall, the live goal iteration counter, the
 // background-jobs grounding note) reaches the model without mutating the
 // cache-stable system prompt. Append-only: every past message stays byte-
 // identical, so the prompt prefix keeps hitting the cache.
@@ -418,8 +418,8 @@ export function makeRunStream(deps: RunStreamDeps) {
       // the model with their live status — otherwise a fresh user message
       // ("bitti mi?") gets answered from the stale transcript and the model
       // resurrects the previous topic (the "alzheimer" loop).
-      // Dynamic, turn-dependent context (learned-memory recall, semantic
-      // auto-context, the live goal iteration counter) and the background-jobs
+      // Dynamic, turn-dependent context (learned-memory recall, the live goal
+      // iteration counter) and the background-jobs
       // grounding note are NOT folded into the system prompt — that would change
       // the cache-stable prefix on every turn. They are appended to the latest
       // user message as a <system-reminder> further below (append-only).

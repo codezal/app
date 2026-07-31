@@ -19,7 +19,6 @@ import {
   Search,
   Shield,
   ShieldCheck,
-  Sparkles,
   Webhook,
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
@@ -34,7 +33,6 @@ import { McpTab } from "./settings/McpTab"
 import { HooksTab } from "./settings/HooksTab"
 import { WebSearchTab } from "./settings/WebSearchTab"
 import { ImageGenTab } from "./settings/ImageGenTab"
-import { SemanticTab } from "./settings/SemanticTab"
 import { AboutTab } from "./settings/AboutTab"
 import { StatsTab } from "./settings/StatsTab"
 import { PluginsTab } from "./PluginsTab"
@@ -66,7 +64,6 @@ type Tab =
   | "hooks"
   | "web"
   | "gorsel"
-  | "semantic"
   | "gecmis"
   | "tokens"
   | "skills"
@@ -111,7 +108,6 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
     { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook, section: 2 },
     { id: "web", label: t("settings.web.title"), icon: Globe, section: 2 },
     { id: "gorsel", label: t("settings.tabs.imageGen"), icon: ImageIcon, section: 2 },
-    { id: "semantic", label: t("settings.tabs.semantic"), icon: Sparkles, section: 2 },
     { id: "skills", label: t("settings.tabs.skills"), icon: ScrollText, section: 2 },
     { id: "eklentiler", label: t("settings.tabs.plugins"), icon: Puzzle, section: 2 },
   ]
@@ -230,7 +226,6 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
             {tab === "hooks" && <HooksTab />}
             {tab === "web" && <WebSearchTab />}
             {tab === "gorsel" && <ImageGenTab />}
-            {tab === "semantic" && <SemanticTab />}
             {tab === "tokens" && <TokenSavingTab />}
             {tab === "skills" && <SkillsTab />}
             {tab === "eklentiler" && <PluginsTab />}

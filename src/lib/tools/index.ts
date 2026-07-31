@@ -28,7 +28,6 @@ import TODOWRITE_DESC from "./prompts/todowrite.txt?raw"
 import REPO_OVERVIEW_DESC from "./prompts/repo_overview.txt?raw"
 import REPO_CLONE_DESC from "./prompts/repo_clone.txt?raw"
 import CREATE_PR_DESC from "./prompts/create_pr.txt?raw"
-import INDEX_DOCS_DESC from "./prompts/index_docs.txt?raw"
 import SKILL_DESC from "./prompts/skill.txt?raw"
 import SPAWN_AGENT_DESC from "./prompts/spawn_agent.txt?raw"
 import DELEGATE_AGENTS_DESC from "./prompts/delegate_agents.txt?raw"
@@ -154,7 +153,6 @@ import { listPluginAgents } from "../agents/plugin"
 import { checkpoint } from "../snapshots"
 import { scanToolInput, secretDenyGuidance, redactSecrets } from "@/lib/security/scan"
 import { runHooks } from "../hooks"
-import { loadIndex, queryIndex, indexDocs } from "../semantic-index"
 import { formatSymbol } from "../token-savers"
 import type { CodeSymbol } from "../token-savers"
 import { invoke } from "@tauri-apps/api/core"
@@ -233,7 +231,6 @@ async function buildSubagentSystem(
         "A tree-sitter Code Map is indexed for this workspace. For structural questions prefer:\n" +
         "- code_search (find symbol) · code_callers (what calls X) · code_callees (what X calls)\n" +
         "- code_context (definition + callers + callees in one call)\n" +
-        "- code_query (semantic/concept search)\n" +
         "Use grep only for literal text (strings, comments, config values).",
     )
   }
@@ -356,7 +353,6 @@ const READ_ONLY_EXTRA = new Set([
   "glob",
   "todo_write",
   "bash_status",
-  "code_query",
   "code_search",
   "code_callers",
   "code_callees",
@@ -544,8 +540,6 @@ export type ToolName =
   | "list_worktrees"
   | "remove_worktree"
   | "create_pr"
-  | "index_docs"
-  | "code_query"
   | "code_search"
   | "code_callers"
   | "code_callees"
@@ -809,7 +803,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
 
 export const READONLY_ALLOW = new Set<string>([
   "read_file", "read_summary", "list_dir", "grep", "glob",
-  "code_query", "code_search", "code_callers", "code_callees", "code_trace", "code_impact", "code_context",
+  "code_search", "code_callers", "code_callees", "code_trace", "code_impact", "code_context",
   "repo_overview", "load_skill",
   "webfetch", "websearch", "search_and_extract", "firecrawl",
   "question", "notify", "todo_write", "propose_plan", "propose_build",
@@ -1047,7 +1041,6 @@ export const CORE_TOOL_NAMES = new Set<string>([
   "grep",
   "glob",
   "repo_overview",
-  "code_query",
   "code_search",
   "code_callers",
   "code_callees",
@@ -1797,79 +1790,6 @@ export function buildTools(
     }),
 
     ...buildCodeMapTools(configWorkspace),
-
-    index_docs: tool({
-      description: INDEX_DOCS_DESC,
-      inputSchema: z.object({
-        urls: z
-          .array(z.string().url())
-          .min(1)
-          .max(20)
-          .describe("HTTP(S) documentation URLs to index (1-20)"),
-      }),
-      execute: async ({ urls }) => {
-        await gateFor("index_docs", { urls })
-        const sem = useSettingsStore.getState().settings.semantic
-        if (!sem?.enabled) {
-          return "Semantic index is disabled. Enable it in Settings > Semantic and build the index."
-        }
-        const r = await indexDocs({
-          workspace: configWorkspace ?? workspace,
-          cfg: { provider: sem.provider, baseUrl: sem.baseUrl, model: sem.model, apiKey: sem.apiKey },
-          urls,
-          fetch: (u) => webfetchImpl(u, "markdown"),
-        })
-        return [
-          `${r.added} chunks added (${r.urls.length}/${urls.length} URLs).`,
-          r.urls.length ? `Indexed: ${r.urls.join(", ")}` : "",
-          "code_query and per-turn auto-context can now retrieve these docs.",
-        ]
-          .filter(Boolean)
-          .join("\n")
-      },
-    }),
-
-    code_query: tool({
-      description:
-        "Run a natural-language query against the workspace semantic index. " +
-        "Returns the most relevant code chunks by embedding similarity (path:line0-line1 + snippet). " +
-        "If the index is missing or semantic search is disabled, it returns an error; the user must build the index in Settings > Semantic. " +
-        "Use it for conceptual searches grep cannot handle (for example 'token refresh flow', 'user logout').",
-      inputSchema: z.object({
-        query: z.string().describe("Natural-language query, clear and concise"),
-        top_k: z.number().int().min(1).max(20).optional().describe("How many results to return (1-20, default 5)"),
-      }),
-      execute: async ({ query, top_k }) => {
-        const cfg = useSettingsStore.getState().settings.semantic
-        if (!cfg || !cfg.enabled) {
-          return "Semantic index is disabled. Enable it in Settings > Semantic."
-        }
-        const idx = await loadIndex(workspace)
-        if (!idx) {
-          return "Semantic index is missing. Build it from Settings > Semantic > Build index."
-        }
-        const results = await queryIndex({
-          index: idx,
-          cfg: {
-            provider: cfg.provider,
-            baseUrl: cfg.baseUrl,
-            model: cfg.model,
-            apiKey: cfg.apiKey,
-          },
-          query,
-          topK: top_k ?? cfg.topK ?? 5,
-        })
-        if (results.length === 0) return "(no matches)"
-        return results
-          .map((r, i) => {
-            const head = `## ${i + 1}. ${r.chunk.path}:${r.chunk.line0}-${r.chunk.line1}  (sim=${r.score.toFixed(3)})`
-            const snippet =
-              r.chunk.text.length > 1500 ? sliceCharsSafe(r.chunk.text, 1500) + "\n... [truncated]" : r.chunk.text
-            return `${head}\n\`\`\`\n${snippet}\n\`\`\``
-          })
-          .join("\n\n")
-      },
-    }),
 
     list_worktrees: tool({
       description:

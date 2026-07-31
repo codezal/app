@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { RefreshCcw, Search } from "@/lib/icons"
 import { db } from "@/lib/db"
-import { useSettingsStore } from "@/store/settings"
-import { embedMany, type EmbeddingConfig } from "@/lib/embedding"
 import { useT } from "@/lib/i18n/useT"
 import { cn } from "@/lib/utils"
 import { errorMessage } from "@/lib/errors"
@@ -11,7 +9,6 @@ import { reindexHistory, type IndexableHarness, type ReindexResult } from "@/lib
 import {
   ensureHistorySchema,
   searchThreads,
-  hybridSearch,
   getThreadMessages,
   historyStats,
 } from "@/lib/harness-history/store"
@@ -50,19 +47,6 @@ export function HistoryTab() {
   const [openMsgs, setOpenMsgs] = useState<HarnessMessage[]>([])
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const semanticCfg = useSettingsStore((s) => s.settings.semantic)
-  const [semantic, setSemantic] = useState(false)
-  const [embedProgress, setEmbedProgress] = useState<{ done: number; total: number } | null>(null)
-  const embedCfg: EmbeddingConfig | null =
-    semanticCfg && semanticCfg.model
-      ? {
-          provider: semanticCfg.provider,
-          baseUrl: semanticCfg.baseUrl,
-          model: semanticCfg.model,
-          apiKey: semanticCfg.apiKey,
-        }
-      : null
-
   useEffect(() => {
     let alive = true
     void (async () => {
@@ -94,19 +78,13 @@ export function HistoryTab() {
     setIndexing(true)
     setError(null)
     try {
-      const r = await reindexHistory(
-        harnesses,
-        semantic && embedCfg
-          ? { embed: embedCfg, onEmbedProgress: (done, total) => setEmbedProgress({ done, total }) }
-          : {},
-      )
+      const r = await reindexHistory(harnesses)
       setResult(r)
       setStats(await historyStats(db))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
       setIndexing(false)
-      setEmbedProgress(null)
     }
   }
 
@@ -124,12 +102,7 @@ export function HistoryTab() {
   async function runSearch(q: string) {
     setSearching(true)
     try {
-      if (semantic && embedCfg) {
-        const [qv] = await embedMany(embedCfg, [q])
-        setHits(await hybridSearch(db, q, qv ?? null, { limit: 30 }))
-      } else {
-        setHits(await searchThreads(db, q, { limit: 30 }))
-      }
+      setHits(await searchThreads(db, q, { limit: 30 }))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -183,23 +156,6 @@ export function HistoryTab() {
           ))}
         </div>
 
-        <label className="mb-3 flex items-center gap-2 text-base">
-          <input
-            type="checkbox"
-            checked={semantic}
-            disabled={!embedCfg}
-            onChange={(e) => setSemantic(e.target.checked)}
-          />
-          <span className={cn("text-codezal-text", !embedCfg && "opacity-50")}>
-            {tx("semantic", "Semantic search (embeddings)")}
-          </span>
-          {!embedCfg && (
-            <span className="text-base text-codezal-mute">
-              {tx("semanticNeedCfg", "— set an embedding model in the Semantic tab")}
-            </span>
-          )}
-        </label>
-
         {error && <div className="mb-2 text-base text-destructive">{error}</div>}
 
         <div className="flex items-center gap-3">
@@ -224,11 +180,6 @@ export function HistoryTab() {
                 : ""}
           </span>
         </div>
-        {embedProgress && (
-          <div className="mt-2 text-base text-codezal-dim">
-            {tx("embedding", "Embedding")}: {embedProgress.done}/{embedProgress.total}
-          </div>
-        )}
       </Section>
 
       <Section title={tx("searchTitle", "Search")}>

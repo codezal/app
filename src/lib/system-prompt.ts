@@ -8,8 +8,6 @@ import {
 import { DEFAULT_MEMORY, type MemorySettings } from "./memory-settings"
 import { loadMemoryContextBlock } from "./memory-store"
 import { loadMethodsCatalog } from "./methods"
-import { loadIndex, queryIndex } from "./semantic-index"
-import { sliceCharsSafe } from "./text"
 import { buildSkillsPromptSection } from "./skills"
 import { readWorkspaceAgents, readUserAgents, buildAgentsCatalog } from "./agents"
 import { listPluginAgents } from "./agents/plugin"
@@ -44,7 +42,6 @@ This workspace has an always-indexed, auto-updated Code Map (a tree-sitter symbo
 - "How does X reach Y / trace the flow" → code_trace
 - "What breaks if I change X (rename, signature change)" → code_impact
 - "Understand a symbol before editing it" → code_context (definition + callers + callees in one call)
-- "Concept search — where's the auth / login / retry logic" (fuzzy, not a known name) → code_query (semantic; if it reports the index is off, fall back to grep)
 
 Use grep ONLY for literal text the Code Map doesn't model: string contents, comments, log messages, config values — or a quick scan once you already have a file open. Do NOT grep for a symbol's callers or definition: that is slower, noisier, and misses dynamic-dispatch edges the Code Map bridges.
 Trust Code Map results (full AST parse) — don't re-verify them with grep. The index stays fresh automatically; never rebuild it manually.`
@@ -163,7 +160,7 @@ export async function buildMemoryPromptSections(args: {
 }
 
 // Per-turn DYNAMIC context — everything that depends on the latest user message
-// (learned-memory recall, method recall, semantic auto-context) or on the live
+// (learned-memory recall, method recall) or on the live
 // goal iteration counter. This is deliberately kept OUT of the system prompt so
 // the prompt prefix stays byte-for-byte identical across turns and the prompt
 // cache keeps hitting. The harness (run-stream) appends the returned string to
@@ -201,42 +198,6 @@ export async function buildDynamicContext(args: {
       if (methodsBlock) sections.push(methodsBlock)
     } catch {
       // Method recall is best-effort.
-    }
-  }
-
-  const sem = useSettingsStore.getState().settings.semantic
-  if (sem?.enabled && sem.autoContext && args.workspacePath && (recentText?.trim().length ?? 0) >= 8) {
-    try {
-      const index = await loadIndex(args.workspacePath)
-      if (index) {
-        const hits = await queryIndex({
-          index,
-          cfg: { provider: sem.provider, baseUrl: sem.baseUrl, model: sem.model, apiKey: sem.apiKey },
-          query: recentText!,
-          topK: Math.min(sem.topK ?? 5, 6),
-        })
-        const relevant = hits.filter((h) => h.score > 0.2)
-        if (relevant.length > 0) {
-          const block: string[] = [
-            "## Relevant code (auto-retrieved from the semantic index)",
-            "Retrieved by similarity to your latest message — a starting point, not authoritative. Open the real files with read_file before editing.",
-          ]
-          let budget = 4000
-          for (const h of relevant) {
-            const snip =
-              h.chunk.text.length > 1200
-                ? sliceCharsSafe(h.chunk.text, 1200) + "\n… [truncated]"
-                : h.chunk.text
-            const entry = `\n### ${h.chunk.path}:${h.chunk.line0}-${h.chunk.line1}\n\`\`\`\n${snip}\n\`\`\``
-            if (budget - entry.length < 0) break
-            budget -= entry.length
-            block.push(entry)
-          }
-          sections.push(block.join("\n"))
-        }
-      }
-    } catch {
-      // Intentionally ignored.
     }
   }
 

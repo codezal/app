@@ -411,50 +411,6 @@
         "additionalProperties": {}
       }
     },
-    "semantic": {
-      "default": {
-        "enabled": false,
-        "provider": "ollama",
-        "baseUrl": "",
-        "model": "nomic-embed-text",
-        "apiKey": "",
-        "topK": 5
-      },
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "provider": {
-          "type": "string",
-          "enum": [
-            "openai",
-            "ollama",
-            "custom"
-          ]
-        },
-        "baseUrl": {
-          "type": "string"
-        },
-        "model": {
-          "type": "string"
-        },
-        "apiKey": {
-          "type": "string"
-        },
-        "topK": {
-          "type": "number"
-        },
-        "autoContext": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "enabled",
-        "provider",
-        "model"
-      ]
-    },
     "appearance": {
       "default": {
         "mode": "system",

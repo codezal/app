@@ -31,7 +31,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     body: `---
 name: code-reviewer
 description: Code review specialist - reviews diffs/files and returns severity-tagged findings.
-tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, code_query, bash]
+tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, lsp, bash]
 bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "sed -n", "awk", "git stash list", "git stash show"]
 plan_mode: true
 ---
@@ -121,7 +121,7 @@ Rules:
     body: `---
 name: debugger
 description: Isolate bugs by forming hypotheses, collecting evidence, and identifying root cause.
-tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_trace, lsp, code_query, bash]
+tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_trace, lsp, bash]
 bash_allow: ["git log", "git diff", "git show", "git status", "git blame", "git bisect", "git rev-parse", "git ls-files", "git branch", "git remote", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest", "sed -n", "awk", "git stash list", "git stash show"]
 approval_required: [bash]
 ---
@@ -159,7 +159,7 @@ Rules:
     body: `---
 name: doc-writer
 description: Write README/JSDoc/API docs by reading code and producing user-facing documentation.
-tools: [list_dir, read_file, grep, glob, code_search, repo_overview, lsp, code_query, write_file, edit_file]
+tools: [list_dir, read_file, grep, glob, code_search, repo_overview, lsp, write_file, edit_file]
 approval_required: [write_file, edit_file]
 ---
 
@@ -168,7 +168,7 @@ You are a technical writer. Task: produce useful documentation for the supplied 
 Flow:
 1. Use \`repo_overview\` to understand the project (stack, README, structure).
 2. Find public API symbols with \`code_search\`; use \`lsp\` (operation: documentSymbol) to inspect a file's symbol/signature surface.
-3. READ behavior with \`read_file\`/\`code_query\`; do not guess.
+3. READ behavior with \`read_file\`; do not guess.
 4. Write the docs with \`write_file\`/\`edit_file\`.
 
 Rules:
@@ -195,7 +195,7 @@ Rules:
     body: `---
 name: refactorer
 description: Suggest refactors by finding duplication, complexity, poor naming, and giving a plan.
-tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, code_query, bash]
+tools: [list_dir, read_file, grep, glob, code_search, code_callers, code_callees, code_impact, code_trace, repo_overview, lsp, bash]
 bash_allow: ["git diff", "git log", "git show", "git status", "git blame", "git rev-parse", "git ls-files", "git remote", "git branch", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "echo", "printf", "pwd", "cat", "grep", "find", "ls", "file", "stat", "du", "sed -n", "awk", "git stash list", "git stash show"]
 plan_mode: true
 ---
@@ -235,7 +235,7 @@ Rules:
     body: `---
 name: explorer
 description: Explore a codebase/module and map architecture, flow, and dependencies (read-only).
-tools: [list_dir, read_file, grep, glob, repo_overview, code_search, code_callers, code_callees, code_trace, code_impact, lsp, code_query]
+tools: [list_dir, read_file, grep, glob, repo_overview, code_search, code_callers, code_callees, code_trace, code_impact, lsp]
 plan_mode: true
 ---
 
@@ -245,7 +245,7 @@ Flow:
 1. Orient with \`repo_overview\` (stack, README, structure); use it first in a new project.
 2. Find relevant symbols/files with \`code_search\`/\`grep\`/\`glob\`.
 3. Map the flow: connections with \`code_callers\`/\`code_callees\`, and "how X reaches Y" with \`code_trace\` (from->to).
-4. Verify symbol definitions/usages with \`lsp\` (operation: definition / references); use \`code_query\` for conceptual search.
+4. Verify symbol definitions/usages with \`lsp\` (operation: definition / references).
 5. Use \`code_impact\` when you need change-impact context.
 
 Final answer (structured):
@@ -271,7 +271,7 @@ Rules:
     body: `---
 name: test-writer
 description: Write missing tests for uncovered code, run them, and fix the tests until they pass.
-tools: [list_dir, read_file, grep, glob, code_search, code_callees, lsp, code_query, write_file, edit_file, bash]
+tools: [list_dir, read_file, grep, glob, code_search, code_callees, lsp, write_file, edit_file, bash]
 bash_allow: ["pnpm test", "pnpm run test", "npm test", "npm run test", "yarn test", "npx vitest", "npx jest", "bun test", "deno test", "cargo test", "go test", "pytest", "vitest", "jest"]
 approval_required: [write_file, edit_file, bash]
 ---

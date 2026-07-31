@@ -278,18 +278,6 @@ export function makeSchema(d: Settings) {
         .catch(undefined),
       providerCatalog: looseRecord.optional(),
       hooks: z.array(HookSchema).optional().catch(d.hooks),
-      semantic: z
-        .object({
-          enabled: z.boolean(),
-          provider: z.enum(["openai", "ollama", "custom"]),
-          baseUrl: z.string().optional(),
-          model: z.string(),
-          apiKey: z.string().optional(),
-          topK: z.number().optional(),
-          autoContext: z.boolean().optional(),
-        })
-        .optional()
-        .catch(d.semantic),
       // Free-form blobs — validated loosely, repaired/merged by their own modules.
       appearance: looseRecord.optional().catch(d.appearance as Record<string, unknown>),
       tokenSavers: looseRecord.optional().catch(d.tokenSavers as Record<string, unknown>),
