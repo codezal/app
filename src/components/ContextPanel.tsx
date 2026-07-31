@@ -227,14 +227,13 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
         <WorkspaceDockHeader
           mode={mode}
           onChange={onModeChange}
-          onClose={onClose}
           isFiles={isFiles}
           prefs={prefs}
           workspacePath={ws}
           onRefresh={refreshFiles}
         />
       ) : (
-        !isFlush && <PanelHeader mode={mode} onClose={onClose} />
+        !isFlush && <PanelHeader mode={mode} />
       )}
       <div
         className={cn(
@@ -263,7 +262,6 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
 function WorkspaceDockHeader({
   mode,
   onChange,
-  onClose,
   isFiles,
   prefs,
   workspacePath,
@@ -271,7 +269,6 @@ function WorkspaceDockHeader({
 }: {
   mode: PanelMode
   onChange?: (mode: PanelMode) => void
-  onClose: () => void
   isFiles: boolean
   prefs: FilesViewPrefs
   workspacePath?: string
@@ -371,15 +368,12 @@ function WorkspaceDockHeader({
           </button>
         </>
       )}
-      <button type="button" onClick={onClose} title={t("contextPanel.panelClose")} aria-label={t("contextPanel.panelClose")} className={iconBtn}>
-        <X className="h-4 w-4" aria-hidden />
-      </button>
       {menu && <EditorContextMenu x={menu.x} y={menu.y} items={moreItems} onClose={() => setMenu(null)} />}
     </div>
   )
 }
 
-function PanelHeader({ mode, onClose }: { mode: PanelMode; onClose: () => void }) {
+function PanelHeader({ mode }: { mode: PanelMode }) {
   const Icon = MODE_ICON[mode]
   return (
     <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-codezal-panel bg-codezal-sidebar px-3.5">
@@ -387,15 +381,6 @@ function PanelHeader({ mode, onClose }: { mode: PanelMode; onClose: () => void }
       <span className="flex-1 truncate text-md font-medium text-codezal-text">
         {modeLabel(mode)}
       </span>
-      <button
-        type="button"
-        onClick={onClose}
-        title={tStaticCtx("contextPanel.panelClose")}
-        aria-label={tStaticCtx("contextPanel.panelClose")}
-        className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-codezal-mute hover:bg-codezal-panel-2 hover:text-codezal-text"
-      >
-        <X className="h-4 w-4" />
-      </button>
     </div>
   )
 }

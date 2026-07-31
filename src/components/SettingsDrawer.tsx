@@ -72,7 +72,6 @@ export type SettingsTab = Tab
 export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Props) {
   const t = useT()
   const [tab, setTab] = useState<Tab>(initialTab ?? "genel")
-  const [navQuery, setNavQuery] = useState("")
   const trafficLightInset = reserveTrafficLights && isMacOS()
 
   useEffect(() => {
@@ -112,49 +111,34 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
   ]
 
   const activeLabel = tabs.find((tt) => tt.id === tab)?.label ?? ""
-  const normalizedNavQuery = navQuery.trim().toLocaleLowerCase()
-  const visibleTabs = normalizedNavQuery
-    ? tabs.filter((item) => item.label.toLocaleLowerCase().includes(normalizedNavQuery))
-    : tabs
+
+  // Top title-bar strip. On macOS the native traffic lights overlay the left of
+  // this 44px band, so it is rendered inside each column (nav + content) instead
+  // of as an outer margin. Marking it data-tauri-drag-region lets a double-click
+  // toggle maximize — matching the chat view's title bar.
+  const titleBarStrip = trafficLightInset ? (
+    <div data-tauri-drag-region className="h-[44px] shrink-0 border-b border-codezal-panel" />
+  ) : null
 
   return (
-    <div
-      className={cn(
-        "flex min-h-0 flex-1 overflow-hidden bg-codezal-bg",
-        trafficLightInset && "mt-[44px] border-t border-codezal-panel",
-      )}
-    >
+    <div className="flex min-h-0 flex-1 overflow-hidden bg-codezal-bg">
       {/* Left nav */}
       <nav className="flex w-[236px] shrink-0 flex-col border-r border-codezal-panel bg-codezal-sidebar">
+        {titleBarStrip}
         <div className="shrink-0 border-b border-codezal-panel px-3 pb-3 pt-3">
           <button
             type="button"
             onClick={onClose}
             title={t("settings.drawer.backBtn")}
-            className="mb-2 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-base text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             <span>{t("settings.drawer.backBtn")}</span>
           </button>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-codezal-mute" aria-hidden />
-            <label htmlFor="settings-nav-search" className="sr-only">
-              {t("common.search")}
-            </label>
-            <input
-              id="settings-nav-search"
-              name="settings-search"
-              autoComplete="off"
-              value={navQuery}
-              onChange={(event) => setNavQuery(event.target.value)}
-              placeholder={`${t("common.search")}…`}
-              className="w-full rounded-md border border-codezal bg-codezal-input py-1.5 pl-8 pr-2 text-sm text-codezal-text placeholder:text-codezal-mute focus:border-codezal-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
-            />
-          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {[0, 1, 2].map((section) => {
-            const items = visibleTabs.filter((item) => item.section === section)
+            const items = tabs.filter((item) => item.section === section)
             if (items.length === 0) return null
             return (
               <div key={section} className="mb-4 last:mb-0">
@@ -171,7 +155,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
                       onClick={() => setTab(tt.id)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
+                        "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
                         active
                           ? "bg-codezal-panel-2 font-medium text-codezal-text"
                           : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
@@ -185,14 +169,12 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
               </div>
             )
           })}
-          {visibleTabs.length === 0 && (
-            <div className="px-2 py-3 text-sm text-codezal-mute">{t("common.noResults")}</div>
-          )}
         </div>
       </nav>
 
       {/* Right content */}
       <div className="flex min-w-0 flex-1 flex-col">
+        {titleBarStrip}
         <header className="shrink-0 border-b border-codezal-panel bg-codezal-bg px-8 py-4">
           <div className="text-sm font-semibold uppercase tracking-[0.12em] text-codezal-mute">
             {t("settings.title")}

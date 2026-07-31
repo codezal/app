@@ -362,8 +362,11 @@ export function AutopilotPage({ onClose, onRun }: Props) {
         useScope,
         {
           name: name.trim(),
+          description: existing?.description,
           prompt: objective.trim(),
           schedule: cron || undefined,
+          once: existing?.once,
+          fireAt: existing?.fireAt,
           provider: selProvider || undefined,
           model: selModel || undefined,
           reasoningEffort: selEffort || undefined,
@@ -711,7 +714,7 @@ export function AutopilotPage({ onClose, onRun }: Props) {
                       <input
                         value={advCron}
                         onChange={(e) => setAdvCron(e.target.value)}
-                        placeholder="*/15 * * * *"
+                        placeholder="0 */2 * * *"
                         className={`${inputCls} font-mono`}
                       />
                       <span className="text-sm text-codezal-mute">{t("routinesOverlay.cronHint")}</span>

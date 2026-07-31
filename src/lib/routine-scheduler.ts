@@ -1,5 +1,5 @@
-//
-// Limitler:
+// Routine scheduler — ticks every 30 s, fires routines whose cron matches the
+// current minute, and catches up missed fires (one-shot + recurring) on start.
 import { readWorkspaceRoutines, readUserRoutines, deleteRoutine, type Routine } from "./routines"
 import { parseCron, matches, prevFireAt } from "./cron"
 import { loadFired, saveFired, type FiredMap } from "./autopilot-state"
@@ -14,7 +14,7 @@ type SchedulerState = {
   workspacePath: string | undefined
   lastFiredAt: Map<string, number>
   onFire: FireCallback | null
-  // Cache: rutin path → parsed cron + ham expr. Refresh ile yenilenir.
+  // Cache: routine path -> parsed cron. Rebuilt on every reload().
   parsed: Array<{ routine: Routine; cron: ReturnType<typeof parseCron> }>
   fired: FiredMap
 }
@@ -26,6 +26,17 @@ const state: SchedulerState = {
   onFire: null,
   parsed: [],
   fired: {},
+}
+
+// Debounced persistence — coalesces rapid saveFired calls (e.g. multiple
+// routines firing in the same tick) into a single disk write.
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleSaveFired(): void {
+  if (saveTimer != null) return
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    void saveFired(state.fired)
+  }, 500)
 }
 
 async function reload(): Promise<void> {
@@ -43,7 +54,7 @@ async function reload(): Promise<void> {
       out.push({ routine: r, cron: c })
     } catch (e) {
       console.warn(
-        `[scheduler] '${r.name}' cron geçersiz '${r.schedule}': ${errorMessage(e)}`,
+        `[scheduler] '${r.name}' invalid cron '${r.schedule}': ${errorMessage(e)}`,
       )
     }
   }
@@ -72,11 +83,11 @@ function tick(): void {
     if (state.lastFiredAt.get(routine.path) === stamp) continue
     state.lastFiredAt.set(routine.path, stamp)
     state.fired[routine.path] = stamp
-    void saveFired(state.fired)
+    scheduleSaveFired()
     try {
       void state.onFire?.(routine)
     } catch (e) {
-      console.warn(`[scheduler] fire hatası '${routine.name}':`, e)
+      console.warn(`[scheduler] fire error '${routine.name}':`, e)
     }
     if (routine.once) void cleanupOnce(routine)
   }
@@ -86,29 +97,35 @@ async function cleanupOnce(routine: Routine): Promise<void> {
   try {
     await deleteRoutine(routine.path)
   } catch (e) {
-    console.warn(`[scheduler] one-shot rutin silinemedi '${routine.name}':`, e)
+    console.warn(`[scheduler] could not delete one-shot routine '${routine.name}':`, e)
   }
   state.lastFiredAt.delete(routine.path)
   await reload()
 }
 
+// Fire one-shot routines whose fireAt has passed while the app was closed.
+// Checks persisted state to avoid double-firing after a restart.
 async function fireMissed(): Promise<void> {
   const now = Date.now()
   for (const { routine } of state.parsed) {
     if (!routine.once || !routine.fireAt) continue
     const scheduled = new Date(routine.fireAt).getTime()
     if (isNaN(scheduled) || scheduled > now) continue
+    // Already recorded as fired (e.g. delete failed, app restarted) — skip.
+    if ((state.fired[routine.path] ?? 0) >= scheduled) continue
     state.lastFiredAt.set(routine.path, scheduled)
+    state.fired[routine.path] = scheduled
     try {
       void state.onFire?.(routine)
     } catch (e) {
-      console.warn(`[scheduler] missed-fire hatası '${routine.name}':`, e)
+      console.warn(`[scheduler] missed-fire error '${routine.name}':`, e)
     }
     void cleanupOnce(routine)
   }
+  scheduleSaveFired()
 }
 
-// EN YAKIN tetiklemeyi tek sefer telafi et. prevFireAt son 24 saatteki son cron
+// Catch up the single most recent missed recurring fire (last 24 h).
 async function fireMissedRecurring(): Promise<void> {
   const nowMin = new Date()
   nowMin.setSeconds(0, 0)
@@ -118,7 +135,7 @@ async function fireMissedRecurring(): Promise<void> {
     const last = prevFireAt(cron, nowMin)
     if (!last) continue
     const lastMs = last.getTime()
-    if (lastMs === nowMin.getTime()) continue // bu dakika → tick halleder
+    if (lastMs === nowMin.getTime()) continue // current minute -> tick handles it
     if (lastMs <= (state.fired[routine.path] ?? 0)) continue
     state.fired[routine.path] = lastMs
     state.lastFiredAt.set(routine.path, lastMs)
@@ -126,7 +143,7 @@ async function fireMissedRecurring(): Promise<void> {
     try {
       void state.onFire?.(routine)
     } catch (e) {
-      console.warn(`[scheduler] recurring catch-up hatası '${routine.name}':`, e)
+      console.warn(`[scheduler] recurring catch-up error '${routine.name}':`, e)
     }
   }
   if (changed) await saveFired(state.fired)
@@ -152,6 +169,13 @@ export function stopScheduler(): void {
   if (state.timer != null) {
     clearInterval(state.timer)
     state.timer = null
+  }
+  if (saveTimer != null) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    // Flush the pending write — otherwise a routine that fired within the last
+    // 500 ms loses its fired timestamp and gets re-fired on the next launch.
+    void saveFired(state.fired)
   }
   state.onFire = null
   state.parsed = []

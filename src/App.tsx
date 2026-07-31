@@ -505,8 +505,7 @@ export default function App() {
         }
         unlisten = await w.onCloseRequested(async (event) => {
           event.preventDefault()
-          // const bg = useSettingsStore.getState().settings.autopilot?.runInBackground
-          const bg = false
+          const bg = !!useSettingsStore.getState().settings.autopilot?.runInBackground
           if (bg && !forceQuitRef.current) {
             try {
               await w.hide()
@@ -563,10 +562,13 @@ export default function App() {
       try {
         const provider = (r.provider as ProviderId | undefined) ?? settings.defaultProvider
         const model = r.model ?? settings.defaultModel
-        await create(provider, model, settings.defaultWorkspacePath, r.reasoningEffort, r.path)
-        setTimeout(() => void onSend(r.prompt), 30)
+        // Route the turn to the created session by id instead of via the active
+        // session: with concurrent fires, `active` can be overwritten by another
+        // routine between create() and the send, misdelivering the prompt.
+        const sid = await create(provider, model, settings.defaultWorkspacePath, r.reasoningEffort, r.path)
+        void dispatchTurn(sid, r.prompt)
       } catch (e) {
-        console.warn(`[scheduler] '${r.name}' fire başarısız:`, e)
+        console.warn(`[scheduler] '${r.name}' fire failed:`, e)
       }
     }
   })
@@ -575,8 +577,7 @@ export default function App() {
     if (!settingsLoaded) return
     void startScheduler({
       workspacePath,
-      // Autopilot iptal: rutinler tetiklenmez — scheduler tick atar ama otomatik
-      onFire: () => {},
+      onFire: (r) => void runRoutineRef.current(r),
     })
     return () => stopScheduler()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -587,9 +588,11 @@ export default function App() {
       void (async () => {
         try {
           await open(sessionId)
-          setTimeout(() => void onSend(`[monitor] ${line}`), 30)
+          // Same id-routed dispatch as runRoutine — avoids misdelivery when a
+          // routine fires between open() and the send.
+          void dispatchTurn(sessionId, `[monitor] ${line}`)
         } catch (e) {
-          console.warn("[monitor] respond başarısız:", e)
+          console.warn("[monitor] respond failed:", e)
         }
       })()
     }
@@ -722,14 +725,16 @@ export default function App() {
 
   useEffect(() => {
     if (!settingsLoaded) return
-    void setAutostart(false)
-  }, [settingsLoaded])
+    void setAutostart(!!settings.autopilot?.autostart)
+  }, [settingsLoaded, settings.autopilot?.autostart])
 
-  // Smart keep-awake: bir session stream ederken (arka plan dahil) sistem idle-sleep'i
+  // Keep-awake: prevent system idle-sleep while streaming or when the user
+  // explicitly enabled the autopilot keep-awake toggle.
+  const keepAwakeSetting = !!settings.autopilot?.keepAwake
   useEffect(() => {
     if (!settingsLoaded) return
-    void setKeepAwake(anyStreaming)
-  }, [settingsLoaded, anyStreaming])
+    void setKeepAwake(anyStreaming || keepAwakeSetting)
+  }, [settingsLoaded, anyStreaming, keepAwakeSetting])
 
   // Appearance: apply theme presets, fonts, motion flags, etc. Follow OS changes when mode='system'.
   useEffect(() => {
@@ -2370,10 +2375,11 @@ export default function App() {
             }}
           />
         ) : (
-          <>
-            {tabBarEl}
+          <div className="flex min-h-0 flex-1">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              {tabBarEl}
 
-            <div className="flex min-h-0 flex-1">
+              <div className="flex min-h-0 flex-1">
               <main
                 id="ana-icerik"
                 className="relative flex min-w-0 flex-1 flex-col overflow-hidden"
@@ -2496,19 +2502,21 @@ export default function App() {
                 />
               )}
 
-              {contextPanelOpen && (
-                <ContextPanel
-                  mode={panelMode}
-                  onModeChange={setPanelMode}
-                  onClose={() => setPanelMode(null)}
-                  onSend={onSend}
-                  onOpenPreview={onOpenSddPreview}
-                  onBuild={onBuildSdd}
-                />
-              )}
             </div>
-          </>
-        )}
+          </div>
+
+          {contextPanelOpen && (
+            <ContextPanel
+              mode={panelMode}
+              onModeChange={setPanelMode}
+              onClose={() => setPanelMode(null)}
+              onSend={onSend}
+              onOpenPreview={onOpenSddPreview}
+              onBuild={onBuildSdd}
+            />
+          )}
+        </div>
+      )}
       </div>
 
       <CommandPalette

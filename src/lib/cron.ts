@@ -1,6 +1,6 @@
-// Basit 5-field cron parser + nextFireAt.
+// Simple 5-field cron parser + nextFireAt.
 // Format: "minute hour day-of-month month day-of-week"
-// day-of-week: 0=Pazar … 6=Cumartesi.
+// day-of-week: 0=Sunday … 6=Saturday.
 import { errorMessage } from "@/lib/errors"
 
 export type CronFields = {
@@ -27,7 +27,7 @@ function expand(piece: string, [lo, hi]: [number, number]): Set<number> {
     const slash = part.indexOf("/")
     if (slash !== -1) {
       step = parseInt(part.slice(slash + 1), 10)
-      if (!Number.isFinite(step) || step <= 0) throw new Error(`Cron geçersiz step: ${part}`)
+      if (!Number.isFinite(step) || step <= 0) throw new Error(`Invalid cron step: ${part}`)
       body = part.slice(0, slash)
     }
     let start = lo
@@ -36,17 +36,17 @@ function expand(piece: string, [lo, hi]: [number, number]): Set<number> {
       // Full range.
     } else if (body.includes("-")) {
       const [a, b] = body.split("-").map((s) => parseInt(s, 10))
-      if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error(`Cron geçersiz aralık: ${part}`)
+      if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error(`Invalid cron range: ${part}`)
       start = a
       end = b
     } else {
       const n = parseInt(body, 10)
-      if (!Number.isFinite(n)) throw new Error(`Cron geçersiz değer: ${part}`)
+      if (!Number.isFinite(n)) throw new Error(`Invalid cron value: ${part}`)
       start = n
       end = n
     }
     if (start < lo || end > hi || start > end) {
-      throw new Error(`Cron aralık dışı (${lo}-${hi}): ${part}`)
+      throw new Error(`Cron value out of range (${lo}-${hi}): ${part}`)
     }
     for (let v = start; v <= end; v += step) out.add(v)
   }
@@ -56,7 +56,7 @@ function expand(piece: string, [lo, hi]: [number, number]): Set<number> {
 export function parseCron(expr: string): CronFields {
   const parts = expr.trim().split(/\s+/)
   if (parts.length !== 5) {
-    throw new Error(`Cron 5 alan olmalı (m h dom mon dow), aldım: ${expr}`)
+    throw new Error(`Cron must have 5 fields (m h dom mon dow), got: ${expr}`)
   }
   return {
     minute: expand(parts[0], RANGES.minute),
@@ -186,7 +186,7 @@ export function cronFromFriendly(f: FriendlySchedule): string {
     case "hourly":
       return "0 * * * *"
     case "everyN":
-      // 5 alan: minute=0, hour=*/N, dom/mon/dow=*.
+      // 5 fields: minute=0, hour=*/N, dom/mon/dow=*.
       return `0 */${Math.max(1, Math.floor(f.n))} * * *`
     case "daily":
       return `${f.m} ${f.h} * * *`

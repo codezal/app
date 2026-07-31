@@ -8,7 +8,8 @@ Actions (`action`):
 - `delete`: remove a routine. Requires `path` (from `list`).
 
 Cron format (`schedule`): 5 fields, local time — `minute hour day-of-month month day-of-week`.
-Examples: `0 9 * * 1-5` = weekdays at 09:00; `*/15 * * * *` = every 15 minutes; `0 0 1 * *` = first of each month at midnight.
+Minimum interval is 1 hour: a sub-hour minute step in the minute field (e.g. `*/15 * * * *` or `*/30 */2 * * *`) is rejected when the hour field is a wildcard (`*` or `*/N`). To repeat every N hours use `0 */N * * *`.
+Examples: `0 9 * * 1-5` = weekdays at 09:00; `0 */2 * * *` = every 2 hours; `0 0 1 * *` = first of each month at midnight.
 
 One-shot delay (`delay`): fire ONCE after a delay, then the routine auto-deletes itself. Format: `5m`, `30s`, `2h`, `1d` (units: s/m/h/d). Seconds round up to the nearest minute. Mutually exclusive with `schedule` — pass one or the other, never both.
 
@@ -19,5 +20,5 @@ Self-rescheduling loop ("wait, then run again by itself"):
 
 Notes:
 - Omit both `schedule` and `delay` to create a manual routine (saved, but only runs when triggered by hand).
-- Scheduling only fires while the app is running; missed fires (app closed) are not caught up.
+- Scheduling fires while the app is running. Missed recurring fires (app was closed) are caught up once on next launch; missed one-shot fires also run once on next launch.
 - Write the routine `prompt` to be fully self-contained — each fire starts a fresh session with no memory of this conversation.
