@@ -37,8 +37,6 @@ type Props = {
 function buildKindOptions(): { value: WorkerKind; label: string; hint: string }[] {
   return [
     { value: "sdk", label: tStatic("orchestraModal.kindSdk"), hint: tStatic("orchestraModal.kindSdkHint") },
-    { value: "claude-cli", label: tStatic("orchestraModal.kindClaude"), hint: tStatic("orchestraModal.kindClaudeHint") },
-    { value: "codex-cli", label: tStatic("orchestraModal.kindCodex"), hint: tStatic("orchestraModal.kindCodexHint") },
     { value: "opencode-cli", label: tStatic("orchestraModal.kindOpencode"), hint: tStatic("orchestraModal.kindOpencodeHint") },
     { value: "kimi-cli", label: tStatic("orchestraModal.kindKimi"), hint: tStatic("orchestraModal.kindKimiHint") },
     { value: "gemini-cli", label: tStatic("orchestraModal.kindGemini"), hint: tStatic("orchestraModal.kindGeminiHint") },
@@ -47,8 +45,6 @@ function buildKindOptions(): { value: WorkerKind; label: string; hint: string }[
 }
 
 const KIND_BINARY: Partial<Record<WorkerKind, string>> = {
-  "claude-cli": "claude",
-  "codex-cli": "codex",
   "opencode-cli": "opencode",
   "kimi-cli": "kimi",
   "gemini-cli": "gemini",
@@ -57,8 +53,6 @@ const KIND_BINARY: Partial<Record<WorkerKind, string>> = {
 function isAcpKind(k: WorkerKind): boolean {
   return (
     k === "opencode-cli" ||
-    k === "claude-cli" ||
-    k === "codex-cli" ||
     k === "kimi-cli" ||
     k === "gemini-cli" ||
     k === "acp"
@@ -71,8 +65,6 @@ function probesModels(k: WorkerKind): boolean {
 
 function acpCommandFor(c: WorkerConfig): string {
   if (c.kind === "opencode-cli") return "opencode acp"
-  if (c.kind === "claude-cli") return "npx -y @agentclientprotocol/claude-agent-acp"
-  if (c.kind === "codex-cli") return "npx -y @zed-industries/codex-acp"
   if (c.kind === "kimi-cli") return "kimi acp"
   if (c.kind === "gemini-cli") return "gemini --experimental-acp"
   return c.acpCommand?.trim() || "opencode acp"

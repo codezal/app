@@ -11,16 +11,6 @@ export function capabilitiesForEngine(engine: AgentEngineRef): EngineCapabilitie
       cancellation: "cooperative",
     }
   }
-  if (engine.kind === "native-cli") {
-    return {
-      session: "resumable",
-      cwd: "fixed-session",
-      tools: "mcp",
-      permissions: "codezal",
-      usage: "partial",
-      cancellation: "cooperative",
-    }
-  }
   return {
     session: "stateless",
     cwd: "per-run",

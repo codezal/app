@@ -3,8 +3,6 @@ import type { ProviderId } from "../providers"
 // (Connect ile probe edilip model listesi session/new'den gelir). sdk → in-process SDK.
 export type WorkerKind =
   | "sdk"
-  | "claude-cli"
-  | "codex-cli"
   | "opencode-cli"
   | "kimi-cli"
   | "gemini-cli"

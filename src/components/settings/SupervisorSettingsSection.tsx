@@ -23,7 +23,7 @@ export function SupervisorSettingsSection() {
           id: createId("worker"),
           agentName: "general",
           enabled: true,
-          engine: { kind: "native-cli", providerId: "codex-cli", modelId: "gpt-5.4" },
+          engine: { kind: "sdk", providerId: settings.defaultProvider, modelId: settings.defaultModel },
         },
       ],
     })
@@ -100,9 +100,7 @@ function SupervisorPoolRow({ entry, onPatch, onRemove, defaultProvider, defaultM
   const changeKind = (kind: AgentEngineRef["kind"]) => {
     const engine: AgentEngineRef = kind === "sdk"
       ? { kind, providerId: defaultProvider, modelId: defaultModel }
-      : kind === "native-cli"
-        ? { kind, providerId: "codex-cli", modelId: "gpt-5.4" }
-        : { kind, providerId: "gemini-cli", modelId: "gemini-2.5-pro" }
+      : { kind, providerId: "gemini-cli", modelId: "gemini-2.5-pro" }
     onPatch({ engine })
   }
   return (
@@ -110,15 +108,9 @@ function SupervisorPoolRow({ entry, onPatch, onRemove, defaultProvider, defaultM
       <div className="grid gap-2 md:grid-cols-4">
         <input aria-label={t("settings.cliAgents.supervisorAgent")} value={entry.agentName} onChange={(event) => onPatch({ agentName: event.target.value })} placeholder="general" className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
         <select aria-label={t("settings.cliAgents.supervisorEngine")} value={entry.engine.kind} onChange={(event) => changeKind(event.target.value as AgentEngineRef["kind"])} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text">
-          <option value="sdk">SDK</option><option value="native-cli">Native CLI</option><option value="acp">ACP</option>
+          <option value="sdk">SDK</option><option value="acp">ACP</option>
         </select>
-        {entry.engine.kind === "native-cli" ? (
-          <select aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value as "codex-cli" | "claude-cli" })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text">
-            <option value="codex-cli">Codex CLI</option><option value="claude-cli">Claude CLI</option>
-          </select>
-        ) : (
-          <input aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
-        )}
+        <input aria-label={t("settings.cliAgents.supervisorProvider")} value={entry.engine.providerId} onChange={(event) => patchEngine({ providerId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
         <input aria-label={t("settings.cliAgents.supervisorModel")} value={entry.engine.modelId ?? ""} onChange={(event) => patchEngine({ modelId: event.target.value })} className="rounded-md border border-codezal bg-codezal-input px-2 py-1 text-base text-codezal-text" />
       </div>
       <div className="mt-2 flex items-center justify-between">

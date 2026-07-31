@@ -61,12 +61,6 @@ import {
 import { isModelEnabled } from "@/lib/providers/model-status"
 import { modelDetail, modelAcceptsImages, modelAcceptsPdf, resolveContextCap, type ProvidersCatalog } from "@/lib/providers-catalog"
 import { lastStepTotalTokens } from "@/lib/context-gauge"
-import {
-  defaultModelForAgentProvider,
-  isCliAgentProvider,
-  listVisibleAgentProviders,
-  modelsForAgentProvider,
-} from "@/lib/agent-providers"
 import { toast } from "@/store/toast"
 import { errorMessage } from "@/lib/errors"
 import { enhancePrompt } from "@/lib/prompt-enhance"
@@ -1436,12 +1430,10 @@ export function Composer({
               modelId={model ?? settings.defaultModel}
               catalog={settings.providerCatalog?.data as ProvidersCatalog | undefined}
               onPickProvider={(id, sessionOnly) => {
-                const defaultModel = isCliAgentProvider(id)
-                  ? defaultModelForAgentProvider(id, settings)
-                  : defaultModelFor(
-                      id,
-                      settings.providerCatalog?.data as ProvidersCatalog | undefined,
-                    )
+                const defaultModel = defaultModelFor(
+                  id,
+                  settings.providerCatalog?.data as ProvidersCatalog | undefined,
+                )
                 if (hasActive) applyMeta({ provider: id, model: defaultModel, reasoningEffort: undefined })
                 else void updateSettings({ defaultProvider: id, defaultModel })
                 if (hasActive && !effIsDraft && workspacePath && !sessionOnly) {
@@ -2295,7 +2287,6 @@ function modelsForPickerProvider(
   catalog: ProvidersCatalog | undefined,
   settings: Settings,
 ): string[] {
-  if (isCliAgentProvider(providerId)) return modelsForAgentProvider(providerId, settings)
   // The picker must mirror the Settings → Providers enabled-state exactly.
   // `isModelEnabled` falls back to the provider's recommended models when the
   // user has never toggled a model (no `modelStatus` entry yet), whereas a
@@ -2366,7 +2357,7 @@ function ModelPicker({
           if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
           return a.label.localeCompare(b.label)
         })
-      return [...apiProviders, ...listVisibleAgentProviders(settings)]
+      return apiProviders
     },
     [adapters, settings, envHits],
   )
@@ -2394,30 +2385,26 @@ function ModelPicker({
     if (!needle) return models
     return models.filter((m) => {
       if (m.toLowerCase().includes(needle)) return true
-      const name = isCliAgentProvider(activeTab) ? undefined : modelDetail(catalog, activeTab, m)?.name
+      const name = modelDetail(catalog, activeTab, m)?.name
       return Boolean(name && name.toLowerCase().includes(needle))
     })
   }, [models, q, catalog, activeTab])
 
   const [hovered, setHovered] = useState(false)
-  const nativeProvider = isCliAgentProvider(providerId)
-  const detail = nativeProvider ? undefined : modelDetail(catalog, providerId, modelId)
+  const detail = modelDetail(catalog, providerId, modelId)
   const activeDisplay = detail?.name || modelId
-  const ctxCap = nativeProvider
-    ? 0
-    : resolveContextCap(
-        catalog,
-        providerId,
-        modelId,
-        settings.customProviders,
-      )
-  const ctxLabel = nativeProvider
-    ? "native CLI"
-    : ctxCap >= 1_000_000
-    ? `${ctxCap / 1_000_000}M`
-    : ctxCap >= 1_000
-      ? `${Math.round(ctxCap / 1_000)}K`
-      : String(ctxCap)
+  const ctxCap = resolveContextCap(
+    catalog,
+    providerId,
+    modelId,
+    settings.customProviders,
+  )
+  const ctxLabel =
+    ctxCap >= 1_000_000
+      ? `${ctxCap / 1_000_000}M`
+      : ctxCap >= 1_000
+        ? `${Math.round(ctxCap / 1_000)}K`
+        : String(ctxCap)
 
   return (
     <div ref={wrapRef} className="relative">
@@ -2427,7 +2414,7 @@ function ModelPicker({
             <div className="flex flex-col gap-1">
               <div className="flex justify-between">
                 <span className="text-codezal-mute">Context</span>
-              <span>{nativeProvider ? ctxLabel : `${ctxLabel} tokens`}</span>
+              <span>{`${ctxLabel} tokens`}</span>
               </div>
             {detail?.cost?.input != null && (
               <div className="flex justify-between">
@@ -2524,7 +2511,7 @@ function ModelPicker({
                     </div>
                   )}
                   {filtered.map((m) => {
-                    const name = isCliAgentProvider(activeTab) ? undefined : modelDetail(catalog, activeTab, m)?.name?.trim()
+                    const name = modelDetail(catalog, activeTab, m)?.name?.trim()
                     const display = name || m
                     const isActive = m === modelId && activeTab === providerId
                     return (

@@ -16,8 +16,6 @@ import {
 
 const KIND_LABEL: Record<WorkerKind, string> = {
   sdk: "Ajan",
-  "claude-cli": "Claude CLI",
-  "codex-cli": "Codex CLI",
   "opencode-cli": "OpenCode CLI",
   "kimi-cli": "Kimi CLI",
   "gemini-cli": "Gemini CLI",

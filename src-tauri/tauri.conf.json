@@ -41,7 +41,6 @@
     "createUpdaterArtifacts": true,
     "targets": "all",
     "resources": {
-      "resources/agent-runtime": "agent-runtime",
       "resources/git": "git"
     },
     "icon": [

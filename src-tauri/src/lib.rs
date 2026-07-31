@@ -127,7 +127,6 @@ pub fn run() {
             fs::fs_copy_dir,
             fs::fs_realpath,
             fs::fs_remove_dir,
-            exec::agent_runtime_dir,
             exec::path_exists,
             db::db_execute,
             db::db_select,

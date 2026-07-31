@@ -3,7 +3,6 @@ import { useSessionsStore } from "@/store/sessions"
 import { useJobsStore } from "@/store/jobs"
 import { startSdkWorker } from "./runners/sdk"
 import { startAcpWorker } from "./runners/acp"
-import { startNativeCliWorker } from "./runners/native-cli"
 import type {
   AgentCardPart,
   AgentCardToolCall,
@@ -29,12 +28,9 @@ import { Semaphore } from "@/lib/async/semaphore"
 
 //   opencode-cli → "opencode acp" (native)
 //   kimi-cli     → "kimi acp" (native)
-//   claude-cli   → "@agentclientprotocol/claude-agent-acp" adapter (lokal claude login)
-//   codex-cli    → "@zed-industries/codex-acp" adapter (ChatGPT login / API key)
+//   gemini-cli   → "gemini acp" (native)
 const RUNNERS: Record<WorkerKind, RunnerStart> = {
   sdk: startSdkWorker,
-  "claude-cli": startNativeCliWorker,
-  "codex-cli": startNativeCliWorker,
   "opencode-cli": startAcpWorker,
   "kimi-cli": startAcpWorker,
   "gemini-cli": startAcpWorker,
@@ -304,7 +300,7 @@ export function createCardEmitter(
           void logError({
             source: `agent-tool:${part?.displayName ?? part?.workerLabel ?? workerId}`,
             // Use the real tool output/error text when the runner carried it
-            // (sdk + native-cli do; acp's protocol does not expose it).
+            // (sdk does; acp's protocol does not expose it).
             message: ev.error || `tool "${ev.name}" returned an error (no error text captured)`,
             context: {
               sessionId,

@@ -16,15 +16,11 @@ import { findAgent } from "../../agents"
 import { useSettingsStore } from "@/store/settings"
 
 const DEFAULT_ACP_COMMAND = "opencode acp"
-export const CLAUDE_ACP_COMMAND = "npx -y @agentclientprotocol/claude-agent-acp"
-export const CODEX_ACP_COMMAND = "npx -y @zed-industries/codex-acp"
 export const KIMI_ACP_COMMAND = "kimi acp"
 export const GEMINI_ACP_COMMAND = "gemini --experimental-acp"
 
 const ACP_COMMAND_BY_KIND: Partial<Record<WorkerKind, string>> = {
   "opencode-cli": DEFAULT_ACP_COMMAND,
-  "claude-cli": CLAUDE_ACP_COMMAND,
-  "codex-cli": CODEX_ACP_COMMAND,
   "kimi-cli": KIMI_ACP_COMMAND,
   "gemini-cli": GEMINI_ACP_COMMAND,
 }

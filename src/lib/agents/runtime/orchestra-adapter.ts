@@ -8,11 +8,10 @@ const ACP_KINDS = new Set<WorkerKind>([
   "acp",
 ])
 
-export type WorkerExecutionAdapter = "sdk" | "native-cli" | "acp"
+export type WorkerExecutionAdapter = "sdk" | "acp"
 
 export function workerExecutionAdapter(kind: WorkerKind): WorkerExecutionAdapter {
   if (kind === "sdk") return "sdk"
-  if (kind === "codex-cli" || kind === "claude-cli") return "native-cli"
   return "acp"
 }
 
@@ -30,16 +29,6 @@ export function workerConfigForPoolEntry(
       idx,
       kind: "sdk",
       provider: entry.engine.providerId,
-      model: entry.engine.modelId,
-      yolo: false,
-      presetAgent,
-      label: entry.label,
-    }
-  }
-  if (entry.engine.kind === "native-cli") {
-    return {
-      idx,
-      kind: entry.engine.providerId,
       model: entry.engine.modelId,
       yolo: false,
       presetAgent,

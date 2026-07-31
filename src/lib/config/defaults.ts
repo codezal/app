@@ -11,7 +11,6 @@ import { DEFAULT_APPEARANCE } from "@/lib/theme"
 import { DEFAULT_TOKEN_SAVERS } from "@/lib/token-savers/types"
 import { DEFAULT_MEMORY } from "@/lib/memory-settings"
 import { DEFAULT_PRIVACY } from "@/lib/privacy"
-import { defaultAgentProvidersSettings } from "@/lib/agent-providers"
 import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
 import { CURRENT_SCHEMA_VERSION } from "./migrate"
 import type { Settings } from "@/store/types"
@@ -46,7 +45,6 @@ export const DEFAULT_SETTINGS: Settings = {
   privacy: DEFAULT_PRIVACY,
   credentials: {},
   providerConfigs: {},
-  agentProviders: defaultAgentProvidersSettings(),
   supervisor: DEFAULT_SUPERVISOR_SETTINGS,
   customProviders: [],
   envFallback: true,

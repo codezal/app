@@ -111,7 +111,6 @@ type MetaPatch = Partial<
     | "workspacePath"
     | "workspaceReadOnly"
     | "reasoningEffort"
-    | "nativeAgent"
     | "permission"
     | "delegationMode"
   >

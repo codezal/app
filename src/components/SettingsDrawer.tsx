@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import {
   ArrowLeft,
   BarChart3,
-  Bot,
   Brain,
   Cog,
   Coins,
@@ -41,7 +40,6 @@ import { SkillsTab } from "./settings/SkillsTab"
 import { ModelsPage } from "./settings/ModelsPage"
 import { PrivacyTab } from "./settings/PrivacyTab"
 import { HistoryTab } from "./settings/HistoryTab"
-import { CliAgentsTab } from "./settings/CliAgentsTab"
 
 type Props = {
   onClose: () => void
@@ -56,7 +54,6 @@ type Tab =
   | "istatistik"
   | "gorunum"
   | "modeller"
-  | "ajanlar"
   | "hafiza"
   | "gizlilik"
   | "onay"
@@ -90,8 +87,6 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
   const tokensLabel = tokensLabelRaw === "settings.tabs.tokens" ? "Token Saving" : tokensLabelRaw
   const historyLabelRaw = t("settings.tabs.history")
   const historyLabel = historyLabelRaw === "settings.tabs.history" ? "History" : historyLabelRaw
-  const cliAgentsLabelRaw = t("settings.tabs.cliAgents")
-  const cliAgentsLabel = cliAgentsLabelRaw === "settings.tabs.cliAgents" ? "CLI Agents" : cliAgentsLabelRaw
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }>; section: number }[] = [
     { id: "genel", label: t("settings.tabs.general"), icon: Cog, section: 0 },
     { id: "gorunum", label: t("settings.tabs.appearance"), icon: Palette, section: 0 },
@@ -100,7 +95,6 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
     { id: "istatistik", label: t("settings.tabs.stats"), icon: BarChart3, section: 0 },
     { id: "hakkinda", label: t("settings.tabs.about"), icon: Info, section: 0 },
     { id: "modeller", label: t("settings.nav.providers"), icon: KeyRound, section: 1 },
-    { id: "ajanlar", label: cliAgentsLabel, icon: Bot, section: 1 },
     { id: "hafiza", label: t("settings.memory.title"), icon: Brain, section: 1 },
     { id: "gecmis", label: historyLabel, icon: Search, section: 1 },
     { id: "tokens", label: tokensLabel, icon: Coins, section: 1 },
@@ -218,7 +212,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
                 <ModelsPage />
               </div>
             )}
-            {tab === "ajanlar" && <CliAgentsTab />}
+
             {tab === "gizlilik" && <PrivacyTab />}
             {tab === "onay" && <ApprovalTab />}
             {tab === "gecmis" && <HistoryTab />}

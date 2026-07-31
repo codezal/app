@@ -15,16 +15,16 @@ import { parseSettings } from "@/lib/config/schema"
 
 const pool: SupervisorPoolEntry[] = [
   {
-    id: "codex-coder",
+    id: "general-sdk",
     agentName: "general",
     enabled: true,
-    engine: { kind: "native-cli", providerId: "codex-cli", modelId: "gpt-5.4" },
+    engine: { kind: "sdk", providerId: "openai", modelId: "gpt-5.4" },
   },
   {
-    id: "claude-reviewer",
+    id: "reviewer-acp",
     agentName: "reviewer",
     enabled: true,
-    engine: { kind: "native-cli", providerId: "claude-cli", modelId: "opus-4.6" },
+    engine: { kind: "acp", providerId: "gemini-cli", modelId: "gemini-2.5-pro" },
   },
   {
     id: "disabled",
@@ -104,8 +104,8 @@ describe("unified agent supervisor", () => {
         parentRunId: "parent",
         depth: 0,
         dispatches: [
-          { poolEntryId: "codex-coder", task: "first" },
-          { poolEntryId: "claude-reviewer", task: "second" },
+          { poolEntryId: "general-sdk", task: "first" },
+          { poolEntryId: "reviewer-acp", task: "second" },
         ],
       },
       async (run): Promise<AgentRunResult> => {
@@ -134,7 +134,7 @@ describe("unified agent supervisor", () => {
           sessionId: "session-1",
           parentRunId: "child",
           depth: 1,
-          dispatches: [{ poolEntryId: "codex-coder", task: "nested" }],
+          dispatches: [{ poolEntryId: "general-sdk", task: "nested" }],
         },
         execute,
       ),
@@ -147,7 +147,7 @@ describe("unified agent supervisor", () => {
           parentRunId: "parent",
           depth: 0,
           dispatches: Array.from({ length: 6 }, (_, index) => ({
-            poolEntryId: "codex-coder",
+            poolEntryId: "general-sdk",
             task: `task-${index}`,
           })),
         },
@@ -162,7 +162,7 @@ describe("unified agent supervisor", () => {
           parentRunId: "parent",
           depth: 0,
           existingChildCount: 5,
-          dispatches: [{ poolEntryId: "codex-coder", task: "one more" }],
+          dispatches: [{ poolEntryId: "general-sdk", task: "one more" }],
         },
         execute,
       ),
@@ -171,11 +171,11 @@ describe("unified agent supervisor", () => {
 
   it("declares conservative engine capabilities", () => {
     expect(capabilitiesForEngine(pool[0].engine)).toMatchObject({
-      session: "resumable",
-      cwd: "fixed-session",
-      tools: "mcp",
+      session: "stateless",
+      cwd: "per-run",
+      tools: "sdk",
       permissions: "codezal",
-      usage: "partial",
+      usage: "exact",
     })
     expect(
       capabilitiesForEngine({ kind: "acp", providerId: "gemini-cli", modelId: "gemini" }),
@@ -185,39 +185,40 @@ describe("unified agent supervisor", () => {
   it("maps pool engines to existing worker runners without losing the agent role", () => {
     expect(workerConfigForPoolEntry(pool[0], 2)).toEqual({
       idx: 2,
-      kind: "codex-cli",
+      kind: "sdk",
+      provider: "openai",
       model: "gpt-5.4",
       yolo: false,
     })
     expect(workerConfigForPoolEntry(pool[1], 3)).toMatchObject({
       idx: 3,
-      kind: "claude-cli",
-      model: "opus-4.6",
+      kind: "gemini-cli",
+      model: "gemini-2.5-pro",
       presetAgent: "reviewer",
     })
     expect(
       workerConfigForPoolEntry(
         {
-          id: "gemini",
+          id: "opencode",
           agentName: "general",
           enabled: true,
-          engine: { kind: "acp", providerId: "gemini-cli", modelId: "gemini-2.5-pro" },
+          engine: { kind: "acp", providerId: "opencode-cli", modelId: "opencode" },
         },
         1,
       ),
-    ).toMatchObject({ kind: "gemini-cli", model: "gemini-2.5-pro" })
+    ).toMatchObject({ kind: "opencode-cli", model: "opencode" })
   })
 
-  it("uses native runtime for Codex and Claude while retaining ACP for other CLIs", () => {
-    expect(workerExecutionAdapter("codex-cli")).toBe("native-cli")
-    expect(workerExecutionAdapter("claude-cli")).toBe("native-cli")
-    expect(workerExecutionAdapter("gemini-cli")).toBe("acp")
+  it("routes SDK workers in-process and everything else through ACP", () => {
     expect(workerExecutionAdapter("sdk")).toBe("sdk")
+    expect(workerExecutionAdapter("gemini-cli")).toBe("acp")
+    expect(workerExecutionAdapter("opencode-cli")).toBe("acp")
+    expect(workerExecutionAdapter("acp")).toBe("acp")
   })
 
   it("resolves legacy spawn requests only to enabled matching pool entries", () => {
     const settings = { ...DEFAULT_SUPERVISOR_SETTINGS, enabled: true, pool }
-    expect(findSupervisorPoolEntry(settings, "reviewer")?.id).toBe("claude-reviewer")
+    expect(findSupervisorPoolEntry(settings, "reviewer")?.id).toBe("reviewer-acp")
     expect(findSupervisorPoolEntry(settings, "missing")).toBeNull()
     expect(findSupervisorPoolEntry({ ...settings, enabled: false }, "reviewer")).toBeNull()
   })

@@ -2,18 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Check } from "@/lib/icons"
 import { listProviderAdapters, modelsFor, defaultModelFor, isConnectedSync, probeEnvVars, type ProviderId } from "@/lib/providers"
 import { modelDetail, type ProvidersCatalog } from "@/lib/providers-catalog"
-import {
-  defaultModelForAgentProvider,
-  isCliAgentProvider,
-  listVisibleAgentProviders,
-  modelsForAgentProvider,
-} from "@/lib/agent-providers"
 import { useSettingsStore } from "@/store/settings"
 import { cn } from "@/lib/utils"
 import { Select } from "@/components/Select"
 import { LOCALES, type Locale } from "@/lib/i18n"
 import { useT } from "@/lib/i18n/useT"
 import { Section, Row, Toggle, NumberField } from "./primitives"
+import { SupervisorSettingsSection } from "./SupervisorSettingsSection"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import { confirm } from "@tauri-apps/plugin-dialog"
 import { toast } from "@/store/toast"
@@ -347,6 +342,7 @@ export function GeneralTab() {
         </Row>
         <ErrorLogRow />
       </Section>
+      <SupervisorSettingsSection />
     </div>
   )
 }
@@ -438,28 +434,22 @@ function DefaultProviderModelSelector() {
       alive = false
     }
   }, [adapters, settings.envFallback])
-  const connected = [
-    ...adapters
-      .filter((p) => isConnectedSync(p, settings, envHits))
-      .sort((a, b) => {
-        if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
-        return a.label.localeCompare(b.label)
-      }),
-    ...listVisibleAgentProviders(settings),
-  ]
+  const connected = adapters
+    .filter((p) => isConnectedSync(p, settings, envHits))
+    .sort((a, b) => {
+      if (Boolean(a.popular) !== Boolean(b.popular)) return a.popular ? -1 : 1
+      return a.label.localeCompare(b.label)
+    })
 
   function modelsForDefault(providerId: ProviderId): string[] {
-    if (isCliAgentProvider(providerId)) return modelsForAgentProvider(providerId, settings)
     return modelsFor(providerId, catalog, settings.modelStatus)
   }
 
   function defaultModelForDefault(providerId: ProviderId): string {
-    if (isCliAgentProvider(providerId)) return defaultModelForAgentProvider(providerId, settings)
     return defaultModelFor(providerId, catalog)
   }
 
   function displayName(providerId: ProviderId, modelId: string): string {
-    if (isCliAgentProvider(providerId)) return modelId
     return modelDetail(catalog, providerId, modelId)?.name?.trim() || modelId
   }
 

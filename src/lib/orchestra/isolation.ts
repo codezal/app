@@ -60,8 +60,6 @@ export async function isWriteCapable(
 ): Promise<boolean> {
   // CLI/ACP worker'lar dinamik tool setine sahip — hepsi (approval ile) yazabilir, izole et.
   if (
-    w.kind === "claude-cli" ||
-    w.kind === "codex-cli" ||
     w.kind === "opencode-cli" ||
     w.kind === "kimi-cli" ||
     w.kind === "gemini-cli" ||

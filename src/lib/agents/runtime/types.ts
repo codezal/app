@@ -2,7 +2,6 @@ import type { ProviderId } from "@/lib/providers"
 
 export type AgentEngineRef =
   | { kind: "sdk"; providerId: ProviderId; modelId: string }
-  | { kind: "native-cli"; providerId: "codex-cli" | "claude-cli"; modelId: string }
   | { kind: "acp"; providerId: string; modelId?: string; command?: string }
 
 export type EngineCapabilities = {

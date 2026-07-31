@@ -54,15 +54,8 @@ beforeEach(() => {
 })
 
 describe("isWriteCapable", () => {
-  it("claude-cli → true", async () => {
-    expect(await isWriteCapable(cfg({ kind: "claude-cli" }), "/ws")).toBe(true)
-  })
   it("opencode-cli → true", async () => {
     expect(await isWriteCapable(cfg({ kind: "opencode-cli" }), "/ws")).toBe(true)
-  })
-  it("codex-cli → true (ACP, yolo'dan bağımsız)", async () => {
-    expect(await isWriteCapable(cfg({ kind: "codex-cli", yolo: true }), "/ws")).toBe(true)
-    expect(await isWriteCapable(cfg({ kind: "codex-cli", yolo: false }), "/ws")).toBe(true)
   })
   it("kimi-cli → true", async () => {
     expect(await isWriteCapable(cfg({ kind: "kimi-cli" }), "/ws")).toBe(true)
@@ -112,7 +105,7 @@ describe("setupWorkerIsolation", () => {
   })
   it("read-only worker → noop, ana workspace", async () => {
     const iso = await setupWorkerIsolation(
-      cfg({ kind: "codex-cli", yolo: false }),
+      cfg({ kind: "opencode-cli", yolo: false }),
       "/ws",
       "id12345678",
       1,
@@ -123,7 +116,7 @@ describe("setupWorkerIsolation", () => {
   })
   it("git repo değil → skip note", async () => {
     mFindRepoRoot.mockResolvedValue(null)
-    const iso = await setupWorkerIsolation(cfg({ kind: "claude-cli" }), "/ws", "id12345678", 1)
+    const iso = await setupWorkerIsolation(cfg({ kind: "gemini-cli" }), "/ws", "id12345678", 1)
     expect(iso.isolated).toBe(false)
     expect(iso.note).toMatch(/not a git repo/)
   })
@@ -137,7 +130,7 @@ describe("setupWorkerIsolation", () => {
       bare: false,
       detached: false,
     })
-    const iso = await setupWorkerIsolation(cfg({ kind: "claude-cli" }), "/ws", "id12345678", 1)
+    const iso = await setupWorkerIsolation(cfg({ kind: "kimi-cli" }), "/ws", "id12345678", 1)
     expect(iso.isolated).toBe(true)
     expect(iso.workWorkspace).toBe("/repo-wt-x")
     expect(iso.branch).toMatch(/^codezal\/wk-1-1-/)
@@ -146,7 +139,7 @@ describe("setupWorkerIsolation", () => {
     mFindRepoRoot.mockResolvedValue("/repo")
     mRunGit.mockResolvedValue({ code: 0, stdout: "abc123\n", stderr: "" })
     mCreateWorktree.mockRejectedValue(new Error("add failed"))
-    const iso = await setupWorkerIsolation(cfg({ kind: "claude-cli" }), "/ws", "id12345678", 1)
+    const iso = await setupWorkerIsolation(cfg({ kind: "acp" }), "/ws", "id12345678", 1)
     expect(iso.isolated).toBe(false)
     expect(iso.workWorkspace).toBe("/ws")
     expect(iso.note).toMatch(/worktree create failed/)

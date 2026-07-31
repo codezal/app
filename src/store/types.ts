@@ -8,7 +8,6 @@ import type { TokenSaverSettings } from "@/lib/token-savers/types"
 import type { MemorySettings } from "@/lib/memory-settings"
 import type { PrivacySettings } from "@/lib/privacy"
 import type { PermissionRule } from "@/lib/permission/types"
-import type { AgentProvidersSettings, NativeAgentHandle } from "@/lib/agent-providers/types"
 import type { SupervisorSettings } from "@/lib/agents/runtime"
 
 export type Role = "user" | "assistant" | "system" | "tool"
@@ -171,7 +170,6 @@ export type Session = {
   goal?: SessionGoal
   todos?: TodoItem[]
   reasoningEffort?: ReasoningEffort
-  nativeAgent?: NativeAgentHandle
   permission?: PermissionRule[]
   pinned?: boolean
   unread?: boolean
@@ -333,9 +331,6 @@ export type Settings = {
   // Per-provider config — baseURL, headers, custom options (openai-compatible
   // endpoint, azure deployment id, vertex project, etc.).
   providerConfigs?: Partial<Record<ProviderId, ProviderConfig>>
-  // Native CLI agent providers (Codex/Claude). These are separate from API
-  // providers because auth, session handles, and streaming come from the CLIs.
-  agentProviders?: AgentProvidersSettings
   supervisor: SupervisorSettings
   customProviders?: CustomProvider[]
   // Fallback to shell env vars when apiKeys is empty. When false, auth chain
