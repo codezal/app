@@ -5,9 +5,39 @@ const CHARS_PER_TOKEN = 4
 const PER_MESSAGE_OVERHEAD = 4
 const PER_TOOL_OVERHEAD = 12
 
+/**
+ * Token estimator for gauge + compaction decisions.
+ *
+ * Prefer provider usage when available (see `context-gauge`). When we must
+ * approximate from text, ASCII runs pack at ~4 chars/token and non-ASCII
+ * (CJK, emoji, …) count as ~1 token each. A naive `length / 4` under-counts
+ * Turkish/CJK text and delays compaction past the real window.
+ */
 export function estimateTextTokens(text: string): number {
   if (!text) return 0
-  return Math.ceil(text.length / CHARS_PER_TOKEN)
+  let asciiRun = 0
+  let tokens = 0
+  const flushAscii = (): void => {
+    if (asciiRun > 0) {
+      tokens += Math.ceil(asciiRun / CHARS_PER_TOKEN)
+      asciiRun = 0
+    }
+  }
+  for (const char of text) {
+    if (char.charCodeAt(0) <= 0x7f) {
+      asciiRun += 1
+      continue
+    }
+    flushAscii()
+    // Zero-width combining marks are not billed as their own tokens.
+    tokens += isCombiningMark(char) ? 0 : 1
+  }
+  flushAscii()
+  return tokens
+}
+
+function isCombiningMark(char: string): boolean {
+  return /[\u0300-\u036f\ufe00-\ufe0f]/u.test(char)
 }
 
 function tokensForContent(content: unknown): number {

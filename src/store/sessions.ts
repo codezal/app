@@ -1077,6 +1077,36 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
           costUsd: 0,
           turns: 0,
         }
+        // last* fields drive the next stream-start gauge base.
+        // - omitted: leave previous last* alone (aux usage like compact/summary
+        //   must NOT clobber the conversation gauge with a tiny side-call).
+        // - explicit number: trusted provider step → stamp.
+        // - explicit undefined: untrusted provider step → clear so estimate wins.
+        const hasLast = Object.prototype.hasOwnProperty.call(delta, "lastInputTokens")
+        const lastTrusted =
+          hasLast &&
+          typeof delta.lastInputTokens === "number" &&
+          Number.isFinite(delta.lastInputTokens)
+        const lastFields = lastTrusted
+          ? {
+              lastInputTokens: delta.lastInputTokens,
+              lastOutputTokens: delta.lastOutputTokens ?? delta.outputTokens,
+              lastCacheReadTokens: delta.lastCacheReadTokens ?? delta.cacheReadTokens ?? 0,
+              lastCacheWriteTokens: delta.lastCacheWriteTokens ?? delta.cacheWriteTokens ?? 0,
+            }
+          : hasLast
+            ? {
+                lastInputTokens: undefined,
+                lastOutputTokens: undefined,
+                lastCacheReadTokens: undefined,
+                lastCacheWriteTokens: undefined,
+              }
+            : {
+                lastInputTokens: cur.lastInputTokens,
+                lastOutputTokens: cur.lastOutputTokens,
+                lastCacheReadTokens: cur.lastCacheReadTokens,
+                lastCacheWriteTokens: cur.lastCacheWriteTokens,
+              }
         return {
           ...s,
           usage: {
@@ -1087,10 +1117,7 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
             reasoningTokens: (cur.reasoningTokens ?? 0) + (delta.reasoningTokens ?? 0),
             costUsd: cur.costUsd + delta.costUsd,
             turns: cur.turns + (delta.countTurn === false ? 0 : 1),
-            lastInputTokens: delta.lastInputTokens ?? delta.inputTokens,
-            lastOutputTokens: delta.lastOutputTokens ?? delta.outputTokens,
-            lastCacheReadTokens: delta.lastCacheReadTokens ?? delta.cacheReadTokens ?? 0,
-            lastCacheWriteTokens: delta.lastCacheWriteTokens ?? delta.cacheWriteTokens ?? 0,
+            ...lastFields,
             effectiveContextTokens: delta.effectiveContextTokens ?? cur.effectiveContextTokens,
           },
           updatedAt: Date.now(),
@@ -1119,11 +1146,21 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
           costUsd: 0,
           turns: 0,
         }
+        // Invalidate the last-step provider snapshot whenever the live gauge is
+        // rewritten. Compaction (and stream-start recompute) stamp a new truth
+        // into effectiveContextTokens; leaving stale last* fields around lets
+        // lastStepTotalTokens resurrect the pre-compact ~full-window number on
+        // the next turn (gauge stuck at 1M after "Sıkıştırıldı: 29K → 2.7K").
+        // addUsageFor re-populates last* from the next real step report.
         return {
           ...s,
           usage: {
             ...cur,
             effectiveContextTokens: n,
+            lastInputTokens: undefined,
+            lastOutputTokens: undefined,
+            lastCacheReadTokens: undefined,
+            lastCacheWriteTokens: undefined,
           },
           updatedAt: Date.now(),
         }

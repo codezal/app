@@ -180,6 +180,33 @@ export function repairJsonString(raw: string): string | null {
   return attempt
 }
 
+// Known parameter-name aliases: models sometimes send the wrong key name
+// (e.g. grep's "query" arrives as "pattern" because glob uses "pattern").
+const PARAM_ALIASES: Record<string, Record<string, string>> = {
+  grep: { pattern: "query" },
+}
+
+export function remapParamAliases(toolName: string, raw: string): string | null {
+  const aliases = PARAM_ALIASES[toolName]
+  if (!aliases) return null
+  let obj: Record<string, unknown>
+  try {
+    obj = JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return null
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null
+  let changed = false
+  for (const [wrong, right] of Object.entries(aliases)) {
+    if (wrong in obj && !(right in obj)) {
+      obj[right] = obj[wrong]
+      delete obj[wrong]
+      changed = true
+    }
+  }
+  return changed ? JSON.stringify(obj) : null
+}
+
 export function makeToolCallRepair<T extends ToolSet>(): (opts: {
   toolCall: LanguageModelV3ToolCall
   tools: T
@@ -200,19 +227,25 @@ export function makeToolCallRepair<T extends ToolSet>(): (opts: {
         : { ...toolCall, toolName: fixed }
     }
 
-    // 2) Input invalid → JSON repair
+    // 2) Input invalid → JSON syntax repair, then parameter-alias remap
     if (InvalidToolInputError.isInstance(error)) {
       const raw = typeof toolCall.input === "string" ? toolCall.input : ""
       const repaired = repairJsonString(raw)
+      if (repaired && repaired !== raw) {
+        console.info(`[repair] '${toolCall.toolName}' input JSON yamalandı`)
+        return { ...toolCall, input: repaired }
+      }
+      // JSON is syntactically valid (or unrepairable) but may use wrong key
+      // names — e.g. models send grep's "query" as "pattern" (glob's key).
+      const remapped = remapParamAliases(toolCall.toolName, repaired ?? raw)
+      if (remapped) {
+        console.info(`[repair] '${toolCall.toolName}' param alias remapped`)
+        return { ...toolCall, input: remapped }
+      }
       if (!repaired) {
         console.warn(`[repair] '${toolCall.toolName}' input parse edilemedi`)
-        return null
       }
-      if (repaired === raw) {
-        return null
-      }
-      console.info(`[repair] '${toolCall.toolName}' input JSON yamalandı`)
-      return { ...toolCall, input: repaired }
+      return null
     }
 
     return null

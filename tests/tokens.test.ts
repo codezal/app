@@ -21,6 +21,17 @@ describe("estimateTextTokens", () => {
     const t = "a".repeat(1000)
     expect(estimateTextTokens(t)).toBe(250)
   })
+
+  it("CJK karakterler ~1 token (length/4 değil)", () => {
+    // 4 Chinese chars → 4 tokens, not 1
+    expect(estimateTextTokens("你好世界")).toBe(4)
+  })
+
+  it("Türkçe aksanlı karakter ASCII gibi değil", () => {
+    // "üğiş" are non-ASCII → 4 tokens; pure ASCII "ugis" → 1
+    expect(estimateTextTokens("üğiş")).toBe(4)
+    expect(estimateTextTokens("ugis")).toBe(1)
+  })
 })
 
 describe("estimateMessagesTokens", () => {

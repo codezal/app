@@ -5,8 +5,9 @@ import {
   unwrapWrappedToolName,
   looksLikeQuotedSyntax,
   makeToolCallRepair,
+  remapParamAliases,
 } from "@/lib/tool-repair"
-import { NoSuchToolError, type ToolSet } from "ai"
+import { NoSuchToolError, InvalidToolInputError, type ToolSet } from "ai"
 import type { LanguageModelV3ToolCall } from "@ai-sdk/provider"
 
 const TOOLS: ToolSet = {
@@ -197,6 +198,75 @@ describe("looksLikeQuotedSyntax", () => {
     expect(looksLikeQuotedSyntax("spawn_agent")).toBe(false)
     expect(looksLikeQuotedSyntax("context7__resolve-library-id")).toBe(false)
     expect(looksLikeQuotedSyntax("ReadFile")).toBe(false)
+  })
+})
+
+describe("remapParamAliases", () => {
+  it("grep: pattern → query remap", () => {
+    const r = remapParamAliases("grep", '{"pattern":"emailInUse","glob":"*.ts"}')
+    expect(r).not.toBeNull()
+    expect(JSON.parse(r!)).toEqual({ query: "emailInUse", glob: "*.ts" })
+  })
+
+  it("grep: query zaten varsa pattern'a dokunmaz", () => {
+    expect(remapParamAliases("grep", '{"query":"test","pattern":"extra"}')).toBeNull()
+  })
+
+  it("grep: pattern yoksa → null", () => {
+    expect(remapParamAliases("grep", '{"query":"test"}')).toBeNull()
+  })
+
+  it("alias'sız tool → null", () => {
+    expect(remapParamAliases("read_file", '{"pattern":"x"}')).toBeNull()
+  })
+
+  it("geçersiz JSON → null", () => {
+    expect(remapParamAliases("grep", "not json")).toBeNull()
+  })
+
+  it("array input → null", () => {
+    expect(remapParamAliases("grep", '["pattern"]')).toBeNull()
+  })
+})
+
+describe("makeToolCallRepair — param alias remap", () => {
+  const mkCall = (toolName: string, input: string): LanguageModelV3ToolCall => ({
+    type: "tool-call",
+    toolCallId: "c1",
+    toolName,
+    input,
+  })
+
+  it("grep pattern→query: InvalidToolInputError onarılır", async () => {
+    const input = '{"pattern":"emailInUse","glob":"**/auth.ts"}'
+    const fixed = await makeToolCallRepair()({
+      toolCall: mkCall("grep", input),
+      tools: TOOLS,
+      error: new InvalidToolInputError({
+        toolName: "grep",
+        toolInput: input,
+        cause: new Error("validation failed"),
+      }),
+    })
+    expect(fixed).not.toBeNull()
+    expect(JSON.parse(fixed!.input as string)).toEqual({
+      query: "emailInUse",
+      glob: "**/auth.ts",
+    })
+  })
+
+  it("alias'sız tool + geçerli JSON → null", async () => {
+    const input = '{"path":"a.ts"}'
+    const fixed = await makeToolCallRepair()({
+      toolCall: mkCall("read_file", input),
+      tools: TOOLS,
+      error: new InvalidToolInputError({
+        toolName: "read_file",
+        toolInput: input,
+        cause: new Error("validation failed"),
+      }),
+    })
+    expect(fixed).toBeNull()
   })
 })
 

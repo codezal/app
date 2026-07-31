@@ -642,4 +642,144 @@ describe("mesaj pencereleme (windowed load + load older)", () => {
     expect(undo).toBeNull()
     expect(useSessionsStore.getState().active!.messages.map((m) => m.id)).toEqual(["u1", "u2"])
   })
+
+  // ---- gauge / compact last* invalidation ----
+  it("setEffectiveContextTokensFor clears stale last* so compact cannot leave a full-window resurrect", () => {
+    const s: Session = {
+      id: "A",
+      title: "A",
+      updatedAt: 1,
+      messages: [],
+      modelMessages: [],
+      provider: "openai" as Session["provider"],
+      model: "m",
+      mode: "build",
+      usage: {
+        inputTokens: 100_000,
+        outputTokens: 1_000,
+        costUsd: 0,
+        turns: 3,
+        lastInputTokens: 50_000,
+        lastOutputTokens: 2_000,
+        lastCacheReadTokens: 900_000,
+        lastCacheWriteTokens: 0,
+        effectiveContextTokens: 952_000,
+      },
+    }
+    useSessionsStore.setState({
+      sessions: { A: s },
+      index: [{ id: "A", title: "A", updatedAt: 1 }],
+      activeId: "A",
+      active: s,
+      isDraft: false,
+    })
+
+    // Compaction (or overflow recovery) stamps the post-compact size.
+    useSessionsStore.getState().setEffectiveContextTokensFor("A", 2_788)
+
+    const usage = useSessionsStore.getState().sessions.A!.usage!
+    expect(usage.effectiveContextTokens).toBe(2_788)
+    // Stale last* would make lastStepTotalTokens reconstruct ~952K on the next
+    // stream start and pin the gauge at "full" after "Sıkıştırıldı".
+    expect(usage.lastInputTokens).toBeUndefined()
+    expect(usage.lastOutputTokens).toBeUndefined()
+    expect(usage.lastCacheReadTokens).toBeUndefined()
+    expect(usage.lastCacheWriteTokens).toBeUndefined()
+    // Cumulative counters are preserved (billing / history).
+    expect(usage.inputTokens).toBe(100_000)
+    expect(usage.turns).toBe(3)
+  })
+
+  it("addUsageFor with omitted last* preserves previous last* (aux usage)", () => {
+    const s: Session = {
+      id: "A",
+      title: "A",
+      updatedAt: 1,
+      messages: [],
+      modelMessages: [],
+      provider: "openai" as Session["provider"],
+      model: "m",
+      mode: "build",
+      usage: {
+        inputTokens: 10_000,
+        outputTokens: 500,
+        costUsd: 0.1,
+        turns: 2,
+        lastInputTokens: 8_000,
+        lastOutputTokens: 400,
+        lastCacheReadTokens: 100_000,
+        lastCacheWriteTokens: 0,
+        effectiveContextTokens: 108_400,
+      },
+    }
+    useSessionsStore.setState({
+      sessions: { A: s },
+      index: [{ id: "A", title: "A", updatedAt: 1 }],
+      activeId: "A",
+      active: s,
+      isDraft: false,
+    })
+
+    // Compact/summary side-call — must not clobber the conversation gauge base.
+    useSessionsStore.getState().addUsageFor("A", {
+      inputTokens: 1_200,
+      outputTokens: 300,
+      costUsd: 0.01,
+      countTurn: false,
+    })
+
+    const usage = useSessionsStore.getState().sessions.A!.usage!
+    expect(usage.lastInputTokens).toBe(8_000)
+    expect(usage.lastCacheReadTokens).toBe(100_000)
+    expect(usage.effectiveContextTokens).toBe(108_400)
+    expect(usage.inputTokens).toBe(11_200)
+    expect(usage.turns).toBe(2)
+  })
+
+  it("addUsageFor with explicit undefined last* clears them (untrusted provider)", () => {
+    const s: Session = {
+      id: "A",
+      title: "A",
+      updatedAt: 1,
+      messages: [],
+      modelMessages: [],
+      provider: "openai" as Session["provider"],
+      model: "m",
+      mode: "build",
+      usage: {
+        inputTokens: 10_000,
+        outputTokens: 500,
+        costUsd: 0.1,
+        turns: 2,
+        lastInputTokens: 8_000,
+        lastOutputTokens: 400,
+        lastCacheReadTokens: 100_000,
+        lastCacheWriteTokens: 0,
+        effectiveContextTokens: 108_400,
+      },
+    }
+    useSessionsStore.setState({
+      sessions: { A: s },
+      index: [{ id: "A", title: "A", updatedAt: 1 }],
+      activeId: "A",
+      active: s,
+      isDraft: false,
+    })
+
+    useSessionsStore.getState().addUsageFor("A", {
+      inputTokens: 20_300,
+      outputTokens: 100,
+      costUsd: 0.02,
+      lastInputTokens: undefined,
+      lastOutputTokens: undefined,
+      lastCacheReadTokens: undefined,
+      lastCacheWriteTokens: undefined,
+      effectiveContextTokens: 239_500,
+    })
+
+    const usage = useSessionsStore.getState().sessions.A!.usage!
+    expect(usage.lastInputTokens).toBeUndefined()
+    expect(usage.lastCacheReadTokens).toBeUndefined()
+    expect(usage.effectiveContextTokens).toBe(239_500)
+  })
 })

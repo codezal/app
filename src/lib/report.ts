@@ -45,6 +45,11 @@ function stackOf(err: unknown): string {
 
 export function isNoiseError(message: string, name?: string): boolean {
   if (name === "AbortError") return true
+  // AI SDK throws this from the TransformStream flush/close phase when the
+  // provider returns an empty response. The real error is already handled in
+  // run-stream.ts's catch block; this is a duplicate rejection escaping
+  // through the writable side's close algorithm — pure noise.
+  if (name === "AI_NoOutputGeneratedError") return true
   if (/\bAbort(Error)?\b|\baborted\b/i.test(message)) return true
   // WebKit/Tauri can surface normal ReadableStream teardown as a bare cancellation error.
   if (/^(?:request\s+)?cancell?ed[.!]?$/i.test(message.trim())) return true
