@@ -65,9 +65,16 @@ export async function searchWorkspace(
     if (opts.caseSensitive) flags.push("-s")
     if (!opts.regex) flags.push("-F") // fixed string
     if (opts.glob) flags.push("-g", opts.glob)
-    flags.push("--", query, workspace)
+    // Search "." with cwd=workspace (not the absolute workspace path). ripgrep
+    // matches globs containing "/" relative to the CWD, so passing an absolute
+    // search root makes prefixed patterns like "src/**/*.ts" match nothing.
+    // Mirrors globWorkspace below.
+    flags.push("--", query, ".")
     const dir = dirOf(rgPath)
-    out = await runProgram("rg", flags, { pathPrepend: dir ? [dir] : undefined })
+    out = await runProgram("rg", flags, {
+      cwd: workspace,
+      pathPrepend: dir ? [dir] : undefined,
+    })
   } else {
     const flags: string[] = ["-RIn"]
     if (!opts.caseSensitive) flags.push("-i")
@@ -88,7 +95,10 @@ export async function searchWorkspace(
     // colon of its own, so anchor on the :line: pair, not the first colon.
     const m = line.match(/^(.+?):(\d+):(.*)$/)
     if (!m) continue
-    const abs = isAbsolutePath(m[1]) ? m[1] : root + "/" + m[1]
+    // rg searches "." so paths are prefixed with "./" (".\" on Windows) — strip
+    // it so relative globs resolve to clean workspace-relative paths.
+    const hitPath = m[1].replace(/^\.[\\/]/, "")
+    const abs = isAbsolutePath(hitPath) ? hitPath : root + "/" + hitPath
     const rel = toRel(abs, root)
     const rawText = m[3]
     const text = rawText.length > 2000 ? rawText.slice(0, 2000) + "..." : rawText
