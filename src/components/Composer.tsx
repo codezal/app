@@ -871,8 +871,12 @@ export function Composer({
     setImages([])
     setFileRefs([])
     setPdfs([])
+    // Drop images for text-only models BEFORE send. Toast-only was not enough:
+    // DashScope Qwen chat models still received image_url parts and 400'd with
+    // "Download multimodal file timed out" on every retry.
+    let sendImgs = imgs
     if (
-      imgs.length > 0 &&
+      sendImgs.length > 0 &&
       !modelAcceptsImages(
         settings.providerCatalog?.data as ProvidersCatalog | undefined,
         provider,
@@ -880,6 +884,7 @@ export function Composer({
       )
     ) {
       toast.info(t("composer.imageUnsupported"))
+      sendImgs = []
     }
     if (
       pdfList.length > 0 &&
@@ -893,7 +898,7 @@ export function Composer({
     }
     onSend(
       body,
-      imgs.length ? imgs : undefined,
+      sendImgs.length ? sendImgs : undefined,
       undefined,
       undefined,
       refs.length ? refs : undefined,

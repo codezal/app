@@ -17,7 +17,7 @@ import { readWorkspaceAgents, readUserAgents, type AgentDef } from "@/lib/agents
 import { AgentCard } from "./AgentCard"
 import type { AgentCardPart } from "@/lib/orchestra/types"
 import { GitPanel } from "./GitPanel"
-import { gitCheckIgnored, gitGrepContent, type GitGrepHit } from "@/lib/git"
+import { gitCheckIgnored } from "@/lib/git"
 import { PreviewPanel } from "./PreviewPanel"
 import { SddRequirementView } from "./sdd/SddRequirementView"
 import { TodoList } from "./TodoList"
@@ -88,20 +88,15 @@ function baseName(p: string): string {
   return i >= 0 ? s.slice(i + 1) : s
 }
 
-type SearchMode = "names" | "contents"
 type FilesViewPrefs = {
   showDotfiles: boolean
   setShowDotfiles: (v: boolean) => void
   showIgnored: boolean
   setShowIgnored: (v: boolean) => void
-  searchMode: SearchMode
-  setSearchMode: (m: SearchMode) => void
 }
 
 const serBool = (v: boolean) => String(v)
 const parseBool = (s: string): boolean | null => (s === "true" ? true : s === "false" ? false : null)
-const serStr = (v: string) => v
-const parseSearchMode = (s: string): SearchMode | null => (s === "names" || s === "contents" ? s : null)
 
 function useStoredState<T>(
   key: string,
@@ -122,8 +117,7 @@ function useStoredState<T>(
 function useFilesViewPrefs(): FilesViewPrefs {
   const [showDotfiles, setShowDotfiles] = useStoredState("codezal.files.showDotfiles", false, parseBool, serBool)
   const [showIgnored, setShowIgnored] = useStoredState("codezal.files.showIgnored", false, parseBool, serBool)
-  const [searchMode, setSearchMode] = useStoredState<SearchMode>("codezal.files.searchMode", "names", parseSearchMode, serStr)
-  return { showDotfiles, setShowDotfiles, showIgnored, setShowIgnored, searchMode, setSearchMode }
+  return { showDotfiles, setShowDotfiles, showIgnored, setShowIgnored }
 }
 
 const PANEL_W_KEY = "codezal.contextPanel.width"
@@ -494,28 +488,7 @@ function FilesSection({
               </button>
             )}
           </div>
-          <div className="mb-2 grid shrink-0 grid-cols-2 gap-0.5 rounded-md bg-codezal-sidebar p-0.5">
-            {(["names", "contents"] as SearchMode[]).map((m) => {
-              const active = prefs.searchMode === m
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => prefs.setSearchMode(m)}
-                  className={cn(
-                    "rounded px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
-                    active ? "bg-codezal-panel-2 text-codezal-text" : "text-codezal-mute hover:text-codezal-text",
-                  )}
-                >
-                  {m === "names" ? t("contextPanel.searchNames") : t("contextPanel.searchContents")}
-                </button>
-              )
-            })}
-          </div>
-          {q && prefs.searchMode === "contents" ? (
-            <FileContentResults root={workspacePath} query={q} />
-          ) : q ? (
+          {q ? (
             <FileSearchResults root={workspacePath} query={q} showDotfiles={prefs.showDotfiles} />
           ) : (
             <FileTree
@@ -599,68 +572,6 @@ function FileSearchResults({ root, query, showDotfiles }: { root: string; query:
                   {dir}
                 </span>
               )}
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-function FileContentResults({ root, query }: { root: string; query: string }) {
-  const t = useT()
-  const openFile = useSessionsStore((s) => s.openFile)
-  const [hits, setHits] = useState<GitGrepHit[] | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setHits(null)
-    const id = setTimeout(() => {
-      gitGrepContent(root, query).then((h) => {
-        if (alive) setHits(h)
-      })
-    }, 200)
-    return () => {
-      alive = false
-      clearTimeout(id)
-    }
-  }, [root, query])
-
-  if (hits === null) {
-    return <div className="px-2 py-1 text-sm text-codezal-mute">{t("contextPanel.contentsSearching")}</div>
-  }
-  if (hits.length === 0) {
-    return <div className="px-2 py-1 text-sm text-codezal-mute">{t("contextPanel.contentsNoMatch")}</div>
-  }
-
-  return (
-    <ul className="flex flex-col text-sm text-codezal-text">
-      {hits.map((h, i) => {
-        const name = baseName(h.path)
-        const rel = relTo(root, h.path)
-        const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : ""
-        return (
-          <li key={`${h.path}:${h.line}:${i}`}>
-            <button
-              type="button"
-              onPointerDown={(ev) => startInternalDrag(ev, { kind: "file", payload: h.path, label: name })}
-              onClick={() => {
-                if (wasDragging()) return
-                openFile(h.path)
-              }}
-              className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left hover:bg-codezal-panel-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
-              title={`${h.path}:${h.line}`}
-            >
-              <span className="flex min-w-0 items-center gap-1.5">
-                <span className="shrink-0 opacity-80">
-                  <FileTypeIcon name={name} />
-                </span>
-                <span className="truncate text-codezal-text">{name}</span>
-                <span className="ml-auto shrink-0 font-mono text-[11px] text-codezal-mute">:{h.line}</span>
-              </span>
-              <span className="truncate pl-5 font-mono text-[11px] text-codezal-dim">{h.text}</span>
-              {dir && <span className="truncate pl-5 text-[11px] text-codezal-mute">{dir}</span>}
             </button>
           </li>
         )

@@ -1,8 +1,7 @@
 // Image attachment helpers — File/Blob → downscaled base64 data URL.
-// Large images bloat token counts, on-disk session JSON, and can exceed
-// provider limits, so the longest edge is clamped to MAX_EDGE before encoding.
-// Images already within the limit are passed through verbatim (no re-encode,
-// preserving the original bytes and transparency).
+// Small / already-safe images pass through unchanged (PNG alpha, GIF, WebP
+// preserved). Oversized images are re-encoded: alpha formats try PNG first,
+// then JPEG with a white flatten if the budget still overflows.
 import type { MessageImage } from "@/store/types"
 import { createId } from "@/lib/id"
 import { saveImage } from "@/lib/image-store"
@@ -10,11 +9,16 @@ import { saveImage } from "@/lib/image-store"
 // Anthropic recommends ~1568px on the long edge; stay just under it.
 const MAX_EDGE = 1536
 const MAX_BASE64_BYTES = 4.5 * 1024 * 1024
-const JPEG_QUALITIES = [0.85, 0.7, 0.55, 0.4]
+// Re-encode quality when we must compress to JPEG.
+const JPEG_QUALITY = 0.85
 
 const PROVIDER_SAFE_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 function isProviderSafe(mime: string): boolean {
   return PROVIDER_SAFE_MIME.has(mime.toLowerCase())
+}
+
+function hasAlphaMime(mime: string): boolean {
+  return /png|webp|gif/.test(mime.toLowerCase())
 }
 
 export type ImageAttachResult = {
@@ -76,9 +80,11 @@ async function downscaleToDataUrl(blob: Blob): Promise<Downscaled | null> {
   }
 
   const { width, height } = bitmap
-  const png = blob.type === "image/png" || blob.type === "image/gif" || !isProviderSafe(blob.type)
+  const withinDim = Math.max(width, height) <= MAX_EDGE
 
-  if (Math.max(width, height) <= MAX_EDGE && isProviderSafe(blob.type)) {
+  // Pass-through: already within the long-edge cap, provider-safe, and under the
+  // base64 budget. Preserves PNG alpha / GIF / WebP instead of forcing JPEG.
+  if (withinDim && isProviderSafe(blob.type)) {
     const raw = await readAsDataUrl(blob)
     if (raw && base64Bytes(raw) <= MAX_BASE64_BYTES) {
       bitmap.close?.()
@@ -87,14 +93,26 @@ async function downscaleToDataUrl(blob: Blob): Promise<Downscaled | null> {
   }
 
   let scale = Math.min(1, MAX_EDGE / Math.max(width, height))
+  const preferPng = hasAlphaMime(blob.type)
   let best: Downscaled | null = null
   for (let step = 0; step < 6; step++) {
     const w = Math.max(1, Math.round(width * scale))
     const h = Math.max(1, Math.round(height * scale))
-    const encoded = encodeAtSize(bitmap, w, h, png)
-    if (encoded) {
-      best = { dataUrl: encoded.dataUrl, width: w, height: h }
-      if (encoded.bytes <= MAX_BASE64_BYTES) {
+    // Alpha sources: try PNG first so transparency survives when it fits.
+    if (preferPng) {
+      const png = encodeAtSize(bitmap, w, h, "image/png")
+      if (png) {
+        best = { dataUrl: png.dataUrl, width: w, height: h }
+        if (png.bytes <= MAX_BASE64_BYTES) {
+          bitmap.close?.()
+          return best
+        }
+      }
+    }
+    const jpeg = encodeAtSize(bitmap, w, h, "image/jpeg", JPEG_QUALITY)
+    if (jpeg) {
+      best = { dataUrl: jpeg.dataUrl, width: w, height: h }
+      if (jpeg.bytes <= MAX_BASE64_BYTES) {
         bitmap.close?.()
         return best
       }
@@ -113,27 +131,23 @@ function encodeAtSize(
   bitmap: ImageBitmap,
   w: number,
   h: number,
-  png: boolean,
+  mime: "image/jpeg" | "image/png",
+  quality?: number,
 ): { dataUrl: string; bytes: number } | null {
   const canvas = document.createElement("canvas")
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
+  // JPEG has no alpha — flatten transparency onto a white background first.
+  if (mime === "image/jpeg") {
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, w, h)
+  }
   ctx.drawImage(bitmap, 0, 0, w, h)
 
-  if (png) {
-    const dataUrl = canvas.toDataURL("image/png")
-    return { dataUrl, bytes: base64Bytes(dataUrl) }
-  }
-  let smallest: { dataUrl: string; bytes: number } | null = null
-  for (const q of JPEG_QUALITIES) {
-    const dataUrl = canvas.toDataURL("image/jpeg", q)
-    const bytes = base64Bytes(dataUrl)
-    if (!smallest || bytes < smallest.bytes) smallest = { dataUrl, bytes }
-    if (bytes <= MAX_BASE64_BYTES) return { dataUrl, bytes }
-  }
-  return smallest
+  const dataUrl = mime === "image/jpeg" ? canvas.toDataURL(mime, quality) : canvas.toDataURL(mime)
+  return { dataUrl, bytes: base64Bytes(dataUrl) }
 }
 
 function base64Bytes(dataUrl: string): number {

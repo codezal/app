@@ -471,6 +471,15 @@ export type Messages = {
     welcomeAgain: string
     welcomeNew: string
     welcomeSubtitle: string
+    welcomeTagline?: string
+    welcomeFeat1?: string
+    welcomeFeat2?: string
+    welcomeFeat3?: string
+    welcomeFeat4?: string
+    welcomeSuggest1?: string
+    welcomeSuggest2?: string
+    welcomeSuggest3?: string
+    welcomeSuggest4?: string
     welcomeInProject: string
     welcomePickProject: string
     welcomeHero?: string
@@ -1271,7 +1280,6 @@ export type Messages = {
       mcp: string
       hooks: string
       orchestra: string
-      semantic: string
       web: string
       autoCompact: string
       memory: string
@@ -1515,20 +1523,6 @@ export type Messages = {
       model: string
       modelHint: string
     }
-    semantic: {
-      title: string
-      description: string
-      enabled: string
-      provider: string
-      baseUrl: string
-      model: string
-      apiKey: string
-      topK: string
-      rebuild: string
-      rebuilding: string
-      indexed: string
-      notIndexed: string
-    }
     web: {
       title: string
       description: string
@@ -1615,7 +1609,6 @@ export type Messages = {
       approval: string
       mcp: string
       hooks: string
-      semantic: string
       plugins: string
       about: string
       appearance?: string
@@ -1649,9 +1642,6 @@ export type Messages = {
       searching: string
       noHits: string
       experimental: string
-      semantic: string
-      semanticNeedCfg: string
-      embedding: string
     }
     stats?: {
       empty: string
@@ -1789,32 +1779,9 @@ export type Messages = {
       pluginHooksTitle?: string
       pluginHooksHint?: string
       pluginHookTrust?: string
-      semanticTitle: string
-      semanticHint: string
-      semanticEnable: string
-      semanticProviderLabel: string
-      semanticModelLabel: string
-      semanticModelPlaceholder: string
-      semanticBaseUrlLabel: string
-      semanticBaseUrlOllamaPh: string
-      semanticBaseUrlCustomPh: string
-      semanticApiKeyLabel: string
-      semanticTopKLabel: string
-      // Auto-context toggle — optional (new keys); other locales fall back to en.
-      semanticAutoContext?: string
-      semanticAutoContextHint?: string
       // Session spend cap — optional; other locales fall back to en.
       spendCapLabel?: string
       spendCapDesc?: string
-      semanticWsTitle: string
-      semanticWsNotConnected: string
-      semanticChunksLabel: string
-      semanticBuiltLabel: string
-      semanticNoIndex: string
-      semanticPhase: string
-      semanticRebuildBtn: string
-      semanticBuildBtn: string
-      semanticNeedWorkspace: string
       providerOllama: string
       providerOpenai: string
       providerCustom: string
@@ -2060,6 +2027,7 @@ export type Messages = {
   errorBanner?: {
     retryAfter: string
     contentFiltered?: string
+    multimodalImage?: string
   }
 
   chatSearch?: {

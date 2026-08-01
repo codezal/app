@@ -34,7 +34,7 @@ export {
   sanitizeSurrogates,
   stripImageParts,
 } from "./providers/transform"
-export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, retryDelayMs, stallRetryDelayMs } from "./providers/error"
+export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, isMultimodalImageError, retryDelayMs, stallRetryDelayMs } from "./providers/error"
 export type { ParsedError } from "./providers/error"
 export { probeModels, LOCAL_PRESETS } from "./providers/discovery"
 export type { LocalPreset } from "./providers/discovery"

@@ -2100,7 +2100,7 @@ export default function App() {
     | string
     | Array<
         | { type: "text"; text: string }
-        | { type: "image"; image: string }
+        | { type: "image"; image: string; mediaType?: string }
         | { type: "file"; data: string; mediaType: string; filename?: string }
       >
   > {
@@ -2109,14 +2109,16 @@ export default function App() {
     if (!hasImages && !hasPdfs) return text
     const parts: Array<
       | { type: "text"; text: string }
-      | { type: "image"; image: string }
+      | { type: "image"; image: string; mediaType?: string }
       | { type: "file"; data: string; mediaType: string; filename?: string }
     > = []
     if (text.trim()) parts.push({ type: "text", text })
     if (images) {
       for (const im of images) {
         const image = im.dataUrl ?? (im.ref ? await loadImageDataUrl(im.ref, im.mime) : "")
-        if (image) parts.push({ type: "image", image })
+        // mediaType keeps openai-compatible converters from sniffing a bare
+        // top-level "image" type; DashScope needs a full image/* subtype.
+        if (image) parts.push({ type: "image", image, mediaType: im.mime || undefined })
       }
     }
     if (pdfs) {
@@ -2256,7 +2258,7 @@ export default function App() {
         />
       </div>
 
-      <div className={cn("relative", activeEmpty && "mx-auto w-full max-w-[820px] shrink-0 pb-[clamp(2rem,6vh,4.5rem)]")}>
+      <div className="relative">
         {error && error.sid === activeSessionId && (
           <div className="absolute inset-x-0 bottom-full z-20">
             <div className="mx-auto w-full max-w-[860px] px-6">

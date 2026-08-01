@@ -245,7 +245,7 @@ export {
   stripImageParts,
   repairToolAdjacency,
 } from "./transform"
-export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, retryDelayMs, stallRetryDelayMs } from "./error"
+export { parseAPICallError, parseStreamError, isContextOverflow, isOverflow, isAuthErrorMessage, isRetryableError, isContentFilterError, isMultimodalImageError, retryDelayMs, stallRetryDelayMs } from "./error"
 export type { ParsedError } from "./error"
 
 export { probeModels, LOCAL_PRESETS } from "./discovery"

@@ -155,15 +155,64 @@ export function modelDetail(
   return p.models[modelId] ?? null
 }
 
+// models.dev is often stale for brand-new DashScope previews. Prefer explicit
+// catalog modalities; fall back to name heuristics only when the catalog has
+// nothing useful. QwenCloud docs (Token Plan Team) list several non-VL ids with
+// "vision understanding" — keep those allowlisted so we don't strip images.
+export function looksLikeVisionModel(modelId: string): boolean {
+  const m = modelId.toLowerCase()
+  // Explicit vision families. Avoid bare "max"/"plus" — those are often text-only.
+  if (/(?:^|[-_./])(vl|vision|omni|qvq|vqa|vlm)(?:$|[-_./])/.test(m)) return true
+  if (m.includes("multimodal") || m.includes("visual")) return true
+  // Gemini / GPT-4o / Claude 3+ are multimodal by default even without "vl".
+  if (/^gemini|^gpt-4o|^gpt-4\.1|^gpt-5|^o[1-9]|^claude-3|^claude-(sonnet|opus|haiku)-/.test(m)) {
+    return true
+  }
+  return false
+}
+
+// Non-VL Qwen ids that still accept images (QwenCloud Token Plan / Model Studio).
+// Keep this tight — "*-max" is NOT a vision signal (qwen3-max / qwen3.7-max are text-only).
+export function isKnownVisionModel(modelId: string): boolean {
+  const m = modelId.toLowerCase()
+  if (looksLikeVisionModel(m)) return true
+  // QwenCloud Team Edition: qwen3.8-max-preview = reasoning + vision understanding.
+  if (/^qwen3\.8-max-preview(?:$|[-_/])/.test(m)) return true
+  if (/^qwen3\.7-plus(?:$|[-_/])/.test(m)) return true
+  if (/^qwen3\.6-(?:plus|flash)(?:$|[-_/])/.test(m)) return true
+  // Qwen3.5 line is multimodal in Model Studio (text+image+video, often audio).
+  if (/^qwen3\.5(?:$|[-_/])/.test(m)) return true
+  return false
+}
+
+function isLikelyTextOnlyChatModel(_provider: ProviderId | undefined, modelId: string): boolean {
+  if (isKnownVisionModel(modelId)) return false
+  const m = modelId.toLowerCase()
+  // Coder / code models almost never take images.
+  if (/(?:^|[-_./])(coder|code)(?:$|[-_./])/.test(m)) return true
+  if (m.includes("qwq")) return true
+  // Explicit text-only Qwen chat max line (NOT qwen3.8-max-preview).
+  if (/^qwen3-max(?:$|[-_/])/.test(m)) return true
+  if (/^qwen3\.7-max(?:$|[-_/])/.test(m)) return true
+  if (/^qwen3\.6-max(?:$|[-_/])/.test(m)) return true
+  if (/^qwen-max(?:$|[-_/])/.test(m)) return true
+  return false
+}
+
 export function modelAcceptsImages(
   catalog: ProvidersCatalog | undefined,
   provider: ProviderId | undefined,
   model: string,
 ): boolean {
-  if (!catalog || !provider) return true
-  const inp = modelDetail(catalog, provider, model)?.modalities?.input
-  if (!inp || inp.length === 0) return true // modalite verisi yok → varsayma
-  return inp.includes("image")
+  if (!provider) return true
+  // Known vision ids win even when a stale catalog marks them text-only
+  // (models.dev lagged qwen3.8-max-preview; QwenCloud already ships vision).
+  if (isKnownVisionModel(model)) return true
+  const inp = catalog ? modelDetail(catalog, provider, model)?.modalities?.input : undefined
+  if (inp && inp.length > 0) return inp.includes("image")
+  // No modality data: deny only known text-only families, else allow.
+  if (isLikelyTextOnlyChatModel(provider, model)) return false
+  return true
 }
 
 // Model PDF (document) girdisi destekliyor mu? — models.dev modalities.input "pdf".

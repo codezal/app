@@ -32,6 +32,37 @@ CREATE TABLE IF NOT EXISTS cm_calls (
 );
 CREATE INDEX IF NOT EXISTS cm_calls_name ON cm_calls(name);
 CREATE INDEX IF NOT EXISTS cm_calls_file ON cm_calls(file);
+CREATE TABLE IF NOT EXISTS cm_strings (
+    file  TEXT NOT NULL,
+    value TEXT NOT NULL,
+    line  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cm_strings_value ON cm_strings(value);
+CREATE INDEX IF NOT EXISTS cm_strings_file ON cm_strings(file);
+CREATE TABLE IF NOT EXISTS cm_imports (
+    file   TEXT NOT NULL,
+    target TEXT NOT NULL,
+    line   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cm_imports_target ON cm_imports(target);
+CREATE INDEX IF NOT EXISTS cm_imports_file ON cm_imports(file);
+CREATE TABLE IF NOT EXISTS cm_inherits (
+    child  TEXT NOT NULL,
+    parent TEXT NOT NULL,
+    kind   TEXT NOT NULL,
+    file   TEXT NOT NULL,
+    line   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cm_inherits_child ON cm_inherits(child);
+CREATE INDEX IF NOT EXISTS cm_inherits_parent ON cm_inherits(parent);
+CREATE TABLE IF NOT EXISTS cm_xlang (
+    ts_name TEXT NOT NULL,
+    rs_name TEXT NOT NULL,
+    ts_file TEXT NOT NULL,
+    rs_file TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cm_xlang_ts ON cm_xlang(ts_name);
+CREATE INDEX IF NOT EXISTS cm_xlang_rs ON cm_xlang(rs_name);
 ";
 
 pub fn open(workspace: &str) -> Result<Connection, String> {
@@ -81,6 +112,43 @@ pub struct Symbol {
     pub sig: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StringRef {
+    pub file: String,
+    pub line: u32,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ImportRef {
+    pub file: String,
+    pub target: String,
+    pub line: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InheritRef {
+    pub child: String,
+    pub parent: String,
+    pub kind: String,
+    pub file: String,
+    pub line: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HierarchyBundle {
+    pub parents: Vec<InheritRef>,
+    pub children: Vec<InheritRef>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct XlangRef {
+    pub ts_name: String,
+    pub rs_name: String,
+    pub ts_file: String,
+    pub rs_file: String,
+}
+
 // NOT: Rust `regex` lookbehind/lookahead DESTEKLEMEZ. Tek lookahead Go type
 
 #[derive(Debug, Clone, Default)]
@@ -88,6 +156,16 @@ pub struct ParsedFile {
     pub symbols: Vec<Symbol>,
     pub raw_calls: Vec<RawCall>,
     pub owner_by_line: Vec<String>,
+    /// Extracted string literals: (value, line).
+    pub strings: Vec<(String, u32)>,
+    /// Import targets: (raw_target, line).
+    pub imports: Vec<(String, u32)>,
+    /// Inheritance: (child, parent, kind, line).
+    pub inherits: Vec<(String, String, String, u32)>,
+    /// #[tauri::command] fn names (Rust files only).
+    pub tauri_commands: Vec<String>,
+    /// invoke("name") calls (TS files only): (name, line).
+    pub invoke_calls: Vec<(String, u32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -332,6 +410,64 @@ static KEYWORDS: LazyLock<Vec<(&'static str, HashSet<&'static str>)>> = LazyLock
     ]
 });
 
+// --- String literal extraction ---
+static STRING_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')"#)
+        .expect("code_map: string regex")
+});
+const MIN_STRING_LEN: usize = 3;
+
+// --- Import extraction (per language) ---
+static IMPORT_TS_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    vec![
+        Regex::new(r#"(?m)(?:import|export)\s+[\s\S]*?\s+from\s+['"]([^'"]+)['"]"#).unwrap(),
+        Regex::new(r#"require\s*\(\s*['"]([^'"]+)['"]\s*\)"#).unwrap(),
+    ]
+});
+static IMPORT_PY_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    vec![
+        Regex::new(r"(?m)^\s*from\s+([\w.]+)\s+import").unwrap(),
+        Regex::new(r"(?m)^\s*import\s+([\w.]+)").unwrap(),
+    ]
+});
+static IMPORT_RS_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    vec![
+        Regex::new(r"(?m)^\s*(?:pub\s+)?use\s+(?:crate::)?([\w:]+)").unwrap(),
+        Regex::new(r"(?m)^\s*(?:pub\s+)?mod\s+(\w+)").unwrap(),
+    ]
+});
+static IMPORT_GO_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?m)^\s*(?:\w+\s+)?"([^"]+)""#).unwrap());
+static IMPORT_JAVA_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^\s*import\s+(?:static\s+)?([\w.]+)").unwrap());
+
+// --- Inheritance extraction ---
+static INHERIT_TS_EXTENDS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)class\s+([A-Za-z_$][\w$]*)\s+extends\s+([A-Za-z_$][\w$]*)").unwrap()
+});
+static INHERIT_TS_IMPLEMENTS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)class\s+([A-Za-z_$][\w$]*)[^{]*implements\s+([^{]+)").unwrap()
+});
+/// `interface Foo extends Bar, Baz {`
+static INHERIT_TS_IFACE_EXTENDS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)interface\s+([A-Za-z_$][\w$]*)\s+extends\s+([^{]+)").unwrap()
+});
+static INHERIT_RS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)impl\s+([A-Za-z_]\w*)\s+for\s+([A-Za-z_]\w*)").unwrap());
+static INHERIT_PY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)class\s+([A-Za-z_]\w*)\s*\(([^)]+)\)").unwrap());
+static INHERIT_JAVA_EXTENDS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)class\s+([A-Za-z_]\w*)\s+extends\s+([A-Za-z_]\w*)").unwrap());
+static INHERIT_JAVA_IMPLEMENTS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)class\s+([A-Za-z_]\w*)[^{]*implements\s+([^{]+)").unwrap());
+
+// --- Tauri cross-language ---
+static TAURI_CMD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)#\[tauri::command\]\s*(?:pub\s+)?fn\s+([A-Za-z_]\w*)").unwrap()
+});
+static INVOKE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"invoke\s*(?:<[^>]*>)?\s*\(\s*["']([A-Za-z_]\w*)["']"#).unwrap());
+
 fn patterns_for(lang: &str) -> &'static [(&'static str, Regex)] {
     PATTERNS
         .iter()
@@ -477,6 +613,8 @@ pub fn parse_source(file: &str, text: &str, lang: &str) -> ParsedFile {
     let mut symbols: Vec<Symbol> = Vec::new();
     let mut def_at_line: Vec<(u32, usize, String)> = Vec::new();
 
+    let empty_kw = HashSet::new();
+    let kw_set = keywords_for(lang).unwrap_or(&empty_kw);
     for (kind, re) in patterns {
         for caps in re.captures_iter(text) {
             if lang == "go" && *kind == "type" && caps.get(2).map(|m| m.as_str()) == Some("struct")
@@ -488,14 +626,26 @@ pub fn parse_source(file: &str, text: &str, lang: &str) -> ParsedFile {
                 None => continue,
             };
             let name = m.as_str();
+            // Skip language keywords (e.g. `for (…) {` / `if (…) {` matched by
+            // the TS "method" pattern) — they are control-flow, not definitions.
+            if kw_set.contains(name) {
+                continue;
+            }
             let offset = m.start();
             let line = line_at(&line_starts, offset);
             let id = format!("{file}::{name}::{line}");
-            let line_end = text[offset..]
+            // sig starts from the beginning of the line so it captures
+            // leading keywords like "export" / "pub" (needed by q_dead).
+            let line_start = line_starts[(line - 1) as usize];
+            let line_end = text[line_start..]
                 .find('\n')
-                .map(|p| offset + p)
+                .map(|p| line_start + p)
                 .unwrap_or(text.len());
-            let sig: String = text[offset..line_end].trim().chars().take(160).collect();
+            let sig: String = text[line_start..line_end]
+                .trim()
+                .chars()
+                .take(160)
+                .collect();
             symbols.push(Symbol {
                 id: id.clone(),
                 file: file.to_string(),
@@ -562,13 +712,196 @@ pub fn parse_source(file: &str, text: &str, lang: &str) -> ParsedFile {
         });
     }
 
+    // --- String literal extraction ---
+    let mut strings: Vec<(String, u32)> = Vec::new();
+    for caps in STRING_RE.captures_iter(text) {
+        let val = caps.get(1).or_else(|| caps.get(2));
+        if let Some(m) = val {
+            let s = m.as_str();
+            if s.len() >= MIN_STRING_LEN {
+                let line = line_at(&line_starts, m.start());
+                strings.push((s.to_string(), line));
+            }
+        }
+    }
+
+    // --- Import extraction ---
+    let mut imports: Vec<(String, u32)> = Vec::new();
+    match lang {
+        "ts" => {
+            for re in IMPORT_TS_RE.iter() {
+                for caps in re.captures_iter(text) {
+                    if let Some(m) = caps.get(1) {
+                        let line = line_at(&line_starts, m.start());
+                        imports.push((m.as_str().to_string(), line));
+                    }
+                }
+            }
+        }
+        "py" => {
+            for re in IMPORT_PY_RE.iter() {
+                for caps in re.captures_iter(text) {
+                    if let Some(m) = caps.get(1) {
+                        let line = line_at(&line_starts, m.start());
+                        imports.push((m.as_str().to_string(), line));
+                    }
+                }
+            }
+        }
+        "rs" => {
+            for re in IMPORT_RS_RE.iter() {
+                for caps in re.captures_iter(text) {
+                    if let Some(m) = caps.get(1) {
+                        let line = line_at(&line_starts, m.start());
+                        imports.push((m.as_str().to_string(), line));
+                    }
+                }
+            }
+        }
+        "go" => {
+            for caps in IMPORT_GO_RE.captures_iter(text) {
+                if let Some(m) = caps.get(1) {
+                    let line = line_at(&line_starts, m.start());
+                    imports.push((m.as_str().to_string(), line));
+                }
+            }
+        }
+        "java" => {
+            for caps in IMPORT_JAVA_RE.captures_iter(text) {
+                if let Some(m) = caps.get(1) {
+                    let line = line_at(&line_starts, m.start());
+                    imports.push((m.as_str().to_string(), line));
+                }
+            }
+        }
+        _ => {}
+    }
+
+    // --- Inheritance extraction ---
+    let mut inherits: Vec<(String, String, String, u32)> = Vec::new();
+    match lang {
+        "ts" | "java" => {
+            let ext_re = if lang == "ts" {
+                &INHERIT_TS_EXTENDS_RE
+            } else {
+                &INHERIT_JAVA_EXTENDS_RE
+            };
+            for caps in ext_re.captures_iter(text) {
+                if let (Some(c), Some(p)) = (caps.get(1), caps.get(2)) {
+                    let line = line_at(&line_starts, c.start());
+                    inherits.push((
+                        c.as_str().to_string(),
+                        p.as_str().to_string(),
+                        "extends".to_string(),
+                        line,
+                    ));
+                }
+            }
+            let imp_re = if lang == "ts" {
+                &INHERIT_TS_IMPLEMENTS_RE
+            } else {
+                &INHERIT_JAVA_IMPLEMENTS_RE
+            };
+            for caps in imp_re.captures_iter(text) {
+                if let (Some(c), Some(p)) = (caps.get(1), caps.get(2)) {
+                    let line = line_at(&line_starts, c.start());
+                    for iface in p.as_str().split(',') {
+                        let iface = iface.trim();
+                        if !iface.is_empty() {
+                            inherits.push((
+                                c.as_str().to_string(),
+                                iface.to_string(),
+                                "implements".to_string(),
+                                line,
+                            ));
+                        }
+                    }
+                }
+            }
+            // TS: interface Foo extends Bar, Baz
+            if lang == "ts" {
+                for caps in INHERIT_TS_IFACE_EXTENDS_RE.captures_iter(text) {
+                    if let (Some(c), Some(p)) = (caps.get(1), caps.get(2)) {
+                        let line = line_at(&line_starts, c.start());
+                        for parent in p.as_str().split(',') {
+                            let parent = parent.trim();
+                            if !parent.is_empty() {
+                                inherits.push((
+                                    c.as_str().to_string(),
+                                    parent.to_string(),
+                                    "extends".to_string(),
+                                    line,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "rs" => {
+            for caps in INHERIT_RS_RE.captures_iter(text) {
+                if let (Some(t), Some(s)) = (caps.get(1), caps.get(2)) {
+                    let line = line_at(&line_starts, t.start());
+                    inherits.push((
+                        s.as_str().to_string(),
+                        t.as_str().to_string(),
+                        "impl_trait".to_string(),
+                        line,
+                    ));
+                }
+            }
+        }
+        "py" => {
+            for caps in INHERIT_PY_RE.captures_iter(text) {
+                if let (Some(c), Some(bases)) = (caps.get(1), caps.get(2)) {
+                    let line = line_at(&line_starts, c.start());
+                    for base in bases.as_str().split(',') {
+                        let base = base.trim();
+                        if !base.is_empty() && base != "object" {
+                            inherits.push((
+                                c.as_str().to_string(),
+                                base.to_string(),
+                                "extends".to_string(),
+                                line,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    // --- Tauri cross-language extraction ---
+    let mut tauri_commands: Vec<String> = Vec::new();
+    let mut invoke_calls: Vec<(String, u32)> = Vec::new();
+    if lang == "rs" {
+        for caps in TAURI_CMD_RE.captures_iter(text) {
+            if let Some(m) = caps.get(1) {
+                tauri_commands.push(m.as_str().to_string());
+            }
+        }
+    }
+    if lang == "ts" {
+        for caps in INVOKE_RE.captures_iter(text) {
+            if let Some(m) = caps.get(1) {
+                let line = line_at(&line_starts, m.start());
+                invoke_calls.push((m.as_str().to_string(), line));
+            }
+        }
+    }
+
     ParsedFile {
         symbols,
         raw_calls,
         owner_by_line,
+        strings,
+        imports,
+        inherits,
+        tauri_commands,
+        invoke_calls,
     }
 }
-
 
 const IGNORE_DIRS: &[&str] = &[
     "node_modules",
@@ -630,6 +963,12 @@ fn store_file(conn: &Connection, rel: &str, parsed: &ParsedFile, hash: &str) -> 
         .map_err(estr)?;
     conn.execute("DELETE FROM cm_calls WHERE file = ?1", [rel])
         .map_err(estr)?;
+    conn.execute("DELETE FROM cm_strings WHERE file = ?1", [rel])
+        .map_err(estr)?;
+    conn.execute("DELETE FROM cm_imports WHERE file = ?1", [rel])
+        .map_err(estr)?;
+    conn.execute("DELETE FROM cm_inherits WHERE file = ?1", [rel])
+        .map_err(estr)?;
     {
         let mut stmt = conn
             .prepare("INSERT OR REPLACE INTO cm_symbols (id, file, name, kind, line, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
@@ -656,6 +995,31 @@ fn store_file(conn: &Connection, rel: &str, parsed: &ParsedFile, hash: &str) -> 
                 .map_err(estr)?;
         }
     }
+    {
+        let mut stmt = conn
+            .prepare("INSERT INTO cm_strings (file, value, line) VALUES (?1, ?2, ?3)")
+            .map_err(estr)?;
+        for (val, line) in &parsed.strings {
+            stmt.execute(params![rel, val, line]).map_err(estr)?;
+        }
+    }
+    {
+        let mut stmt = conn
+            .prepare("INSERT INTO cm_imports (file, target, line) VALUES (?1, ?2, ?3)")
+            .map_err(estr)?;
+        for (target, line) in &parsed.imports {
+            stmt.execute(params![rel, target, line]).map_err(estr)?;
+        }
+    }
+    {
+        let mut stmt = conn
+            .prepare("INSERT INTO cm_inherits (child, parent, kind, file, line) VALUES (?1, ?2, ?3, ?4, ?5)")
+            .map_err(estr)?;
+        for (child, parent, kind, line) in &parsed.inherits {
+            stmt.execute(params![child, parent, kind, rel, line])
+                .map_err(estr)?;
+        }
+    }
     conn.execute(
         "INSERT OR REPLACE INTO cm_files (path, hash, indexed_at) VALUES (?1, ?2, ?3)",
         params![rel, hash, now_millis()],
@@ -668,6 +1032,12 @@ fn remove_file(conn: &Connection, rel: &str) -> Result<(), String> {
     conn.execute("DELETE FROM cm_symbols WHERE file = ?1", [rel])
         .map_err(estr)?;
     conn.execute("DELETE FROM cm_calls WHERE file = ?1", [rel])
+        .map_err(estr)?;
+    conn.execute("DELETE FROM cm_strings WHERE file = ?1", [rel])
+        .map_err(estr)?;
+    conn.execute("DELETE FROM cm_imports WHERE file = ?1", [rel])
+        .map_err(estr)?;
+    conn.execute("DELETE FROM cm_inherits WHERE file = ?1", [rel])
         .map_err(estr)?;
     conn.execute("DELETE FROM cm_files WHERE path = ?1", [rel])
         .map_err(estr)?;
@@ -717,11 +1087,53 @@ pub struct BuildStats {
 pub fn build(workspace: &str) -> Result<BuildStats, String> {
     let conn = open(workspace)?;
     let tx = conn.unchecked_transaction().map_err(estr)?;
-    conn.execute_batch("DELETE FROM cm_symbols; DELETE FROM cm_calls; DELETE FROM cm_files;")
-        .map_err(estr)?;
+    conn.execute_batch(
+        "DELETE FROM cm_symbols; DELETE FROM cm_calls; DELETE FROM cm_files; \
+         DELETE FROM cm_strings; DELETE FROM cm_imports; DELETE FROM cm_inherits; \
+         DELETE FROM cm_xlang;",
+    )
+    .map_err(estr)?;
     let files = collect_files(workspace);
+    // Collect tauri commands and invoke calls for xlang matching.
+    let mut rs_cmds: HashMap<String, String> = HashMap::new(); // name -> file
+    let mut ts_invokes: Vec<(String, String)> = Vec::new(); // (name, file)
     for rel in &files {
-        let _ = index_file(&conn, workspace, rel);
+        let lang = dot_ext(rel).as_deref().and_then(ext_to_lang);
+        let abs = Path::new(workspace).join(rel);
+        let text = match std::fs::read_to_string(&abs) {
+            Ok(t) if t.len() <= MAX_FILE_BYTES => t,
+            _ => continue,
+        };
+        let hash = hash_of(&text);
+        let parsed = match lang {
+            Some(l) => parse_source(rel, &text, l),
+            None => continue,
+        };
+        let _ = store_file(&conn, rel, &parsed, &hash);
+        if lang == Some("rs") {
+            for cmd in &parsed.tauri_commands {
+                rs_cmds.insert(cmd.clone(), rel.clone());
+            }
+        }
+        if lang == Some("ts") {
+            for (name, _line) in &parsed.invoke_calls {
+                ts_invokes.push((name.clone(), rel.clone()));
+            }
+        }
+    }
+    // Build xlang mappings: match invoke("foo") with #[tauri::command] fn foo.
+    {
+        let mut stmt = conn
+            .prepare(
+                "INSERT INTO cm_xlang (ts_name, rs_name, ts_file, rs_file) VALUES (?1, ?2, ?3, ?4)",
+            )
+            .map_err(estr)?;
+        for (name, ts_file) in &ts_invokes {
+            if let Some(rs_file) = rs_cmds.get(name) {
+                stmt.execute(params![name, name, ts_file, rs_file])
+                    .map_err(estr)?;
+            }
+        }
     }
     let symbols: i64 = conn
         .query_row("SELECT COUNT(*) FROM cm_symbols", [], |r| r.get(0))
@@ -732,7 +1144,6 @@ pub fn build(workspace: &str) -> Result<BuildStats, String> {
         symbols: symbols as usize,
     })
 }
-
 
 const SYM_COLS: &str = "id, file, name, kind, line, sig";
 
@@ -879,6 +1290,161 @@ fn q_trace(conn: &Connection, from: &str, to: &str, max_depth: u32) -> Result<Ve
     Ok(vec![])
 }
 
+// ---------------------------------------------------------------------------
+// New queries: references, dead, importers, hierarchy, diff_impact, xlang
+// ---------------------------------------------------------------------------
+
+fn q_references(conn: &Connection, query: &str, limit: u32) -> Result<Vec<StringRef>, String> {
+    let escaped = query
+        .replace('\\', r"\\")
+        .replace('%', r"\%")
+        .replace('_', r"\_");
+    let sql = "SELECT file, line, value FROM cm_strings WHERE value LIKE ?1 ESCAPE '\\' ORDER BY file, line LIMIT ?2";
+    let mut stmt = conn.prepare(sql).map_err(estr)?;
+    let rows = stmt
+        .query_map(params![format!("%{escaped}%"), limit], |r| {
+            Ok(StringRef {
+                file: r.get(0)?,
+                line: r.get(1)?,
+                value: r.get(2)?,
+            })
+        })
+        .map_err(estr)?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
+/// Entry-point files whose top-level calls are expected and not "dead".
+const ENTRY_FILES: &[&str] = &[
+    "main.ts", "index.ts", "App.tsx", "app.tsx", "lib.rs", "main.rs",
+];
+
+fn q_dead(conn: &Connection, limit: u32) -> Result<Vec<Symbol>, String> {
+    // Symbols that are never called AND not exported (sig lacks leading
+    // export/pub keyword). Uses prefix matching ('export%' / 'pub %') so
+    // a function named `exportData()` is NOT falsely treated as exported.
+    //
+    // Known limitation: deadness is checked by NAME, not by (file, name).
+    // If `foo` in file A is never called but `foo` in file B IS called,
+    // the dead `foo` in file A is hidden (false negative). This is a
+    // trade-off of the regex-based approach — the cm_calls table stores
+    // call targets by name, not by definition site.
+    let sql = format!(
+        "SELECT {SYM_COLS} FROM cm_symbols s \
+         WHERE (s.kind = 'function' OR s.kind = 'method') \
+           AND NOT EXISTS (SELECT 1 FROM cm_calls c WHERE c.name = s.name) \
+           AND s.sig NOT LIKE 'export%' \
+           AND s.sig NOT LIKE 'pub %' \
+         ORDER BY s.file, s.line LIMIT ?1"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(estr)?;
+    let rows = stmt
+        .query_map(params![limit * 3], row_to_symbol)
+        .map_err(estr)?;
+    let all: Vec<Symbol> = rows.filter_map(Result::ok).collect();
+    // Filter out entry-point files.
+    Ok(all
+        .into_iter()
+        .filter(|s| {
+            let base = s.file.rsplit(['/', '\\']).next().unwrap_or(&s.file);
+            !ENTRY_FILES.contains(&base)
+        })
+        .take(limit as usize)
+        .collect())
+}
+
+fn q_importers(conn: &Connection, file: &str, limit: u32) -> Result<Vec<ImportRef>, String> {
+    let sql =
+        "SELECT file, target, line FROM cm_imports WHERE target = ?1 ORDER BY file, line LIMIT ?2";
+    let mut stmt = conn.prepare(sql).map_err(estr)?;
+    let rows = stmt
+        .query_map(params![file, limit], |r| {
+            Ok(ImportRef {
+                file: r.get(0)?,
+                target: r.get(1)?,
+                line: r.get(2)?,
+            })
+        })
+        .map_err(estr)?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
+fn q_hierarchy(conn: &Connection, name: &str) -> Result<HierarchyBundle, String> {
+    let parents_sql =
+        "SELECT child, parent, kind, file, line FROM cm_inherits WHERE child = ?1 ORDER BY line";
+    let children_sql =
+        "SELECT child, parent, kind, file, line FROM cm_inherits WHERE parent = ?1 ORDER BY line";
+    let to_ref = |r: &rusqlite::Row| -> rusqlite::Result<InheritRef> {
+        Ok(InheritRef {
+            child: r.get(0)?,
+            parent: r.get(1)?,
+            kind: r.get(2)?,
+            file: r.get(3)?,
+            line: r.get(4)?,
+        })
+    };
+    let mut stmt = conn.prepare(parents_sql).map_err(estr)?;
+    let parents: Vec<InheritRef> = stmt
+        .query_map([name], to_ref)
+        .map_err(estr)?
+        .filter_map(Result::ok)
+        .collect();
+    let mut stmt = conn.prepare(children_sql).map_err(estr)?;
+    let children: Vec<InheritRef> = stmt
+        .query_map([name], to_ref)
+        .map_err(estr)?
+        .filter_map(Result::ok)
+        .collect();
+    Ok(HierarchyBundle { parents, children })
+}
+
+fn q_diff_impact(conn: &Connection, files: &[String], limit: u32) -> Result<Vec<Symbol>, String> {
+    // Collect all symbols defined in the changed files.
+    let mut seeds: Vec<String> = Vec::new();
+    {
+        let sql = format!("SELECT DISTINCT name FROM cm_symbols WHERE file = ?1");
+        let mut stmt = conn.prepare(&sql).map_err(estr)?;
+        for f in files {
+            let names: Vec<String> = stmt
+                .query_map([f.as_str()], |r| r.get::<_, String>(0))
+                .map_err(estr)?
+                .filter_map(Result::ok)
+                .collect();
+            seeds.extend(names);
+        }
+    }
+    // For each seed, run transitive impact and collect.
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut result: Vec<Symbol> = Vec::new();
+    for name in &seeds {
+        let impacted = q_impact(conn, name, limit)?;
+        for sym in impacted {
+            if seen.insert(sym.id.clone()) {
+                result.push(sym);
+                if result.len() >= limit as usize {
+                    return Ok(result);
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn q_xlang(conn: &Connection, name: &str) -> Result<Vec<XlangRef>, String> {
+    let sql = "SELECT ts_name, rs_name, ts_file, rs_file FROM cm_xlang WHERE ts_name = ?1 OR rs_name = ?1";
+    let mut stmt = conn.prepare(sql).map_err(estr)?;
+    let rows = stmt
+        .query_map([name], |r| {
+            Ok(XlangRef {
+                ts_name: r.get(0)?,
+                rs_name: r.get(1)?,
+                ts_file: r.get(2)?,
+                rs_file: r.get(3)?,
+            })
+        })
+        .map_err(estr)?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
 #[tauri::command]
 pub fn codemap_build(workspace: String) -> Result<BuildStats, String> {
     build(&workspace)
@@ -993,6 +1559,100 @@ pub fn codemap_status(workspace: String) -> Result<CodeMapStatus, String> {
         symbols: count("SELECT COUNT(*) FROM cm_symbols")?,
         calls: count("SELECT COUNT(*) FROM cm_calls")?,
     })
+}
+
+#[tauri::command]
+pub fn codemap_references(
+    workspace: String,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<StringRef>, String> {
+    let conn = open(&workspace)?;
+    q_references(&conn, &query, limit.unwrap_or(50))
+}
+
+#[tauri::command]
+pub fn codemap_dead(workspace: String, limit: Option<u32>) -> Result<Vec<Symbol>, String> {
+    let conn = open(&workspace)?;
+    q_dead(&conn, limit.unwrap_or(50))
+}
+
+/// Generate candidate import specifiers for a file path so that both
+/// `src/lib/compact.ts` and `@/lib/compact` resolve to the same targets.
+fn import_candidates(file: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![file.to_string()];
+    // Strip common extensions.
+    let no_ext = file
+        .strip_suffix(".ts")
+        .or_else(|| file.strip_suffix(".tsx"))
+        .or_else(|| file.strip_suffix(".js"))
+        .or_else(|| file.strip_suffix(".jsx"))
+        .unwrap_or(file);
+    if no_ext != file {
+        out.push(no_ext.to_string());
+    }
+    // src/lib/foo → @/lib/foo
+    if let Some(rest) = no_ext.strip_prefix("src/") {
+        let alias = format!("@/{rest}");
+        if !out.contains(&alias) {
+            out.push(alias);
+        }
+    }
+    // @/lib/foo → src/lib/foo
+    if let Some(rest) = no_ext.strip_prefix("@/") {
+        let src = format!("src/{rest}");
+        if !out.contains(&src) {
+            out.push(src);
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub fn codemap_importers(
+    workspace: String,
+    file: String,
+    limit: Option<u32>,
+) -> Result<Vec<ImportRef>, String> {
+    let conn = open(&workspace)?;
+    let lim = limit.unwrap_or(50);
+    let candidates = import_candidates(&file);
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut result: Vec<ImportRef> = Vec::new();
+    for c in &candidates {
+        for r in q_importers(&conn, c, lim)? {
+            let key = format!("{}:{}:{}", r.file, r.target, r.line);
+            if seen.insert(key) {
+                result.push(r);
+                if result.len() >= lim as usize {
+                    return Ok(result);
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn codemap_hierarchy(workspace: String, name: String) -> Result<HierarchyBundle, String> {
+    let conn = open(&workspace)?;
+    q_hierarchy(&conn, &name)
+}
+
+#[tauri::command]
+pub fn codemap_diff_impact(
+    workspace: String,
+    files: Vec<String>,
+    limit: Option<u32>,
+) -> Result<Vec<Symbol>, String> {
+    let conn = open(&workspace)?;
+    q_diff_impact(&conn, &files, limit.unwrap_or(50))
+}
+
+#[tauri::command]
+pub fn codemap_xlang(workspace: String, name: String) -> Result<Vec<XlangRef>, String> {
+    let conn = open(&workspace)?;
+    q_xlang(&conn, &name)
 }
 
 #[cfg(test)]
@@ -1299,5 +1959,248 @@ mod tests {
         assert!(ctx.seeds.iter().any(|s| s.name == "b"));
         assert!(ctx.callers.iter().any(|s| s.name == "a"));
         assert!(ctx.callees.iter().any(|s| s.name == "c"));
+    }
+
+    // --- New feature tests ---
+
+    #[test]
+    fn string_extraction_finds_literals() {
+        let src = r#"const x = "hello world"; const y = 'ab'; const z = "ok";"#;
+        let pf = parse_source("a.ts", src, "ts");
+        let vals: Vec<&str> = pf.strings.iter().map(|(v, _)| v.as_str()).collect();
+        assert!(vals.contains(&"hello world"));
+        // "ab" is only 2 chars — below MIN_STRING_LEN
+        assert!(!vals.contains(&"ab"));
+        // "ok" is only 2 chars — below MIN_STRING_LEN
+        assert!(!vals.contains(&"ok"));
+    }
+
+    #[test]
+    fn q_references_finds_string_in_db() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        let src = r#"function a() { return "semantic.index" }"#;
+        store_file(&conn, "a.ts", &parse_source("a.ts", src, "ts"), "h").unwrap();
+        let refs = q_references(&conn, "semantic", 10).unwrap();
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].file, "a.ts");
+        assert!(refs[0].value.contains("semantic"));
+    }
+
+    #[test]
+    fn import_extraction_ts() {
+        let src =
+            "import { foo } from './foo'\nimport bar from '../bar'\nconst x = require('./baz')\n";
+        let pf = parse_source("a.ts", src, "ts");
+        let targets: Vec<&str> = pf.imports.iter().map(|(t, _)| t.as_str()).collect();
+        assert!(targets.contains(&"./foo"));
+        assert!(targets.contains(&"../bar"));
+        assert!(targets.contains(&"./baz"));
+    }
+
+    #[test]
+    fn import_extraction_rs() {
+        let src = "use crate::foo::bar;\nmod baz;\npub use std::io;\n";
+        let pf = parse_source("a.rs", src, "rs");
+        let targets: Vec<&str> = pf.imports.iter().map(|(t, _)| t.as_str()).collect();
+        assert!(targets.contains(&"foo::bar"));
+        assert!(targets.contains(&"baz"));
+        assert!(targets.contains(&"std::io"));
+    }
+
+    #[test]
+    fn q_importers_finds_dependents() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        store_file(
+            &conn,
+            "a.ts",
+            &parse_source("a.ts", "import { x } from './utils'\n", "ts"),
+            "h",
+        )
+        .unwrap();
+        store_file(
+            &conn,
+            "b.ts",
+            &parse_source("b.ts", "import { y } from './utils'\n", "ts"),
+            "h",
+        )
+        .unwrap();
+        let importers = q_importers(&conn, "./utils", 10).unwrap();
+        assert_eq!(importers.len(), 2);
+    }
+
+    #[test]
+    fn inherits_extraction_ts() {
+        let src = "class Dog extends Animal implements Pet, Trainable {\n}\n";
+        let pf = parse_source("a.ts", src, "ts");
+        assert!(pf
+            .inherits
+            .iter()
+            .any(|(c, p, k, _)| c == "Dog" && p == "Animal" && k == "extends"));
+        assert!(pf
+            .inherits
+            .iter()
+            .any(|(c, p, k, _)| c == "Dog" && p == "Pet" && k == "implements"));
+        assert!(pf
+            .inherits
+            .iter()
+            .any(|(c, p, k, _)| c == "Dog" && p == "Trainable" && k == "implements"));
+    }
+
+    #[test]
+    fn inherits_extraction_rs() {
+        let src = "impl Display for Foo {\n}\nimpl Clone for Bar {\n}\n";
+        let pf = parse_source("a.rs", src, "rs");
+        assert!(pf
+            .inherits
+            .iter()
+            .any(|(c, p, k, _)| c == "Foo" && p == "Display" && k == "impl_trait"));
+        assert!(pf
+            .inherits
+            .iter()
+            .any(|(c, p, k, _)| c == "Bar" && p == "Clone" && k == "impl_trait"));
+    }
+
+    #[test]
+    fn q_hierarchy_parents_and_children() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        store_file(
+            &conn,
+            "a.ts",
+            &parse_source(
+                "a.ts",
+                "class Dog extends Animal {}\nclass Cat extends Animal {}\n",
+                "ts",
+            ),
+            "h",
+        )
+        .unwrap();
+        let h = q_hierarchy(&conn, "Animal").unwrap();
+        assert_eq!(h.children.len(), 2);
+        assert!(h.parents.is_empty());
+        let h2 = q_hierarchy(&conn, "Dog").unwrap();
+        assert_eq!(h2.parents.len(), 1);
+        assert_eq!(h2.parents[0].parent, "Animal");
+    }
+
+    #[test]
+    fn dead_symbols_detected() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        // helper is called, orphan is not.
+        store_file(
+            &conn,
+            "a.ts",
+            &parse_source(
+                "a.ts",
+                "function helper() {}\nfunction orphan() {}\nfunction main() {\n  helper()\n}\n",
+                "ts",
+            ),
+            "h",
+        )
+        .unwrap();
+        let dead = q_dead(&conn, 50).unwrap();
+        let names: Vec<&str> = dead.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"orphan"));
+        assert!(!names.contains(&"helper"));
+    }
+
+    #[test]
+    fn dead_symbols_skips_exported() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        store_file(
+            &conn,
+            "a.ts",
+            &parse_source(
+                "a.ts",
+                "export function publicApi() {}\nfunction internal() {}\n",
+                "ts",
+            ),
+            "h",
+        )
+        .unwrap();
+        let dead = q_dead(&conn, 50).unwrap();
+        let names: Vec<&str> = dead.iter().map(|s| s.name.as_str()).collect();
+        assert!(!names.contains(&"publicApi"));
+        assert!(names.contains(&"internal"));
+    }
+
+    #[test]
+    fn dead_symbols_export_named_fn_not_excluded() {
+        // A function named `exportData` must NOT be falsely treated as
+        // exported — the old '%export%' pattern matched the function name.
+        // The prefix match 'export%' only matches sigs starting with the
+        // `export` keyword.
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        store_file(
+            &conn,
+            "a.ts",
+            &parse_source("a.ts", "function exportData() {}\n", "ts"),
+            "h",
+        )
+        .unwrap();
+        let dead = q_dead(&conn, 50).unwrap();
+        let names: Vec<&str> = dead.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"exportData"));
+    }
+
+    #[test]
+    fn tauri_command_and_invoke_extraction() {
+        let rs_src =
+            "#[tauri::command]\npub fn pty_spawn() {}\n#[tauri::command]\nfn read_env_var() {}\n";
+        let pf_rs = parse_source("lib.rs", rs_src, "rs");
+        assert!(pf_rs.tauri_commands.contains(&"pty_spawn".to_string()));
+        assert!(pf_rs.tauri_commands.contains(&"read_env_var".to_string()));
+
+        let ts_src = r#"const r = await invoke<string>("pty_spawn", { args })"#;
+        let pf_ts = parse_source("a.ts", ts_src, "ts");
+        assert!(pf_ts.invoke_calls.iter().any(|(n, _)| n == "pty_spawn"));
+    }
+
+    #[test]
+    fn q_xlang_matches_invoke_to_command() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cm_xlang (ts_name, rs_name, ts_file, rs_file) VALUES ('pty_spawn', 'pty_spawn', 'src/a.ts', 'src-tauri/src/lib.rs')",
+            [],
+        )
+        .unwrap();
+        let refs = q_xlang(&conn, "pty_spawn").unwrap();
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].ts_file, "src/a.ts");
+        assert_eq!(refs[0].rs_file, "src-tauri/src/lib.rs");
+    }
+
+    #[test]
+    fn q_diff_impact_finds_transitive_callers() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        store_file(
+            &conn,
+            "a.ts",
+            &parse_source(
+                "a.ts",
+                "function changed() {}\nfunction mid() {\n  changed()\n}\n",
+                "ts",
+            ),
+            "h",
+        )
+        .unwrap();
+        store_file(
+            &conn,
+            "b.ts",
+            &parse_source("b.ts", "function top() {\n  mid()\n}\n", "ts"),
+            "h",
+        )
+        .unwrap();
+        let impact = q_diff_impact(&conn, &["a.ts".to_string()], 50).unwrap();
+        let names: HashSet<String> = impact.iter().map(|s| s.name.clone()).collect();
+        assert!(names.contains("mid"));
+        assert!(names.contains("top"));
     }
 }

@@ -53,6 +53,46 @@ describe("isTransientNetworkError", () => {
     expect(isTransientNetworkError("invalid x-api-key")).toBe(false)
     expect(isTransientNetworkError("Unexpected token < in JSON")).toBe(false)
   })
+  it("DashScope multimodal download timeout transient DEĞİL (retry döngüsü yok)", () => {
+    expect(
+      isTransientNetworkError(
+        'Bad Request: data: {"error":{"code":"invalid_parameter_error","message":"Download multimodal file timed out"}}',
+      ),
+    ).toBe(false)
+    expect(isTransientNetworkError("Download multimodal file timed out")).toBe(false)
+  })
+})
+
+describe("multimodal image errors", () => {
+  it("parseStreamError multimodal timeout → non-retryable api_error", () => {
+    const r = parseStreamError(new Error("Download multimodal file timed out"))
+    expect(r?.type).toBe("api_error")
+    expect(isRetryableError(r)).toBe(false)
+    expect(r?.message).toMatch(/Download multimodal file timed out/i)
+  })
+  it("parseAPICallError 400 multimodal → isRetryable false", () => {
+    const e = new APICallError({
+      message: "Bad Request",
+      url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          code: "invalid_parameter_error",
+          message: "Download multimodal file timed out",
+          type: "invalid_request_error",
+        },
+      }),
+      isRetryable: true, // SDK may flag 400 oddly — we must force false
+    })
+    const r = parseAPICallError(e)
+    expect(r.type).toBe("api_error")
+    if (r.type === "api_error") {
+      expect(r.isRetryable).toBe(false)
+      expect(r.message).toMatch(/Download multimodal file timed out/i)
+    }
+    expect(isRetryableError(r)).toBe(false)
+  })
 })
 
 describe("parseAPICallError", () => {

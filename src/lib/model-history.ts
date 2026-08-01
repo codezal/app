@@ -37,6 +37,9 @@ function toToolResultPart(p: Extract<Part, { type: "tool-result" }>): ToolResult
 
 function userContent(m: Message): ModelMessage | null {
   const text = m.content
+  // Only inline dataUrl can be rebuilt synchronously. Disk-backed `ref` images
+  // live in model_message rows after the original send; this path is the
+  // fallback when those rows are missing.
   const imgs = (m.images ?? []).filter(
     (im): im is typeof im & { dataUrl: string } => typeof im.dataUrl === "string" && im.dataUrl.length > 0,
   )
@@ -44,9 +47,13 @@ function userContent(m: Message): ModelMessage | null {
     if (!text.trim()) return null
     return { role: "user", content: text }
   }
-  const parts: Array<{ type: "text"; text: string } | { type: "image"; image: string }> = []
+  const parts: Array<
+    { type: "text"; text: string } | { type: "image"; image: string; mediaType?: string }
+  > = []
   if (text.trim()) parts.push({ type: "text", text })
-  for (const im of imgs) parts.push({ type: "image", image: im.dataUrl })
+  for (const im of imgs) {
+    parts.push({ type: "image", image: im.dataUrl, mediaType: im.mime || undefined })
+  }
   if (parts.length === 0) return null
   return { role: "user", content: parts }
 }

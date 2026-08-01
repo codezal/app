@@ -222,7 +222,7 @@ export function TabBar({
       aria-label={t("a11y.toolbarLandmark")}
       className={cn(
         // Keep the header above content fades and panel dropdowns.
-        "relative z-30 flex h-[44px] items-center gap-2 border-b border-codezal-panel bg-codezal-bg px-2",
+        "relative z-30 flex h-[44px] items-center gap-2 border-b border-codezal-panel bg-codezal-sidebar px-2",
         // Sidebar collapsed: traffic lights overlay this row at x=20 (Tauri config). The
         // light-side cluster (expand · settings · search · [new-chat] · back · forward,
         // gap-1.5) sits after the lights. Editor mode hides new-chat → 5 buttons (reserve

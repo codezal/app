@@ -12,6 +12,7 @@ import {
   parseStreamError,
   isRetryableError,
   isContentFilterError,
+  isMultimodalImageError,
   retryDelayMs,
   stallRetryDelayMs,
   stripImageParts,
@@ -29,6 +30,7 @@ import { detectStopReason, isUserWaitingTool } from "@/lib/stream/stop-reason"
 import { needsCompletionNudge, COMPLETION_NUDGE_TEXT } from "@/lib/stream/completion-guard"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { modelDetail, resolveContextCap, catalogPricing, modelAcceptsImages } from "@/lib/providers-catalog"
+import { materializeInlineImages, pruneStaleImages, resizeInlineImages } from "@/lib/image-parts"
 import { logError } from "@/lib/error-log"
 import { lastToolBeat } from "@/lib/tool-heartbeat"
 import { applyModelToolPolicy, buildAllTools, deferredToolNames, makeToolSearchTool, resetDoomLoop, TOOL_SEARCH_NAME } from "@/lib/tools"
@@ -183,13 +185,17 @@ export function makeRunStream(deps: RunStreamDeps) {
   async function runStream(
     sid: string,
     asstMsgId: string,
-    history: ModelMessage[],
+    historyIn: ModelMessage[],
     override?: SendOverride,
     retryCount = 0,
     apiRetryCount = 0,
     autoContinueCount = 0,
     completionNudged = false,
   ) {
+    // Reassigned when stale images are pruned so the success path uses the
+    // lean (pruned) version. The error path restores the original (historyIn)
+    // so a user retry still has full image context.
+    let history = historyIn
     const cur = useSessionsStore.getState().sessions[sid]
     if (!cur) return
     const settings = useSettingsStore.getState().settings
@@ -434,6 +440,25 @@ export function makeRunStream(deps: RunStreamDeps) {
       })
       const reasoningActive = reasoningCapable && effort !== "off"
 
+      // Drop images from older user turns BEFORE wire encode. Chat history keeps
+      // re-sending every prior screenshot on each turn; DashScope then 400s with
+      // "Download multimodal file timed out" after a few successful rounds.
+      // Persist the prune so RAM/DB and later turns stay lean (UI thumbs use
+      // Message.images, not modelMessages). Run on raw history (not sanitized)
+      // so empty-assistant filtering does not get written back permanently.
+      // keepRecentUserTurns=2: the current + previous turn keep their images so
+      // a follow-up like "bu ekrandaki hatayı düzelt" still has the pixels;
+      // older turns fall back to the assistant's textual analysis of them.
+      const imgPrune = pruneStaleImages(history, { keepRecentUserTurns: 2 })
+      if (imgPrune.stripped > 0) {
+        history = imgPrune.messages
+        // Don't persist the prune yet — only persist after stream success.
+        // If the stream fails, the catch block restores the original history
+        // (historyIn) so a user retry still has full image context.
+        if (retryCount === 0 && apiRetryCount === 0) {
+          console.info(`[images] pruned ${imgPrune.stripped} stale image part(s) from history`)
+        }
+      }
       let outgoingHistory = deps.sanitizeHistoryForProvider(history)
       const hh = settings.tokenSavers?.historyHygiene
       if (hh?.enabled) {
@@ -458,12 +483,18 @@ export function makeRunStream(deps: RunStreamDeps) {
         modelId,
         modelAcceptsImages(catalogData, provider, modelId),
       )
+      // Downscale oversized inline images (Pi-style 2000px / ~4.5 MB base64) so
+      // the provider never chokes re-downloading multi-MB screenshots, then
+      // materialize data: URLs → Uint8Array so openai-compatible providers
+      // (DashScope) never try to HTTP-download the image payload.
+      const resized = await resizeInlineImages(messages)
+      const wireMessages = materializeInlineImages(resized)
       // Privacy Filter — cloud provider + enabled ise giden mesajlardaki PII'yi
-      let outboundMessages = messages
+      let outboundMessages = wireMessages
       const privacyCfg = settings.privacy
       if (privacyActive(privacyCfg, provider)) {
         const scrubber = new PrivacyScrubber(privacyCfg!)
-        outboundMessages = scrubber.scrubMessages(messages)
+        outboundMessages = scrubber.scrubMessages(wireMessages)
         const leaks = scrubber.verify(outboundMessages)
         if (leaks.length > 0) {
           throw new Error(
@@ -561,7 +592,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           ? { activeTools: initialActiveTools as (keyof typeof tools)[] }
           : {}),
         // olarak enjekte et — tool-result image openai-uyumlu provider'larda (Kimi)
-        prepareStep: ({ steps, messages: stepMessages }) => {
+        prepareStep: async ({ steps, messages: stepMessages }) => {
           const out: {
             activeTools?: (keyof typeof tools)[]
             messages?: ModelMessage[]
@@ -601,13 +632,25 @@ export function makeRunStream(deps: RunStreamDeps) {
                     role: "user",
                     content: [
                       { type: "text", text: "browser_screenshot:" },
-                      { type: "image", image: `data:image/jpeg;base64,${b64}` },
+                      {
+                        type: "image",
+                        image: `data:image/jpeg;base64,${b64}`,
+                        mediaType: "image/jpeg",
+                      },
                     ],
                   })
                 }
               }
             }
-            if (imgs.length) out.messages = [...base, ...imgs]
+            if (imgs.length) {
+              // Bytes, not data: URLs — same DashScope download-timeout fix as
+              // the initial outbound path. Also drop older screenshot user-turns
+              // so a long tool loop doesn't re-upload every prior capture, and
+              // downscale screenshots to the Pi-style 2000px / ~4.5 MB limits.
+              const withShots = [...base, ...imgs]
+              const prunedShots = pruneStaleImages(withShots, { keepRecentUserTurns: 2 })
+              out.messages = materializeInlineImages(await resizeInlineImages(prunedShots.messages))
+            }
           }
           // Refresh the live estimate against the messages this step will send
           // (post-prune, plus any injected screenshots). Assignment is direct
@@ -615,8 +658,8 @@ export function makeRunStream(deps: RunStreamDeps) {
           // gate and the next provider total can be accepted. Floor on resolve
           // still prevents untrusted reports from yanking the UI mid-turn.
           // Do NOT write the gauge here — only onStepEnd / turn-end stamp it.
-          const wireMessages = out.messages ?? base
-          gauge.liveEstimate = estimateMessagesTokens(wireMessages)
+          const stepWire = out.messages ?? base
+          gauge.liveEstimate = estimateMessagesTokens(stepWire)
           return out
         },
         ...(Object.keys(providerOptions).length > 0
@@ -997,7 +1040,12 @@ export function makeRunStream(deps: RunStreamDeps) {
       const partial: ModelMessage[] = partialText.trim()
         ? [{ role: "assistant", content: partialText }]
         : []
-      useSessionsStore.getState().replaceModelMessagesFor(sid, [...history, ...partial])
+      // Restore the original (unpruned) history on failure so a user retry
+      // still has full image context. The prune is only persisted on success
+      // (the replaceModelMessagesFor call after result.response). For retries,
+      // historyIn is already the pruned version (retryHistory = history), so
+      // this correctly degrades.
+      useSessionsStore.getState().replaceModelMessagesFor(sid, [...historyIn, ...partial])
       patchFor(asstMsgId, {
         parts: [...parts],
         content: partialText,
@@ -1005,6 +1053,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         modelMsgCount: partial.length,
         endedAt: Date.now(),
       })
+      await useSessionsStore.getState().persistSession(sid).catch(() => {})
       await useSessionsStore.getState().persistSession(sid).catch(() => {})
       if (streamStalled) {
         if (apiRetryCount < MAX_API_RETRIES) {
@@ -1044,7 +1093,16 @@ export function makeRunStream(deps: RunStreamDeps) {
           if (lastUser?.content) insertToFocusedComposer(lastUser.content)
           deps.setError(tStatic("errorBanner.contentFiltered"), sid)
         } else {
-          const base = parsed?.message ?? errorMessage(e)
+          const raw = parsed?.message ?? errorMessage(e)
+          // Keep the friendly hint but ALSO surface the raw provider reason —
+          // the canned message lists several causes (download timeout vs. no
+          // vision) and hiding the real one makes vision-capable models look
+          // broken ("ne alaka, vision var"). raw is already capped upstream.
+          const base = isMultimodalImageError(raw)
+            ? raw && raw.trim()
+              ? `${tStatic("errorBanner.multimodalImage")} · ${raw}`
+              : tStatic("errorBanner.multimodalImage")
+            : raw
           const ra = parsed?.type === "api_error" ? parsed.retryAfterMs : undefined
           deps.setError(
             ra

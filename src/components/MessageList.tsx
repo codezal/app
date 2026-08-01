@@ -345,7 +345,7 @@ export function MessageList({
     }
   }, [hasMessages, active?.id])
 
-  if (messages.length === 0) return loading ? <ChatSkeleton /> : <Welcome />
+  if (messages.length === 0) return loading ? <ChatSkeleton /> : <Welcome onQuickPrompt={onQuickPrompt} />
 
   const hiddenCount = Math.max(0, messages.length - renderLimit)
   const shown = hiddenCount > 0 ? messages.slice(hiddenCount) : messages
@@ -1199,7 +1199,7 @@ function UserContent({
         </div>
       )}
       {content.trim() && (
-        <div className="max-w-[72%] overflow-hidden rounded-2xl rounded-br-md border border-codezal-strong bg-[hsl(var(--codezal-panel-2)_/_0.7)] shadow-sm">
+        <div className="max-w-[72%] overflow-hidden rounded-2xl rounded-br-md border border-codezal-strong bg-codezal-sidebar shadow-sm">
           <div className="whitespace-pre-wrap px-3.5 py-2 text-md leading-[1.7] text-codezal-text">
             {displayContent}
           </div>
@@ -1358,12 +1358,12 @@ function WorkLogGroup({
         })
       : t("messageList.worked")
   return (
-    <div className="my-2 overflow-hidden rounded-xl border border-codezal-hair bg-[hsl(var(--codezal-panel)_/_0.4)] text-md">
+    <div className="my-2 space-y-1 text-md">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="group flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-codezal-chip/40"
+        className="group flex w-full items-center gap-2 rounded-xl border border-codezal-hair bg-codezal-sidebar px-3 py-2 text-left transition-colors hover:bg-codezal-chip/40"
       >
         <Check className="h-3.5 w-3.5 shrink-0 text-codezal-ok" aria-hidden />
         <span className="min-w-0 truncate font-medium text-codezal-text">{label}</span>
@@ -1375,11 +1375,7 @@ function WorkLogGroup({
           )}
         />
       </button>
-      {open && (
-        <div className="border-t border-codezal-hair bg-[hsl(var(--codezal-panel-2)_/_0.45)] px-2 py-1.5">
-          {children}
-        </div>
-      )}
+      {open && <div className="space-y-1 px-1">{children}</div>}
     </div>
   )
 }
@@ -1518,7 +1514,7 @@ function ToolGroup({
 
   return (
     <div
-      className="my-2 overflow-hidden rounded-xl border border-codezal-hair bg-[hsl(var(--codezal-panel)_/_0.4)] text-md"
+      className="my-2 overflow-hidden rounded-xl border border-codezal-hair bg-codezal-sidebar text-md"
       aria-busy={runningAny || undefined}
       aria-live="polite"
     >
@@ -1557,7 +1553,7 @@ function ToolGroup({
         )}
       </button>
       {open && (
-        <div className="border-t border-codezal-hair bg-[hsl(var(--codezal-panel-2)_/_0.45)] px-2 py-1.5">
+        <div className="border-t border-codezal-hair bg-codezal-panel-2/40 px-2 py-1.5">
           {calls.map((c) => (
             <ToolRow
               key={c.toolCallId}
@@ -2896,12 +2892,55 @@ function ChatSkeleton() {
   )
 }
 
-function Welcome() {
+function Welcome({ onQuickPrompt }: { onQuickPrompt?: (prompt: string) => void }) {
   const t = useT()
+  const suggestions = [
+    t("messageList.welcomeSuggest1" as MessageKey),
+    t("messageList.welcomeSuggest2" as MessageKey),
+    t("messageList.welcomeSuggest3" as MessageKey),
+    t("messageList.welcomeSuggest4" as MessageKey),
+  ]
 
   return (
-    <div className="flex flex-1">
-      <h1 className="sr-only">{t("sidebar.newSession")}</h1>
+    <div className="flex flex-1 items-center justify-center overflow-y-auto px-6 py-10">
+      <div className="flex w-full max-w-[680px] flex-col items-center text-center">
+        <div className="select-none text-4xl font-semibold tracking-tight text-codezal-text">
+          Codezal
+        </div>
+        <h1 className="mt-4 text-xl font-medium text-codezal-text">
+          {t("messageList.welcomeTagline" as MessageKey)}
+        </h1>
+        <p className="mt-1.5 text-md text-codezal-mute">
+          {t("messageList.welcomeSubtitle" as MessageKey)}
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs text-codezal-dim">
+          {([
+            t("messageList.welcomeFeat1" as MessageKey),
+            t("messageList.welcomeFeat2" as MessageKey),
+            t("messageList.welcomeFeat3" as MessageKey),
+            t("messageList.welcomeFeat4" as MessageKey),
+          ]).map((f) => (
+            <span
+              key={f}
+              className="rounded-full border border-codezal-hair bg-codezal-panel/40 px-2.5 py-1 text-codezal-mute transition-colors hover:border-codezal-strong hover:text-codezal-text"
+            >
+              {f}
+            </span>
+          ))}
+        </div>
+        <div className="mt-7 grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onQuickPrompt?.(s)}
+              className="rounded-xl border border-codezal-hair bg-codezal-panel/40 px-4 py-3 text-left text-md text-codezal-dim transition-all hover:-translate-y-0.5 hover:border-codezal-strong hover:bg-codezal-panel-2 hover:text-codezal-text"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

@@ -128,7 +128,7 @@ describe("messagesToModelMessages", () => {
         role: "user",
         content: [
           { type: "text", text: "buna bak" },
-          { type: "image", image: "data:image/png;base64,AAA" },
+          { type: "image", image: "data:image/png;base64,AAA", mediaType: "image/png" },
         ],
       },
     ])

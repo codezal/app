@@ -42,10 +42,34 @@ const TRANSIENT_NETWORK_PATTERNS: RegExp[] = [
   /tcp connect error|dns error|channel closed/i,
 ]
 
+// Provider-side permanent failures that happen to contain "timed out" and must
+// NOT be treated as transient network blips (retrying just re-hits the same 400).
+const NON_TRANSIENT_TIMEOUT_PATTERNS: RegExp[] = [
+  /download multimodal file timed out/i,
+  /multimodal file timed out/i,
+  /failed to download.*image/i,
+  /image.*download.*(?:fail|timeout|timed out)/i,
+]
+
 // True when an error message looks like a transient network/transport failure
 // (not an HTTP status error). These are retried with backoff by the stream loop.
 export function isTransientNetworkError(message: string): boolean {
+  if (NON_TRANSIENT_TIMEOUT_PATTERNS.some((p) => p.test(message))) return false
   return TRANSIENT_NETWORK_PATTERNS.some((p) => p.test(message))
+}
+
+// DashScope / Qwen (and some OpenAI-compat gateways) reject image parts on
+// text-only models or when the image payload can't be fetched server-side.
+// UI maps this via tStatic("errorBanner.multimodalImage").
+export function isMultimodalImageError(message: string): boolean {
+  return (
+    /download multimodal file timed out/i.test(message) ||
+    /multimodal file timed out/i.test(message) ||
+    /does not support image/i.test(message) ||
+    /image input is not supported/i.test(message) ||
+    /model .* not support(?:s|ed)? .*image/i.test(message) ||
+    /vision is not supported/i.test(message)
+  )
 }
 
 // True when an error message looks like an authentication / credential failure
@@ -163,11 +187,13 @@ export function parseAPICallError(error: APICallError): ParsedError {
   if (isOverflow(m) || error.statusCode === 413 || code === "context_length_exceeded") {
     return { type: "context_overflow", message: m }
   }
+  // Multimodal/image rejections are permanent client errors — never retry.
+  const multimodal = isMultimodalImageError(m)
   return {
     type: "api_error",
     message: m,
     statusCode: error.statusCode,
-    isRetryable: error.isRetryable,
+    isRetryable: multimodal ? false : error.isRetryable,
     retryAfterMs: parseRetryAfter(error.responseHeaders),
   }
 }
@@ -184,6 +210,9 @@ export function parseStreamError(input: unknown): ParsedError | undefined {
         : (parseJson(input)?.message as string | undefined) ?? ""
   if (!msg) return undefined
   if (isOverflow(msg)) return { type: "context_overflow", message: msg }
+  if (isMultimodalImageError(msg)) {
+    return { type: "api_error", message: msg, isRetryable: false }
+  }
   if (isTransientNetworkError(msg)) {
     return { type: "api_error", message: msg, isRetryable: true }
   }

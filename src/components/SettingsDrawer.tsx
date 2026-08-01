@@ -112,100 +112,103 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
 
   const activeLabel = tabs.find((tt) => tt.id === tab)?.label ?? ""
 
-  // Top title-bar strip. On macOS the native traffic lights overlay the left of
-  // this 44px band, so it is rendered inside each column (nav + content) instead
-  // of as an outer margin. Marking it data-tauri-drag-region lets a double-click
-  // toggle maximize — matching the chat view's title bar.
-  const titleBarStrip = trafficLightInset ? (
-    <div data-tauri-drag-region className="h-[44px] shrink-0 border-b border-codezal-panel" />
-  ) : null
-
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden bg-codezal-bg">
-      {/* Left nav */}
-      <nav className="flex w-[236px] shrink-0 flex-col border-r border-codezal-panel bg-codezal-sidebar">
-        {titleBarStrip}
-        <div className="shrink-0 border-b border-codezal-panel px-3 pb-3 pt-3">
-          <button
-            type="button"
-            onClick={onClose}
-            title={t("settings.drawer.backBtn")}
-            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-base text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            <span>{t("settings.drawer.backBtn")}</span>
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          {[0, 1, 2].map((section) => {
-            const items = tabs.filter((item) => item.section === section)
-            if (items.length === 0) return null
-            return (
-              <div key={section} className="mb-4 last:mb-0">
-                <div className="mb-1 px-2 text-xs font-medium text-codezal-mute">
-                  {sectionLabels[section]}
-                </div>
-                {items.map((tt) => {
-                  const Icon = tt.icon
-                  const active = tab === tt.id
-                  return (
-                    <button
-                      key={tt.id}
-                      type="button"
-                      onClick={() => setTab(tt.id)}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
-                        active
-                          ? "bg-codezal-panel-2 font-medium text-codezal-text"
-                          : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
-                      )}
-                    >
-                      <Icon className={cn("h-4 w-4", active && "text-codezal-accent")} aria-hidden />
-                      <span className="truncate">{tt.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )
-          })}
-        </div>
-      </nav>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-codezal-bg">
+      {/* Full-width title bar — one color across nav + content so the top strip
+          never splits into sidebar white / content gray. On macOS the native
+          traffic lights overlay this band; data-tauri-drag-region enables
+          double-click maximize like the chat title bar. */}
+      {trafficLightInset ? (
+        <div
+          data-tauri-drag-region
+          className="h-[44px] shrink-0 border-b border-codezal-panel bg-codezal-sidebar"
+        />
+      ) : null}
 
-      {/* Right content */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {titleBarStrip}
-        <header className="shrink-0 border-b border-codezal-panel bg-codezal-bg px-8 py-4">
-          <div className="text-sm font-semibold uppercase tracking-[0.12em] text-codezal-mute">
-            {t("settings.title")}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Left nav */}
+        <nav className="flex w-[236px] shrink-0 flex-col border-r border-codezal-panel bg-codezal-sidebar">
+          <div className="shrink-0 px-3 pb-3 pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              title={t("settings.drawer.backBtn")}
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-base text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              <span>{t("settings.drawer.backBtn")}</span>
+            </button>
           </div>
-          <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-codezal-text">{activeLabel}</h1>
-        </header>
+          <div className="flex-1 overflow-y-auto px-3 py-3">
+            {[0, 1, 2].map((section) => {
+              const items = tabs.filter((item) => item.section === section)
+              if (items.length === 0) return null
+              return (
+                <div key={section} className="mb-4 last:mb-0">
+                  <div className="mb-1 px-2 text-xs font-medium text-codezal-mute">
+                    {sectionLabels[section]}
+                  </div>
+                  {items.map((tt) => {
+                    const Icon = tt.icon
+                    const active = tab === tt.id
+                    return (
+                      <button
+                        key={tt.id}
+                        type="button"
+                        onClick={() => setTab(tt.id)}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-codezal-accent/40",
+                          active
+                            ? "bg-codezal-panel-2 font-medium text-codezal-text"
+                            : "text-codezal-dim hover:bg-codezal-chip-soft hover:text-codezal-text",
+                        )}
+                      >
+                        <Icon className={cn("h-4 w-4", active && "text-codezal-accent")} aria-hidden />
+                        <span className="truncate">{tt.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        </nav>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-5xl px-8 py-8">
-            {tab === "genel" && <GeneralTab />}
-            {tab === "istatistik" && <StatsTab />}
-            {tab === "hafiza" && <MemoryTab />}
-            {tab === "gorunum" && <AppearanceTab />}
-            {tab === "modeller" && (
-              <div className="flex flex-col gap-6">
-                <ProviderCatalogSection />
-                <ModelsPage />
-              </div>
-            )}
+        {/* Right content */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="shrink-0 border-b border-codezal-panel bg-codezal-sidebar px-8 py-4">
+            <div className="text-sm font-semibold uppercase tracking-[0.12em] text-codezal-mute">
+              {t("settings.title")}
+            </div>
+            <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-codezal-text">{activeLabel}</h1>
+          </header>
 
-            {tab === "gizlilik" && <PrivacyTab />}
-            {tab === "onay" && <ApprovalTab />}
-            {tab === "gecmis" && <HistoryTab />}
-            {tab === "mcp" && <McpTab />}
-            {tab === "hooks" && <HooksTab />}
-            {tab === "web" && <WebSearchTab />}
-            {tab === "gorsel" && <ImageGenTab />}
-            {tab === "tokens" && <TokenSavingTab />}
-            {tab === "skills" && <SkillsTab />}
-            {tab === "eklentiler" && <PluginsTab />}
-            {tab === "hakkinda" && <AboutTab />}
+          <div className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-5xl px-8 py-8">
+              {tab === "genel" && <GeneralTab />}
+              {tab === "istatistik" && <StatsTab />}
+              {tab === "hafiza" && <MemoryTab />}
+              {tab === "gorunum" && <AppearanceTab />}
+              {tab === "modeller" && (
+                <div className="flex flex-col gap-6">
+                  <ProviderCatalogSection />
+                  <ModelsPage />
+                </div>
+              )}
+
+              {tab === "gizlilik" && <PrivacyTab />}
+              {tab === "onay" && <ApprovalTab />}
+              {tab === "gecmis" && <HistoryTab />}
+              {tab === "mcp" && <McpTab />}
+              {tab === "hooks" && <HooksTab />}
+              {tab === "web" && <WebSearchTab />}
+              {tab === "gorsel" && <ImageGenTab />}
+              {tab === "tokens" && <TokenSavingTab />}
+              {tab === "skills" && <SkillsTab />}
+              {tab === "eklentiler" && <PluginsTab />}
+              {tab === "hakkinda" && <AboutTab />}
+            </div>
           </div>
         </div>
       </div>

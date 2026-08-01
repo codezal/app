@@ -1,6 +1,5 @@
 import { runProgram } from "@/lib/exec"
 import { errorMessage } from "@/lib/errors"
-import { joinFsPath } from "@/lib/fs-path"
 
 const GIT_FLAGS = [
   "--no-optional-locks",
@@ -723,39 +722,4 @@ export async function gitCheckIgnored(workspace: string, absPaths: string[]): Pr
   return out
 }
 
-export type GitGrepHit = { path: string; line: number; text: string }
 
-// Literal, case-insensitive content search across tracked + untracked-but-not-
-// ignored files (`git grep -I -i -F -n`). Returns absolute paths. Empty query,
-// no matches, or a non-repo all resolve to `[]` (never throws). Output is capped
-// both by a timeout/ring buffer (runProgram) and a 200-row slice here.
-export async function gitGrepContent(workspace: string, query: string): Promise<GitGrepHit[]> {
-  const q = query.trim()
-  if (!workspace || !q) return []
-  try {
-    const r = await runProgram(
-      "git",
-      [...GIT_FLAGS, "grep", "-n", "-I", "-i", "-F", "--", q],
-      { cwd: workspace, timeoutMs: 10000 },
-    )
-    // 0 = matches, 1 = no matches, 128+ = error / not a repo
-    if (r.code !== 0 || !r.stdout) return []
-    const hits: GitGrepHit[] = []
-    for (const raw of r.stdout.split("\n")) {
-      if (!raw) continue
-      const i1 = raw.indexOf(":")
-      if (i1 < 0) continue
-      const i2 = raw.indexOf(":", i1 + 1)
-      if (i2 < 0) continue
-      const rel = raw.slice(0, i1)
-      const line = Number(raw.slice(i1 + 1, i2))
-      const text = raw.slice(i2 + 1)
-      if (!rel || !Number.isFinite(line)) continue
-      hits.push({ path: joinFsPath(workspace, rel), line, text })
-      if (hits.length >= 200) break
-    }
-    return hits
-  } catch {
-    return []
-  }
-}

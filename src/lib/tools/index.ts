@@ -228,7 +228,7 @@ async function buildSubagentSystem(
     parts.push(`\nWorking directory: ${workspace}`)
     parts.push(
       "\n## Code navigation\n" +
-        "A tree-sitter Code Map is indexed for this workspace. For structural questions prefer:\n" +
+        "A regex-based Code Map is indexed for this workspace. For structural questions prefer:\n" +
         "- code_search (find symbol) · code_callers (what calls X) · code_callees (what X calls)\n" +
         "- code_context (definition + callers + callees in one call)\n" +
         "Use grep only for literal text (strings, comments, config values).",
@@ -359,6 +359,12 @@ const READ_ONLY_EXTRA = new Set([
   "code_trace",
   "code_impact",
   "code_context",
+  "code_references",
+  "code_dead",
+  "code_importers",
+  "code_hierarchy",
+  "code_diff_impact",
+  "code_xlang",
 ])
 
 function wrapToolsWithPolicy(
@@ -546,6 +552,12 @@ export type ToolName =
   | "code_trace"
   | "code_impact"
   | "code_context"
+  | "code_references"
+  | "code_dead"
+  | "code_importers"
+  | "code_hierarchy"
+  | "code_diff_impact"
+  | "code_xlang"
   | "grep"
   | "glob"
   | "todo_write"
@@ -804,6 +816,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
 export const READONLY_ALLOW = new Set<string>([
   "read_file", "read_summary", "list_dir", "grep", "glob",
   "code_search", "code_callers", "code_callees", "code_trace", "code_impact", "code_context",
+  "code_references", "code_dead", "code_importers", "code_hierarchy", "code_diff_impact", "code_xlang",
   "repo_overview", "load_skill",
   "webfetch", "websearch", "search_and_extract", "firecrawl",
   "question", "notify", "todo_write", "propose_plan", "propose_build",
@@ -1047,6 +1060,7 @@ export const CORE_TOOL_NAMES = new Set<string>([
   "code_trace",
   "code_impact",
   "code_context",
+  "code_references",
   "load_skill",
   "todo_write",
   "question",
@@ -1553,6 +1567,8 @@ export function buildTools(
         const res = await withLock(abs, () =>
           writeFileAbs(abs, content, path, (old) => useWriteDiffs.getState().add(toolCallId, old)),
         )
+        // Keep the Code Map index fresh after writes (fire-and-forget).
+        invoke("codemap_reindex_file", { workspace, rel: path }).catch(() => {})
         return appendFormatters(workspace, path, res)
       },
     }),
@@ -1580,6 +1596,8 @@ export function buildTools(
         const res = await withLock(abs, () =>
           editFileAbs(abs, old_string, new_string, replace_all ?? false, path),
         )
+        // Keep the Code Map index fresh after edits (fire-and-forget).
+        invoke("codemap_reindex_file", { workspace, rel: path }).catch(() => {})
         return appendFormatters(workspace, path, res)
       },
     }),
@@ -1906,6 +1924,15 @@ export function buildTools(
             const surfaced = await runFormatters(workspace, p)
             if (surfaced) out += `\n\n${surfaced}`
           }
+        }
+        // Keep the Code Map index fresh after patch (fire-and-forget batch).
+        const patchedFiles = [
+          ...result.filesChanged,
+          ...result.filesAdded,
+          ...result.filesMoved.map((m) => m.to),
+        ]
+        if (patchedFiles.length > 0) {
+          invoke("codemap_reindex_files", { workspace, rels: patchedFiles }).catch(() => {})
         }
         return out
       },
@@ -2804,6 +2831,138 @@ function buildCodeMapTools(workspace: string | undefined): ToolSet {
           section("Callers (who uses it)", b.callers),
           section("Callees (what it uses)", b.callees),
         ].join("\n\n")
+      },
+    }),
+
+    code_references: tool({
+      description:
+        "Find all string-literal references matching a query across indexed source files. Use this to locate " +
+        "i18n keys, config names, event names, route paths, or any string constant — things that are NOT " +
+        "function calls and therefore invisible to code_callers. Returns file:line:value for each match.",
+      inputSchema: z.object({
+        query: z.string().describe("String (or substring) to search for in string literals"),
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+      execute: async ({ query, limit }) => {
+        const refs = await invoke<Array<{ file: string; line: number; value: string }>>(
+          "codemap_references",
+          { workspace: ws, query, limit: limit ?? 50 },
+        )
+        if (refs.length === 0) return "(no string references found)"
+        return refs.map((r) => `- ${r.file}:${r.line} — "${r.value}"`).join("\n")
+      },
+    }),
+
+    code_dead: tool({
+      description:
+        "Detect potentially dead (unreachable) symbols: functions/methods that are never called anywhere in " +
+        "the codebase AND are not exported. Use after a refactor or feature removal to find leftover code. " +
+        "Entry-point files (main.ts, index.ts, App.tsx, lib.rs, main.rs) are excluded.",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(200).optional(),
+      }),
+      execute: async ({ limit }) => {
+        const syms = await invoke<CodeSymbol[]>("codemap_dead", {
+          workspace: ws,
+          limit: limit ?? 50,
+        })
+        return orHint(syms)
+      },
+    }),
+
+    code_importers: tool({
+      description:
+        "List files that import the given module/file. Use before deleting or moving a file to see its " +
+        "dependents. Pass a workspace-relative file path or an import specifier (e.g. './utils', '@/lib/foo').",
+      inputSchema: z.object({
+        file: z.string().describe("Workspace-relative file path or import specifier"),
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+      execute: async ({ file, limit }) => {
+        const refs = await invoke<Array<{ file: string; target: string; line: number }>>(
+          "codemap_importers",
+          { workspace: ws, file, limit: limit ?? 50 },
+        )
+        if (refs.length === 0) return "(no importers found)"
+        return refs.map((r) => `- ${r.file}:${r.line} → ${r.target}`).join("\n")
+      },
+    }),
+
+    code_hierarchy: tool({
+      description:
+        "Show the type hierarchy for a class/struct/trait: what it extends/implements (parents) and what " +
+        "extends/implements it (children). Works for TS classes, Rust trait impls, Python/Java inheritance.",
+      inputSchema: z.object({
+        name: z.string().describe("Type name (class, struct, trait, interface)"),
+      }),
+      execute: async ({ name }) => {
+        const b = await invoke<{
+          parents: Array<{ child: string; parent: string; kind: string; file: string; line: number }>
+          children: Array<{ child: string; parent: string; kind: string; file: string; line: number }>
+        }>("codemap_hierarchy", { workspace: ws, name })
+        if (b.parents.length === 0 && b.children.length === 0)
+          return `(no hierarchy information for "${name}")`
+        const fmt = (r: { child: string; parent: string; kind: string; file: string; line: number }) =>
+          `- ${r.child} —${r.kind}→ ${r.parent}  (${r.file}:${r.line})`
+        const parts: string[] = []
+        if (b.parents.length) parts.push(`### Parents (what ${name} inherits)\n${b.parents.map(fmt).join("\n")}`)
+        if (b.children.length) parts.push(`### Children (what inherits ${name})\n${b.children.map(fmt).join("\n")}`)
+        return parts.join("\n\n")
+      },
+    }),
+
+    code_diff_impact: tool({
+      description:
+        "Compute the blast radius of a set of changed files: finds all symbols defined in those files, then " +
+        "traces their transitive callers across the codebase. Use after a multi-file change to understand " +
+        "what else might be affected. Pass explicit file paths, or omit to auto-detect via git diff.",
+      inputSchema: z.object({
+        files: z
+          .array(z.string())
+          .optional()
+          .describe("Changed file paths (workspace-relative). Omit to use git diff --name-only."),
+        limit: z.number().int().min(1).max(200).optional(),
+      }),
+      execute: async ({ files, limit }) => {
+        let fileList = files
+        if (!fileList || fileList.length === 0) {
+          // Auto-detect changed files from git.
+          const { runBash } = await import("./shell")
+          // `2>/dev/null` is POSIX-only and fails on Windows cmd.exe/PowerShell.
+          // Use `|| true` to tolerate non-zero exit (not a repo, no HEAD, etc.).
+          const out = await runBash(ws, "git diff --name-only HEAD || git diff --name-only || true", {})
+          fileList = out
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l.length > 0 && !l.startsWith("("))
+        }
+        if (fileList.length === 0) return "(no changed files detected)"
+        const syms = await invoke<CodeSymbol[]>("codemap_diff_impact", {
+          workspace: ws,
+          files: fileList,
+          limit: limit ?? 50,
+        })
+        if (syms.length === 0) return `(no transitive callers found for ${fileList.length} changed file(s))`
+        return `Blast radius for ${fileList.length} changed file(s) — ${syms.length} affected symbol(s):\n${symList(syms)}`
+      },
+    }),
+
+    code_xlang: tool({
+      description:
+        "Find cross-language links between TypeScript invoke() calls and Rust #[tauri::command] handlers. " +
+        "Pass a command name to see both sides (TS caller file + Rust handler file). Useful in Tauri apps " +
+        "to trace the full path from UI to native code.",
+      inputSchema: z.object({
+        name: z.string().describe("Tauri command name (e.g. 'pty_spawn', 'codemap_search')"),
+      }),
+      execute: async ({ name }) => {
+        const refs = await invoke<
+          Array<{ ts_name: string; rs_name: string; ts_file: string; rs_file: string }>
+        >("codemap_xlang", { workspace: ws, name })
+        if (refs.length === 0) return `(no cross-language link found for "${name}")`
+        return refs
+          .map((r) => `- invoke("${r.ts_name}") in ${r.ts_file}  ↔  #[tauri::command] fn ${r.rs_name} in ${r.rs_file}`)
+          .join("\n")
       },
     }),
   }

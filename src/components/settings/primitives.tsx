@@ -16,7 +16,7 @@ export function Section({
       {description && (
         <p className="mt-1 text-base leading-relaxed text-codezal-mute">{description}</p>
       )}
-      <div className="mt-3 rounded-xl border border-codezal-hair bg-codezal-panel/70 px-5 py-1">
+      <div className="mt-3 rounded-xl border border-codezal-hair bg-codezal-sidebar px-5 py-1">
         {children}
       </div>
     </section>
