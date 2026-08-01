@@ -120,7 +120,7 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex-1 overflow-auto bg-codezal-code">
+      <div className="min-h-0 flex-1 overflow-auto bg-codezal-code">
         {edits.files.length === 0 ? (
           <div className="p-6 text-md text-codezal-mute">{t("messageList.noChanges")}</div>
         ) : single &&
