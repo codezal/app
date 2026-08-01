@@ -135,6 +135,33 @@ describe("contextCap", () => {
     expect(contextCap("kimi-k2-thinking")).toBe(256_000)
   })
 
+  it("grok-4.5 → 500_000", () => {
+    expect(contextCap("grok-4.5")).toBe(500_000)
+  })
+
+  it("grok-4.20 series → 1_000_000 (models.dev)", () => {
+    expect(contextCap("grok-4.20-0309-reasoning")).toBe(1_000_000)
+    expect(contextCap("grok-4.20-multi-agent-0309")).toBe(1_000_000)
+  })
+
+  it("grok-4.3 → 1_000_000", () => {
+    expect(contextCap("grok-4.3")).toBe(1_000_000)
+  })
+
+  it("grok-4 / grok-4-fast → 256_000", () => {
+    expect(contextCap("grok-4")).toBe(256_000)
+    expect(contextCap("grok-4-fast")).toBe(256_000)
+  })
+
+  it("grok-3 series → 128_000", () => {
+    expect(contextCap("grok-3")).toBe(128_000)
+    expect(contextCap("grok-3-mini")).toBe(128_000)
+  })
+
+  it("grok-code-fast → 256_000", () => {
+    expect(contextCap("grok-code-fast-1")).toBe(256_000)
+  })
+
   it("bilinmeyen → 200_000", () => {
     expect(contextCap("some-unknown-model")).toBe(200_000)
   })

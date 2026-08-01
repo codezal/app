@@ -1,0 +1,74 @@
+# Catalog Sync — keep the offline models.dev snapshot fresh.
+#
+# The app ships a bundled snapshot (src/lib/catalog-snapshot.json) as a
+# first-run / offline seed. This workflow refreshes it from models.dev on a
+# weekly schedule (or manually) and opens a PR with a change summary so the
+# team can review new/removed models before merging.
+#
+# The runtime still auto-refreshes every 24 h; this only keeps the *bundled*
+# seed from going stale between releases.
+
+name: Catalog Sync
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Fetch latest catalog from models.dev
+        run: |
+          SUMMARY_FILE="${{ runner.temp }}/catalog-summary.md" \
+            npm run snapshot:catalog
+
+      - name: Read change summary
+        id: summary
+        run: |
+          if [ -f "${{ runner.temp }}/catalog-summary.md" ]; then
+            {
+              echo 'body<<EOF'
+              cat "${{ runner.temp }}/catalog-summary.md"
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo 'body=No summary generated.' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: refresh models.dev catalog snapshot"
+          branch: chore/catalog-sync
+          delete-branch: true
+          title: "chore: refresh models.dev catalog snapshot"
+          body: ${{ steps.summary.outputs.body }}
+          labels: |
+            dependencies
+            automated
+          # Only open a PR when the snapshot actually changed; the action
+          # skips PR creation automatically when there is no diff.

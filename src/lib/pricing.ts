@@ -86,6 +86,15 @@ export function contextCap(model: string): number {
   if (/^(kimi-)?k2\.[56]/.test(model)) return 256_000
   if (model.includes("k2-thinking")) return 256_000
   if (model.startsWith("kimi-") || model.startsWith("moonshot")) return 128_000
+  // xAI / Grok (matches models.dev): 4.5 = 500K, 4.20/4.3/4.4+ = 1M,
+  // 4.x (4, 4-fast, 4.1) = 256K, 3.x = 128K, other grok = 256K.
+  if (model.startsWith("grok-")) {
+    if (model.startsWith("grok-4.5")) return 500_000
+    if (/^grok-4\.[2-9]/.test(model)) return 1_000_000
+    if (model.startsWith("grok-4")) return 256_000
+    if (model.startsWith("grok-3")) return 128_000
+    return 256_000
+  }
   return 200_000
 }
 
