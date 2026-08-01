@@ -5,8 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import App from './App.tsx'
 import { installHttpNoiseFilter } from './lib/http-noise'
 import { installGlobalErrorReporter } from './lib/report'
-// Monaco Editor worker + tema kurulumu (import side-effect: loader.config({monaco})).
-import './lib/monaco/setup'
+// Monaco setup artık lazy: CodeEditor ilk mount olduğunda yüklenir (main bundle'dan ~4 MB çıkar).
 
 installHttpNoiseFilter()
 

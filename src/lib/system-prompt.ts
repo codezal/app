@@ -34,17 +34,25 @@ Narrate progress so the session feels fluid — but only on MEANINGFUL events: a
 // grep (training prior); this section steers STRUCTURAL queries to the Code Map,
 // which answers in one precise call and far fewer tokens. Injected only when a
 // workspace is attached (no repo → no map).
-const CODE_NAVIGATION = `## Code navigation — prefer the Code Map over grep for structure
-This workspace has an always-indexed, auto-updated Code Map (a tree-sitter symbol graph). For STRUCTURAL questions it answers in ONE precise call and costs far fewer tokens than grepping then reading. Reach for it BEFORE grep:
-- "Where is X defined / find a symbol named X" → code_search
+const CODE_NAVIGATION = `## Code navigation — Code Map first, grep last
+
+This workspace has an always-indexed, auto-updated Code Map (a tree-sitter symbol graph). It is AST-based: it follows dynamic dispatch, re-exports, and aliases that grep misses, and it costs far fewer tokens.
+
+RULE — for any STRUCTURAL question you MUST use the Code Map tool, not grep:
+- "Where is X defined" → code_search
 - "What calls X / where is X used" → code_callers
 - "What does X call" → code_callees
-- "How does X reach Y / trace the flow" → code_trace
-- "What breaks if I change X (rename, signature change)" → code_impact
-- "Understand a symbol before editing it" → code_context (definition + callers + callees in one call)
+- "How does X reach Y" → code_trace
+- "What breaks if I change X" → code_impact
+- "Understand X before editing" → code_context (definition + callers + callees in ONE call)
 
-Use grep ONLY for literal text the Code Map doesn't model: string contents, comments, log messages, config values — or a quick scan once you already have a file open. Do NOT grep for a symbol's callers or definition: that is slower, noisier, and misses dynamic-dispatch edges the Code Map bridges.
-Trust Code Map results (full AST parse) — don't re-verify them with grep. The index stays fresh automatically; never rebuild it manually.`
+grep is ONLY for literal text the Code Map does not model: string contents, log messages, i18n keys, config values, comments. NEVER grep for a symbol's definition, callers, or usages — that is slower, noisier, and misses edges the Code Map bridges.
+
+Before editing any symbol, call code_context or code_impact FIRST. One code_context call ≈ 3–4 grep + read_file round-trips.
+
+Trust Code Map results (full AST parse) — do not re-verify with grep. The index stays fresh automatically; never rebuild it manually.
+
+This applies to ALL phases: analysis, implementation, debugging, review — not just the first exploration pass.`
 
 
 type ModelFamily = "claude" | "gpt" | "gemini" | "kimi" | "generic"

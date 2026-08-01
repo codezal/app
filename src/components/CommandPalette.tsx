@@ -53,7 +53,9 @@ type Props = {
 
 export function CommandPalette({ open, onClose, onOpenSettings, onOpenSearch, onOpenFork, initialPage = "root" }: Props) {
   const t = useT()
-  const [page, setPage] = useState<Page>("root")
+  // Component is only mounted while open (parent gates on `open`), so seed the
+  // page from `initialPage` — the open-transition block below never fires on mount.
+  const [page, setPage] = useState<Page>(initialPage)
   const [query, setQuery] = useState("")
 
   const active = useSessionsStore((s) => s.active)

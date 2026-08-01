@@ -1,9 +1,12 @@
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
 import { Check, FileText, Globe, ImageIcon, ListChecks, Palette, Play, Search, Sparkles } from "@/lib/icons"
 import { sddPlanPath, sddRequirementPath } from "@/lib/sdd-store"
 import { useSddStore } from "@/store/sdd"
 import { useSessionsStore } from "@/store/sessions"
-import { FileViewer } from "@/components/FileViewer"
+
+const FileViewer = lazy(() =>
+  import("@/components/FileViewer").then((m) => ({ default: m.FileViewer })),
+)
 import { SddStepper } from "./SddStepper"
 import { useSddDocSync } from "./useSddDocSync"
 import { useT } from "@/lib/i18n/useT"
@@ -132,7 +135,9 @@ export function SddRequirementView({
           </button>
         </div>
       )}
-      <FileViewer reloadSignal={reloadKey} path={docPath} />
+      <Suspense fallback={null}>
+        <FileViewer reloadSignal={reloadKey} path={docPath} />
+      </Suspense>
     </div>
   )
 }

@@ -3,7 +3,7 @@
 // "code reading" style of Codex/Claude. Terminal/diff output keeps its own
 // renderers; this is only for file content.
 import { useMemo, useState } from "react"
-import hljs from "highlight.js"
+import { hljs } from "@/lib/hljs"
 import { Check, Copy } from "@/lib/icons"
 import "@/styles/highlight.css"
 import { t as tStatic } from "@/lib/i18n"

@@ -1,6 +1,6 @@
 import { createElement, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import hljs from "highlight.js"
+import { hljs } from "@/lib/hljs"
 import "@/styles/highlight.css"
 import {
   Activity,
@@ -1600,7 +1600,7 @@ function CountUp({ value, animate }: { value: number; animate: boolean }) {
   return <>{display}</>
 }
 
-function ToolRow({
+const ToolRow = memo(function ToolRow({
   call,
   result,
   onOpenAgentPanel,
@@ -1738,13 +1738,13 @@ function ToolRow({
       )}
     </div>
   )
-}
+})
 
 function stripCR(s: string): string {
   return s.replace(/\r\n/g, "\n").replace(/\r/g, "")
 }
 
-function BashBody({
+const BashBody = memo(function BashBody({
   cmd,
   output: rawOutput,
   hasResult,
@@ -1834,7 +1834,7 @@ function BashBody({
       )}
     </div>
   )
-}
+})
 
 // (webfetch). SearchBody CSS'i uppercase uygular → "CONTEXT7", "CODE QUERY".
 function genericBoxLabel(toolName: string): string {
@@ -2027,7 +2027,7 @@ function OpenPathBody({
   )
 }
 
-function ToolBody({
+const ToolBody = memo(function ToolBody({
   call,
   result,
   writeHunks,
@@ -2288,7 +2288,7 @@ function ToolBody({
       isError={!!result.isError}
     />
   )
-}
+})
 
 function stripCatN(out: string): { code: string; startLine: number } {
   const lines = out.split("\n")
@@ -2475,7 +2475,7 @@ function MovedFileLine({ from, to }: { from: string; to: string }) {
 
 // Diff renderer. With a path/added/removed it shows a Codex-style file header
 // (path + diff-stat) above the colored hunk lines; without, just the lines.
-function DiffBlock({
+const DiffBlock = memo(function DiffBlock({
   lines,
   path,
   added,
@@ -2568,7 +2568,7 @@ function DiffBlock({
       )}
     </div>
   )
-}
+})
 
 // Codex-style row descriptor: a tense-aware verb label + the file basename
 // (link coloured) + optional +added/-removed diff counts. Reads have no counts.

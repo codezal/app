@@ -10,7 +10,10 @@ import { SideChatPanel } from "@/components/SideChatPanel"
 import { SIDE_CHAT_SYSTEM, buildSideChatMessages, newSideChatThread } from "@/lib/side-chat"
 import { ContextPanel } from "@/components/ContextPanel"
 import { AgentTranscriptPane } from "@/components/AgentTranscript"
-import { FileViewer } from "@/components/FileViewer"
+// FileViewer (Monaco Editor) — lazy: defer loading until the editor panel opens
+const FileViewer = lazy(() =>
+  import("@/components/FileViewer").then((m) => ({ default: m.FileViewer })),
+)
 import { DiffViewer } from "@/components/DiffViewer"
 import { TurnDiffViewer } from "@/components/TurnDiffViewer"
 import { OutputViewer } from "@/components/OutputViewer"
@@ -24,18 +27,41 @@ import type { PanelMode } from "@/lib/panel-modes"
 import { requestOpenPrView } from "@/lib/git-events"
 import { renderTemplate } from "@/lib/commands"
 import { REVIEW_TEMPLATE } from "@/lib/commands/templates"
-import { SettingsPage, type SettingsTab } from "@/components/SettingsDrawer"
-import { Onboarding } from "@/components/Onboarding"
+import type { SettingsTab } from "@/components/SettingsDrawer"
+
+const SettingsPage = lazy(() =>
+  import("@/components/SettingsDrawer").then((m) => ({ default: m.SettingsPage })),
+)
+// Onboarding — lazy: only ever shown once on first launch.
+const Onboarding = lazy(() =>
+  import("@/components/Onboarding").then((m) => ({ default: m.Onboarding })),
+)
 import { ErrorBanner } from "@/components/ErrorBanner"
-import { CommandPalette, type Page as PalettePage } from "@/components/CommandPalette"
-import { SearchOverlay } from "@/components/SearchOverlay"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
+import type { Page as PalettePage } from "@/components/CommandPalette"
+// CommandPalette / SearchOverlay — lazy: opened on demand.
+const CommandPalette = lazy(() =>
+  import("@/components/CommandPalette").then((m) => ({ default: m.CommandPalette })),
+)
+const SearchOverlay = lazy(() =>
+  import("@/components/SearchOverlay").then((m) => ({ default: m.SearchOverlay })),
+)
 import { ApprovalModal } from "@/components/ApprovalModal"
 import { QuestionModal } from "@/components/QuestionModal"
-import { AutopilotPage } from "@/components/RoutinesOverlay"
-import { ForkDialog } from "@/components/ForkDialog"
-import { OrchestraConfigModal } from "@/components/OrchestraConfigModal"
+// Routines / Fork / Orchestra — lazy: conditionally mounted overlays.
+const AutopilotPage = lazy(() =>
+  import("@/components/RoutinesOverlay").then((m) => ({ default: m.AutopilotPage })),
+)
+const ForkDialog = lazy(() =>
+  import("@/components/ForkDialog").then((m) => ({ default: m.ForkDialog })),
+)
+const OrchestraConfigModal = lazy(() =>
+  import("@/components/OrchestraConfigModal").then((m) => ({ default: m.OrchestraConfigModal })),
+)
 import { Select } from "@/components/Select"
-import { HelpOverlay } from "@/components/HelpOverlay"
+const HelpOverlay = lazy(() =>
+  import("@/components/HelpOverlay").then((m) => ({ default: m.HelpOverlay })),
+)
 import { Columns2, X } from "@/lib/icons"
 import { useNavHistory } from "@/lib/hooks/useNavHistory"
 import { useNewSession } from "@/lib/hooks/useNewSession"
@@ -2231,7 +2257,9 @@ export default function App() {
             />
           </Suspense>
         ) : (
-          <FileViewer path={editorFile} />
+          <Suspense fallback={null}>
+            <FileViewer path={editorFile} />
+          </Suspense>
         )
       ) : null,
     [editorFile, workspacePath],
@@ -2325,6 +2353,7 @@ export default function App() {
   )
 
   return (
+    <ErrorBoundary>
     <div className="cz-app-shell flex h-full overflow-hidden bg-codezal-sidebar text-codezal-text">
       <a
         href="#ana-icerik"
@@ -2334,7 +2363,11 @@ export default function App() {
       </a>
       <Toaster />
       <MascotOverlay hidden={showSettings || showRoutines || showOrchestra || showHelp} />
-      {settingsLoaded && !settings.onboardingCompleted && <Onboarding />}
+      {settingsLoaded && !settings.onboardingCompleted && (
+        <Suspense fallback={null}>
+          <Onboarding />
+        </Suspense>
+      )}
       {!sidebarCollapsed && !showSettings && (
         <Sidebar
           onOpenSettings={() => {
@@ -2358,24 +2391,28 @@ export default function App() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-codezal-panel bg-codezal-bg">
         {showSettings ? (
-          <SettingsPage
-            onClose={() => {
-              setShowSettings(false)
-              setSettingsTab(undefined)
-            }}
-            reserveTrafficLights={sidebarCollapsed || showSettings}
-            initialTab={settingsTab}
-          />
+          <Suspense fallback={null}>
+            <SettingsPage
+              onClose={() => {
+                setShowSettings(false)
+                setSettingsTab(undefined)
+              }}
+              reserveTrafficLights={sidebarCollapsed || showSettings}
+              initialTab={settingsTab}
+            />
+          </Suspense>
         ) : showRoutines ? (
-          <AutopilotPage
-            onClose={() => setShowRoutines(false)}
-            onRun={async (prompt, opts) => {
-              const provider = (opts?.provider as ProviderId | undefined) ?? settings.defaultProvider
-              const model = opts?.model ?? settings.defaultModel
-              await create(provider, model, settings.defaultWorkspacePath)
-              void onSend(prompt)
-            }}
-          />
+          <Suspense fallback={null}>
+            <AutopilotPage
+              onClose={() => setShowRoutines(false)}
+              onRun={async (prompt, opts) => {
+                const provider = (opts?.provider as ProviderId | undefined) ?? settings.defaultProvider
+                const model = opts?.model ?? settings.defaultModel
+                await create(provider, model, settings.defaultWorkspacePath)
+                void onSend(prompt)
+              }}
+            />
+          </Suspense>
         ) : (
           <div className="flex min-h-0 flex-1">
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -2521,37 +2558,55 @@ export default function App() {
       )}
       </div>
 
-      <CommandPalette
-        open={showPalette}
-        initialPage={palettePage}
-        onClose={() => {
-          setShowPalette(false)
-          setPalettePage("root")
-        }}
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenSearch={() => {
-          setShowPalette(false)
-          setShowSearch(true)
-        }}
-        onOpenFork={() => {
-          setShowPalette(false)
-          setShowForkDialog(true)
-        }}
-      />
-
-      <ForkDialog open={showForkDialog} onClose={() => setShowForkDialog(false)} />
-
-      <SearchOverlay open={showSearch} onClose={() => setShowSearch(false)} />
-
-      {showOrchestra && (
-        <OrchestraConfigModal onClose={() => setShowOrchestra(false)} />
+      {showPalette && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={showPalette}
+            initialPage={palettePage}
+            onClose={() => {
+              setShowPalette(false)
+              setPalettePage("root")
+            }}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenSearch={() => {
+              setShowPalette(false)
+              setShowSearch(true)
+            }}
+            onOpenFork={() => {
+              setShowPalette(false)
+              setShowForkDialog(true)
+            }}
+          />
+        </Suspense>
       )}
 
+      {showForkDialog && (
+        <Suspense fallback={null}>
+          <ForkDialog open={showForkDialog} onClose={() => setShowForkDialog(false)} />
+        </Suspense>
+      )}
 
-      <HelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
+      {showSearch && (
+        <Suspense fallback={null}>
+          <SearchOverlay open={showSearch} onClose={() => setShowSearch(false)} />
+        </Suspense>
+      )}
+
+      {showOrchestra && (
+        <Suspense fallback={null}>
+          <OrchestraConfigModal onClose={() => setShowOrchestra(false)} />
+        </Suspense>
+      )}
+
+      {showHelp && (
+        <Suspense fallback={null}>
+          <HelpOverlay open={showHelp} onClose={() => setShowHelp(false)} />
+        </Suspense>
+      )}
 
       <ApprovalModal />
       <UpdateToast />
     </div>
+    </ErrorBoundary>
   )
 }
