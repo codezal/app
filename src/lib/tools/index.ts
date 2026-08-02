@@ -184,10 +184,12 @@ function formatHits(hits: SearchHit[]): string {
 // the parent's context window.
 const SPAWN_OUTPUT_MAX = 20_000
 // Cap for a single worker's output inside the delegate_agents tool result the
-// parent model sees. Raised from 6 KB to 24 KB (pi parity ~50 KB per task):
-// the model must be able to reason over the substance of what workers did.
-// The full output is additionally persisted in the agent-card part and is
-// injected into the model history via appendWorkerResultNotes.
+// parent model sees. 50 KB per task matches pi's subagent output cap, so the
+// model can reason over the substance of what workers did. The full output is
+// additionally persisted in the agent-card part and injected into the model
+// history via appendWorkerResultNotes (error notes only — done text already
+// rides this tool result). Worst case stays bounded: max 5 dispatches per
+// call, and compaction folds older turns.
 const WORKER_OUTPUT_MAX = 50_000
 
 // Stall watchdog: abort a subagent whose stream goes silent (provider hang).
@@ -1979,6 +1981,12 @@ export function buildTools(
           results.map((result) => ({
             ...result,
             output: truncateForContext(result.output, WORKER_OUTPUT_MAX),
+            // Short error in the tool result; the full error text rides the
+            // agent-note block (agentCardContextBlock) so the model gets both
+            // without the JSON doubling context size.
+            errorMessage: result.errorMessage
+              ? truncateForContext(result.errorMessage, 2000)
+              : result.errorMessage,
           })),
           null,
           2,

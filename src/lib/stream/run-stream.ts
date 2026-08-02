@@ -1068,7 +1068,9 @@ export function makeRunStream(deps: RunStreamDeps) {
       // this correctly degrades.
       // Worker error notes ride along here too (cards live on the store
       // message), so a failed/aborted delegation turn keeps its failure
-      // reasons in live history — matching the restart rebuild.
+      // reasons in live history — matching the restart rebuild. Best-effort:
+      // cards may still be "running" while in-flight workers tear down, in
+      // which case the notes land on the next rebuild of this turn instead.
       const storedTurnParts =
         useSessionsStore.getState().sessions[sid]?.messages.find((mm) => mm.id === asstMsgId)
           ?.parts ?? []

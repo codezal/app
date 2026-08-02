@@ -26,10 +26,10 @@ type AssistantContentPart = Exclude<AssistantPart, string>[number]
 type ToolResultContentPart = Extract<ModelMessage, { role: "tool" }>["content"][number]
 
 // Cap (chars) for worker-result blocks injected into the model context. The
-// delegate_agents tool result (24 KB per worker) is the primary carrier and
-// persists in modelMessages; these notes only ADD unique info (full error
-// text beyond the tool result's 2000-char error truncation) or back the rare
-// parts-rebuild path, so a small cap keeps context growth bounded.
+// delegate_agents tool result (50 KB per worker, errorMessage capped at 2 KB)
+// is the primary carrier and persists in modelMessages; these notes ADD the
+// full error text beyond the tool result's short error, so a small cap keeps
+// context growth bounded.
 export const AGENT_NOTE_MAX_CHARS = 8_000
 
 function capText(text: string, maxChars: number): string {
