@@ -423,10 +423,6 @@ export default function App() {
   }>({ newChat: () => {}, newProject: () => {}, toggleSplit: () => {}, settings: () => {} })
 
   useEffect(() => {
-    const onPushed = () => {
-      markAiOpened("agents")
-      setPanelMode("agents")
-    }
     const onOpenPane = (e: Event) => {
       const id = (e as CustomEvent<{ workerId?: string }>).detail?.workerId
       const sid = useSessionsStore.getState().activeId
@@ -441,11 +437,9 @@ export default function App() {
         setPanelMode("preview")
       }
     }
-    window.addEventListener("codezal:agent-card-pushed", onPushed)
     window.addEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
     window.addEventListener("codezal:preview-navigate", onPreviewNav as EventListener)
     return () => {
-      window.removeEventListener("codezal:agent-card-pushed", onPushed)
       window.removeEventListener("codezal:open-agent-pane", onOpenPane as EventListener)
       window.removeEventListener("codezal:preview-navigate", onPreviewNav as EventListener)
     }

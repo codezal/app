@@ -1,10 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { Ban, Bot, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Copy, ExternalLink, Eye, FileText, FolderOpen, FolderPlus, ListChecks, MessageSquarePlus, MoreHorizontal, Pencil, Plus, RefreshCw, Scissors, Search, ShieldCheck, Sparkles, Trash2, X } from "@/lib/icons"
+import { Ban, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Copy, ExternalLink, Eye, FileText, FolderOpen, FolderPlus, ListChecks, MessageSquarePlus, MoreHorizontal, Pencil, Plus, RefreshCw, Scissors, Search, ShieldCheck, Sparkles, Trash2, X } from "@/lib/icons"
 import { FileTypeIcon, FolderTypeIcon } from "@/lib/file-icons"
 import { mkdir, rename, remove, exists } from "@tauri-apps/plugin-fs"
 import { readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
-import { Identicon } from "@/lib/identicon"
 import { useSessionsStore } from "@/store/sessions"
 import { useSettingsStore } from "@/store/settings"
 import { readWorkspaceDir, type FsEntry } from "@/lib/workspace-tree"
@@ -13,9 +12,6 @@ import { startInternalDrag, wasDragging } from "@/lib/internal-drag"
 import { readProjectMemory, readUserMemory, invalidateMemoryCache, type MemoryFile } from "@/lib/memory"
 import { memoryTargetPath } from "@/lib/memory-write"
 import { listAllSkills, type Skill } from "@/lib/skills"
-import { readWorkspaceAgents, readUserAgents, type AgentDef } from "@/lib/agents"
-import { AgentCard } from "./AgentCard"
-import type { AgentCardPart } from "@/lib/orchestra/types"
 import { GitPanel } from "./GitPanel"
 import { gitCheckIgnored } from "@/lib/git"
 import { PreviewPanel } from "./PreviewPanel"
@@ -238,7 +234,6 @@ export function ContextPanel({ mode, onClose, onModeChange, onSend, onOpenPrevie
         {mode === "files" && <FilesSection workspacePath={ws} prefs={prefs} refreshTick={refreshTick} />}
         {mode === "git" && <GitPanel key={ws ?? ""} workspacePath={ws} surface="changes" />}
         {mode === "review" && <GitPanel key={ws ?? ""} workspacePath={ws} surface="review" />}
-        {mode === "agents" && <AgentsSection workspacePath={ws} />}
         {mode === "skills" && <SkillsSection workspacePath={ws} />}
         {mode === "memory" && <MemorySection workspacePath={ws} />}
         {mode === "rules" && <RulesSection workspacePath={ws} />}
@@ -1074,135 +1069,6 @@ function TreeNode({
         />
       )}
     </li>
-  )
-}
-
-function AgentsSection({ workspacePath }: { workspacePath?: string }) {
-  const t = useT()
-  const [agents, setAgents] = useState<AgentDef[] | null>(null)
-  const openFile = useSessionsStore((s) => s.openFile)
-
-  // Live agent cards for the active session — spawn_agent runs surface here
-  // (instead of inline in the chat). Patches to the message parts update them
-  // in place. messages ref changes on each patch, so the memo stays fresh.
-  const messages = useSessionsStore((s) => s.active?.messages)
-  const runningCards = useMemo(() => {
-    const out: AgentCardPart[] = []
-    for (const m of messages ?? []) {
-      for (const p of m.parts ?? []) {
-        if (p.type === "agent-card") out.push(p)
-      }
-    }
-    return out
-  }, [messages])
-
-  // Completed cards stay visible for the whole current turn (since the last
-  // user message), not just a few seconds — otherwise sequential spawn_agent
-  // runs vanish from the panel while the chat still shows "N agents called".
-  // Cards persist in message parts, so older turns' cards must stay hidden.
-  const turnStart = useMemo(() => {
-    const ms = messages ?? []
-    for (let i = ms.length - 1; i >= 0; i--) {
-      const m = ms[i]
-      if (m.role !== "user") continue
-      // Message ids embed the creation timestamp (prefix_hexTime_…); Message
-      // has no `createdAt` field. Inlined here (pure ops, no call/try) so the
-      // React Compiler can preserve this memo. Invalid ids fall back to 0.
-      const sep = m.id.indexOf("_")
-      if (sep === -1) return 0
-      return Number(BigInt("0x" + m.id.slice(sep + 1, sep + 15)) / BigInt(0x1000))
-    }
-    return 0
-  }, [messages])
-
-  const visibleCards = useMemo(
-    () =>
-      runningCards.filter((c) => {
-        if (c.status !== "done" && c.status !== "aborted" && c.status !== "error") return true
-        return (c.startedAt ?? c.finishedAt ?? 0) >= turnStart
-      }),
-    [runningCards, turnStart],
-  )
-
-  useEffect(() => {
-    let alive = true
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAgents(null)
-    Promise.all([readWorkspaceAgents(workspacePath), readUserAgents()])
-      .then(([p, u]) => {
-        if (alive) setAgents([...p, ...u])
-      })
-      .catch(() => {
-        if (alive) setAgents([])
-      })
-    return () => {
-      alive = false
-    }
-  }, [workspacePath])
-
-  return (
-    <div className="flex flex-col gap-3">
-      {visibleCards.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <SectionHead
-            label={
-              visibleCards.some(
-                (c) =>
-                  c.status === "running" ||
-                  c.status === "pending" ||
-                  c.status === "waiting-approval",
-              )
-                ? t("contextPanel.runningHeading")
-                : t("contextPanel.doneHeading")
-            }
-            right={String(visibleCards.length)}
-          />
-          {visibleCards.map((c) => (
-            <AgentCard key={c.workerId} part={c} compact />
-          ))}
-        </div>
-      )}
-      <div>
-      {!agents ? (
-        <div className="px-1 py-6 text-center text-sm text-codezal-mute">…</div>
-      ) : agents.length === 0 ? (
-        <EmptyState icon={Bot} title={t("contextPanel.noAgents")}>
-          <code className="text-codezal-dim">.codezal/agents/&lt;name&gt;.md</code>{t("contextPanel.agentEmptyHintWorkspaceOr")}
-          <code className="text-codezal-dim">~/.codezal/agents/&lt;name&gt;.md</code>{t("contextPanel.agentEmptyHintAdd")}
-        </EmptyState>
-      ) : (
-        <div className="flex flex-col gap-0.5">
-          {agents.map((a) => (
-            <button
-              key={a.path}
-              type="button"
-              onClick={() => openFile(a.path)}
-              className="flex flex-col gap-0.5 truncate rounded-md px-2 py-[3px] text-left hover:bg-codezal-panel-2"
-              title={a.path}
-            >
-              <span className="flex items-center gap-2">
-                <Identicon seed={a.name} size={16} className="shrink-0 rounded" />
-                <span className="truncate text-sm text-codezal-text">{a.name}</span>
-                <span className="ml-auto shrink-0 text-sm text-codezal-mute">
-                  {a.scope === "project" ? t("contextPanel.scopeProject") : t("contextPanel.scopeGlobal")}
-                </span>
-              </span>
-              {a.description && (
-                <span className="truncate pl-5 text-sm text-codezal-dim">
-                  {a.description}
-                </span>
-              )}
-              {a.model && (
-                <span className="truncate pl-5 font-mono text-sm text-codezal-mute">
-                  · {a.model}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-      </div>
-    </div>
   )
 }
 
