@@ -180,9 +180,20 @@ export function messagesToModelMessages(msgs: Message[]): ModelMessage[] {
       if (msg) out.push(msg)
     } else if (m.role === "assistant") {
       out.push(...assistantMessages(m))
+    } else if (
+      m.role === "system" &&
+      typeof m.content === "string" &&
+      m.content.includes("<compacted-memory>")
+    ) {
+      // Compacted-memory system messages carry the summarized history from
+      // auto-compaction. They live in modelMessages (not UI messages) normally,
+      // but when rebuilding from UI messages (legacy / eviction fallback) they
+      // must be preserved — losing them means the model forgets everything
+      // before the compaction point.
+      out.push({ role: "system", content: m.content })
     }
-    // system/tool UI rows (compaction notices, status lines) are not part of
-    // the model history.
+    // Other system/tool UI rows (status lines, compaction notices) are not
+    // part of the model history.
   }
   return out
 }

@@ -394,6 +394,9 @@ export function makeRunStream(deps: RunStreamDeps) {
           recordSavings("toolDesc", saved)
         }
       }
+      // Total tool count for wire-cost estimation (tool definitions are sent
+      // alongside messages but not part of the message array).
+      const toolCount = Object.keys(tools).length
       const sddDraft = Object.values(useSddStore.getState().drafts).find(
         (d) => d.assistantSessionId === sid,
       )
@@ -548,7 +551,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       // jump down the instant the user hit send (e.g. 36.3K → 29.2K).
       const base = Math.max(usageBase, effectivePrev)
       const previousOccupancy = base > 0 ? base + trailing : 0
-      const estimatedOutbound = estimateMessagesTokens(outboundMessages)
+      const estimatedOutbound = estimateMessagesTokens(outboundMessages, undefined, toolCount)
       const startGauge = streamStartContextTokens(estimatedOutbound, previousOccupancy)
       useSessionsStore.getState().setEffectiveContextTokensFor(sid, startGauge)
 
@@ -612,7 +615,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           if (initialActiveTools) out.activeTools = [...activeSet] as (keyof typeof tools)[]
 
           let base = stepMessages
-          if (estimateMessagesTokens(stepMessages) >= guardTrigger) {
+          if (estimateMessagesTokens(stepMessages, undefined, toolCount) >= guardTrigger) {
             // tailTurns left at the default (PRUNE_TAIL_TURNS) on purpose: 0 here
             // used to prune the *latest* turn's tool evidence too, leaving the model
             // with almost no working memory on long sessions (the "alzheimer" the
@@ -671,7 +674,7 @@ export function makeRunStream(deps: RunStreamDeps) {
           // still prevents untrusted reports from yanking the UI mid-turn.
           // Do NOT write the gauge here — only onStepEnd / turn-end stamp it.
           const stepWire = out.messages ?? base
-          gauge.liveEstimate = estimateMessagesTokens(stepWire)
+          gauge.liveEstimate = estimateMessagesTokens(stepWire, undefined, toolCount)
           return out
         },
         ...(Object.keys(providerOptions).length > 0
@@ -977,7 +980,7 @@ export function makeRunStream(deps: RunStreamDeps) {
         updatedSnap?.usage?.effectiveContextTokens ||
         Math.max(
           gauge.liveEstimate,
-          estimateMessagesTokens(updatedSnap?.modelMessages ?? outboundMessages),
+          estimateMessagesTokens(updatedSnap?.modelMessages ?? outboundMessages, undefined, toolCount),
         )
 
       try {

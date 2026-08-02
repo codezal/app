@@ -4,6 +4,14 @@ import type { ModelMessage } from "ai"
 const CHARS_PER_TOKEN = 4
 const PER_MESSAGE_OVERHEAD = 4
 const PER_TOOL_OVERHEAD = 12
+// Conservative per-image estimate (Anthropic bills ~1600 tok for a typical
+// screenshot; OpenAI tiles vary). A fixed constant avoids over-counting from
+// base64 string length while keeping the gauge aware images exist.
+const PER_IMAGE_TOKENS = 1_500
+// Average token cost of a single tool definition (description + JSON input
+// schema) on the wire. Used to close the gap between the text-only estimate
+// and the real prompt size when many tools (especially MCP) are registered.
+const AVG_TOOL_SCHEMA_TOKENS = 200
 
 /**
  * Token estimator for gauge + compaction decisions.
@@ -62,6 +70,9 @@ function tokensForContent(content: unknown): number {
       }
       // reasoning / thinking
       if (typeof p.reasoning === "string") total += estimateTextTokens(p.reasoning)
+      // image part (screenshot, inline image) — providers tokenize by pixels,
+      // not bytes; use a fixed estimate so the gauge doesn't ignore images.
+      if (p.type === "image") total += PER_IMAGE_TOKENS
     }
     return total
   }
@@ -79,11 +90,17 @@ function safeJson(v: unknown): string {
 export function estimateMessagesTokens(
   messages: ModelMessage[],
   systemPrompt?: string,
+  toolCount?: number,
 ): number {
   let total = systemPrompt ? estimateTextTokens(systemPrompt) + PER_MESSAGE_OVERHEAD : 0
   for (const m of messages) {
     total += PER_MESSAGE_OVERHEAD
     total += tokensForContent(m.content)
+  }
+  // Tool definitions (description + input schema) are sent alongside messages
+  // but are not part of the message array — add their estimated wire cost.
+  if (toolCount && toolCount > 0) {
+    total += toolCount * AVG_TOOL_SCHEMA_TOKENS
   }
   return total
 }
