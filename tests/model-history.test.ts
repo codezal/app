@@ -180,25 +180,25 @@ describe("agent results in model context (pi-style persistence)", () => {
     errorMessage: "provider timeout",
   }
 
-  it("agentCardContextBlock: done card carries final text, error card carries the error", async () => {
+  it("agentCardContextBlock: only error/aborted cards yield a block (done text lives in the tool result)", async () => {
     const { agentCardContextBlock } = await import("@/lib/model-history")
-    const done = agentCardContextBlock(doneCard as never)
-    expect(done).toContain("## Agent result — worker (done)")
-    expect(done).toContain("FIXED: null deref")
+    expect(agentCardContextBlock(doneCard as never)).toBeNull()
     const err = agentCardContextBlock(errCard as never)
     expect(err).toContain("## Agent result — reviewer (error)")
     expect(err).toContain("provider timeout")
+    const aborted = agentCardContextBlock({ ...doneCard, status: "aborted" as const, errorMessage: "stopped" } as never)
+    expect(aborted).toContain("(aborted)")
     expect(agentCardContextBlock({ ...doneCard, status: "running" } as never)).toBeNull()
   })
 
-  it("agentCardContextBlock caps oversized final text", async () => {
+  it("agentCardContextBlock caps oversized error text", async () => {
     const { agentCardContextBlock, AGENT_NOTE_MAX_CHARS } = await import("@/lib/model-history")
     const big = "x".repeat(AGENT_NOTE_MAX_CHARS + 500)
-    const block = agentCardContextBlock({ ...doneCard, finalText: big } as never)
+    const block = agentCardContextBlock({ ...errCard, errorMessage: big } as never)
     expect(block).toContain("[… truncated")
   })
 
-  it("messagesToModelMessages includes agent-card results as assistant text", () => {
+  it("messagesToModelMessages appends worker ERROR notes to the last assistant message (done text stays in the tool result)", () => {
     const out = messagesToModelMessages([
       msg({
         id: "a1",
@@ -208,14 +208,36 @@ describe("agent results in model context (pi-style persistence)", () => {
           { type: "tool-call", toolCallId: "d1", toolName: "delegate_agents", input: {} },
           doneCard,
           { type: "tool-result", toolCallId: "d1", toolName: "delegate_agents", output: "{}" },
+          errCard,
           { type: "text", text: "özet" },
         ],
       }),
     ])
-    const joined = JSON.stringify(out)
-    expect(joined).toContain("## Agent result — worker (done)")
-    expect(joined).toContain("FIXED: null deref")
+    // roles unchanged (note rides inside the final assistant message — parity).
     expect(out.map((m) => m.role)).toEqual(["assistant", "tool", "assistant"])
+    const last = out[out.length - 1] as { role: string; content: Array<{ type: string; text: string }> }
+    const joined = JSON.stringify(out)
+    expect(joined).not.toContain("## Agent result — worker (done)")
+    expect(joined).toContain("## Agent result — reviewer (error)")
+    expect(last.content[last.content.length - 1].text).toContain("provider timeout")
+  })
+
+  it("rebuild parity: tool-call turn WITHOUT trailing text keeps live message count (note rides the tool-call assistant)", () => {
+    const out = messagesToModelMessages([
+      msg({
+        id: "a1",
+        role: "assistant",
+        content: "",
+        parts: [
+          { type: "tool-call", toolCallId: "d1", toolName: "delegate_agents", input: {} },
+          { type: "tool-result", toolCallId: "d1", toolName: "delegate_agents", output: "{}" },
+          errCard,
+        ],
+      }),
+    ])
+    // Live stored 2 ([assistant w/ tool-call, tool]) — rebuild must too.
+    expect(out.map((m) => m.role)).toEqual(["assistant", "tool"])
+    expect(JSON.stringify(out)).toContain("provider timeout")
   })
 
   it("appendWorkerResultNotes appends ONLY error/aborted notes (done text already in tool result)", async () => {

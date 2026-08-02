@@ -941,9 +941,15 @@ export function makeRunStream(deps: RunStreamDeps) {
         }
       }
 
+      // Agent-card parts live on the STORE message (pushed via
+      // pushAgentCardFor), not in the local `parts` array — read them from
+      // there so worker error notes reach the persisted model history.
+      const storedTurnParts =
+        useSessionsStore.getState().sessions[sid]?.messages.find((mm) => mm.id === asstMsgId)
+          ?.parts ?? []
       useSessionsStore.getState().replaceModelMessagesFor(
         sid,
-        [...history, ...appendWorkerResultNotes(finalMessages, parts)],
+        [...history, ...appendWorkerResultNotes(finalMessages, storedTurnParts)],
       )
 
       finalStopReason = detectStopReason(finalFinishReason, parts[parts.length - 1])

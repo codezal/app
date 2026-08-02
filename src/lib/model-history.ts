@@ -37,37 +37,31 @@ function capText(text: string, maxChars: number): string {
   return text.slice(0, maxChars) + `\n\n[… truncated, ${text.length} total chars]`
 }
 
-// Build a compact markdown block carrying a worker/reviewer run's result into
-// the model context — the pi equivalent of persisting subagent output in the
-// session. Done runs carry the final text; failed/aborted runs carry the error
-// so the parent model can reason about what went wrong. Pending/running cards
-// yield nothing (they stream).
+// Build a compact markdown block carrying a failed/aborted worker/reviewer
+// run's error into the model context — the pi equivalent of persisting
+// subagent output in the session. Done runs are intentionally skipped: their
+// final text is already carried verbatim by the persisted delegate_agents tool
+// result (24 KB per worker), so duplicating it would double context cost.
+// Pending/running cards yield nothing (they stream).
 export function agentCardContextBlock(card: AgentCardPart, maxChars = AGENT_NOTE_MAX_CHARS): string | null {
+  if (card.status !== "error" && card.status !== "aborted") return null
   const label = card.workerLabel || card.displayName || card.kind || "agent"
-  if (card.status === "done") {
-    const body = card.finalText?.trim()
-    if (!body) return null
-    return `## Agent result — ${label} (done)\n${capText(body, maxChars)}`
-  }
-  if (card.status === "error" || card.status === "aborted") {
-    const body = (card.errorMessage || card.finalText || "").trim()
-    if (!body) return null
-    return `## Agent result — ${label} (${card.status})\n${capText(body, maxChars)}`
-  }
-  return null
+  const body = (card.errorMessage || card.finalText || "").trim()
+  if (!body) return null
+  return `## Agent result — ${label} (${card.status})\n${capText(body, maxChars)}`
 }
 
-// Append worker-result notes onto the last assistant message of a just-finished
-// turn's model messages. Only error/aborted cards are appended — done-card
-// final text is already in the persisted delegate_agents tool result (24 KB
-// per worker), so duplicating it would bloat the context. Appends to an
-// existing assistant message only (never adds a message), so modelMsgCount
-// parity for truncateAfter/forkAt is preserved.
+// Append worker-error notes onto the last assistant message of a turn's model
+// messages (both the live post-run path and the parts-rebuild path). Only
+// error/aborted cards are appended — done-card final text is already in the
+// persisted delegate_agents tool result (24 KB per worker), so duplicating it
+// would bloat the context. Appends to an existing assistant message only
+// (never adds a message), so modelMsgCount parity for truncateAfter/forkAt is
+// preserved in every turn shape.
 export function appendWorkerResultNotes(messages: ModelMessage[], parts: Part[]): ModelMessage[] {
   const notes: string[] = []
   for (const p of parts) {
     if (p.type !== "agent-card") continue
-    if (p.status !== "error" && p.status !== "aborted") continue
     const block = agentCardContextBlock(p)
     if (block) notes.push(block)
   }
@@ -115,13 +109,14 @@ function assistantMessages(m: Message): ModelMessage[] {
     return out
   }
 
-  // Parity rule: card notes are only injected when the turn actually carried a
-  // tool call (a completed or aborted delegation). The live run stored an
-  // assistant message for that tool-call run (modelMsgCount), so emitting the
-  // note inside it keeps message counts aligned for truncateAfter/forkAt; a
-  // turn with only cards (no tool call) produced no model message live and
-  // must produce none here either.
-  const hasToolCall = parts.some((p) => p.type === "tool-call")
+  // Worker/reviewer error notes (pi-style) are appended to the LAST assistant
+  // message of the rebuilt turn — exactly like the live path appends them to
+  // the final assistant message — so message counts stay aligned with the
+  // live run (modelMsgCount parity for truncateAfter/forkAt) in every shape:
+  // tool-call turns with/without trailing text, aborted turns, card-only turns.
+  const cardParts = parts.filter(
+    (p): p is Extract<Part, { type: "agent-card" }> => p.type === "agent-card",
+  )
 
   let buf: AssistantContentPart[] = []
   const flushAssistant = () => {
@@ -147,18 +142,9 @@ function assistantMessages(m: Message): ModelMessage[] {
         flushAssistant()
         out.push({ role: "tool", content: [toToolResultPart(p)] })
         break
-      case "agent-card": {
-        // Worker/reviewer results are model input (pi-style): the delegation
-        // tool result is truncated, so the card's final text/error rides into
-        // the assistant run as a text block instead of being dropped — but only
-        // for turns that had a tool call (parity, see above).
-        if (!hasToolCall) break
-        const note = agentCardContextBlock(p)
-        if (note) buf.push({ type: "text", text: note })
-        break
-      }
       default:
-        // Future UI-only parts are not model input.
+        // agent-card notes are appended at the end (see above); future
+        // UI-only parts are not model input.
         break
     }
   }
@@ -168,6 +154,9 @@ function assistantMessages(m: Message): ModelMessage[] {
   // agent cards) — keep the turn addressable via its collapsed text.
   if (out.length === 0 && m.content.trim()) {
     out.push({ role: "assistant", content: m.content })
+  }
+  if (cardParts.length > 0) {
+    return appendWorkerResultNotes(out, cardParts)
   }
   return out
 }
