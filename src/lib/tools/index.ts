@@ -188,7 +188,7 @@ const SPAWN_OUTPUT_MAX = 20_000
 // the model must be able to reason over the substance of what workers did.
 // The full output is additionally persisted in the agent-card part and is
 // injected into the model history via appendWorkerResultNotes.
-const WORKER_OUTPUT_MAX = 24_000
+const WORKER_OUTPUT_MAX = 50_000
 
 // Stall watchdog: abort a subagent whose stream goes silent (provider hang).
 // Slow providers can take >150s to first token on a large context, which the

@@ -33,8 +33,13 @@ type ToolResultContentPart = Extract<ModelMessage, { role: "tool" }>["content"][
 export const AGENT_NOTE_MAX_CHARS = 8_000
 
 function capText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text
-  return text.slice(0, maxChars) + `\n\n[… truncated, ${text.length} total chars]`
+  let t = text
+  // A worker output containing the closing delimiter would end the
+  // <subagent-output> block early — escape it so the untrusted-data frame
+  // cannot be broken by the payload itself.
+  t = t.replace(/<\/subagent-output>/gi, "<\\/subagent-output>")
+  if (t.length <= maxChars) return t
+  return t.slice(0, maxChars) + `\n\n[… truncated, ${t.length} total chars]`
 }
 
 // Build a compact markdown block carrying a failed/aborted worker/reviewer
