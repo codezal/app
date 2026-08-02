@@ -263,6 +263,7 @@ export type Messages = {
     chatOnly: string
     effortLabel: string
     defaultPlaceholder: string
+    workerReadOnly?: string
     pasteBinary?: string
     pasteTooLarge?: string
     pasteUnreadable?: string
@@ -341,6 +342,8 @@ export type Messages = {
     fileRevertConfirm?: string
     hunkRevert?: string
     turnReview?: string
+    turnAiReview?: string
+    turnAiReviewHighRisk?: string
     turnShowMore?: string
     turnDiffTab?: string
     deleteMsg: string
@@ -863,12 +866,14 @@ export type Messages = {
   codeReview?: {
     titleCommit?: string
     titlePush?: string
+    titleTurn?: string
     reviewing?: string
     noIssues?: string
     summaryLabel?: string
     commitAnyway?: string
     pushAnyway?: string
     continue?: string
+    dismiss?: string
     cancel?: string
     blockedHint?: string
     fixWithAI?: string
@@ -1773,6 +1778,8 @@ export type Messages = {
       reviewBeforeCommitDesc?: string
       reviewBeforePushLabel?: string
       reviewBeforePushDesc?: string
+      reviewAfterTurnLabel?: string
+      reviewAfterTurnDesc?: string
       reviewBlockOnCriticalLabel?: string
       reviewBlockOnCriticalDesc?: string
       // Optional — appearance subview. Locales without these keys fall back to EN.

@@ -265,6 +265,7 @@ const en: Messages = {
     chatOnly: "Chat only",
     effortLabel: "Reasoning",
     defaultPlaceholder: "Give Codezal a goal…  (/ for commands)",
+    workerReadOnly: "Worker session — results are sent back to the parent chat",
     pasteBinary: "{name}: can't paste a binary file",
     pasteTooLarge: "{name}: too large (max 256KB)",
     pasteUnreadable: "{name}: couldn't read",
@@ -342,6 +343,8 @@ const en: Messages = {
     fileRevertConfirm: "Revert this file's changes from this turn? Other files and the conversation are kept.",
     hunkRevert: "Revert hunk",
     turnReview: "Review",
+    turnAiReview: "Review with AI",
+    turnAiReviewHighRisk: "High-risk change — an AI review is recommended",
     turnShowMore: "Show {count} more",
     turnDiffTab: "Turn changes",
     deleteMsg: "Delete message",
@@ -868,12 +871,14 @@ const en: Messages = {
   codeReview: {
     titleCommit: "Review before commit",
     titlePush: "Review before push",
+    titleTurn: "Review of your changes",
     reviewing: "Reviewing changes…",
     noIssues: "No issues found. Looks good to ship.",
     summaryLabel: "Summary",
     commitAnyway: "Commit anyway",
     pushAnyway: "Push anyway",
     continue: "Continue",
+    dismiss: "Dismiss",
     cancel: "Cancel",
     blockedHint: "Critical findings block this action. Review them, or override to continue.",
     fixWithAI: "Fix with AI",
@@ -1786,6 +1791,9 @@ const en: Messages = {
       reviewBeforePushLabel: "Review changes before push",
       reviewBeforePushDesc:
         "Review the commits about to be pushed (diff against upstream) before pushing. Off: pushes go straight through.",
+      reviewAfterTurnLabel: "Offer review after a turn",
+      reviewAfterTurnDesc:
+        "After a turn that modified files, show a one-click “Review changes” action on the turn diff that runs a model review of the working-tree diff. High-risk turns (auth, crypto, secrets, payments, migrations, execution-granting paths) are emphasized. Informational only — blocks nothing. Off: no action shown.",
       reviewBlockOnCriticalLabel: "Block on critical findings",
       reviewBlockOnCriticalDesc:
         "When a review surfaces critical bugs or security issues, block the commit/push unless you explicitly override. Only applies while review is on.",

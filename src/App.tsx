@@ -348,6 +348,11 @@ export default function App() {
   const activeCompacting = useSessionsStore((s) =>
     s.activeId ? !!s.compactingIds[s.activeId] : false,
   )
+  // Worker sessions (parallel agents) are read-only — the user cannot type
+  // into them; results flow back to the parent session automatically.
+  const activeIsWorker = useSessionsStore((s) =>
+    s.activeId ? !!s.sessions[s.activeId]?.ownerSessionId : false,
+  )
   useTodoPanelAuto(panelMode, setPanelMode, activeStreaming)
   // AI-transient panes (agents / todo / preview): the AI opens them while it
   // works and they close again when the run finishes — they never linger.
@@ -2287,6 +2292,8 @@ export default function App() {
         <Composer
           streaming={activeStreaming}
           compacting={activeCompacting}
+          disabled={activeIsWorker}
+          placeholder={activeIsWorker ? tStatic("composer.workerReadOnly") : undefined}
           onSend={onSend}
           onAbort={onAbort}
           onSlashAction={(a, args) => void onSlashAction(a, args)}
