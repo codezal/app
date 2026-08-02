@@ -152,3 +152,80 @@ describe("messagesToModelMessages", () => {
     expect(out.map((m) => m.role)).toEqual(["assistant", "tool", "assistant", "tool", "assistant"])
   })
 })
+
+describe("agent results in model context (pi-style persistence)", () => {
+  const doneCard = {
+    type: "agent-card" as const,
+    workerId: "w1",
+    workerIdx: 1,
+    taskNum: 1,
+    task: "fix the bug",
+    workerLabel: "worker",
+    kind: "sdk" as const,
+    configSnapshot: { kind: "sdk" as const, yolo: false },
+    status: "done" as const,
+    outputLog: [],
+    finalText: "FIXED: null deref in src/auth.ts:42 — added guard, tests pass.",
+  }
+  const errCard = {
+    type: "agent-card" as const,
+    workerId: "w2",
+    workerIdx: 2,
+    taskNum: 2,
+    workerLabel: "reviewer",
+    kind: "sdk" as const,
+    configSnapshot: { kind: "sdk" as const, yolo: false },
+    status: "error" as const,
+    outputLog: [],
+    errorMessage: "provider timeout",
+  }
+
+  it("agentCardContextBlock: done card carries final text, error card carries the error", async () => {
+    const { agentCardContextBlock } = await import("@/lib/model-history")
+    const done = agentCardContextBlock(doneCard as never)
+    expect(done).toContain("## Agent result — worker (done)")
+    expect(done).toContain("FIXED: null deref")
+    const err = agentCardContextBlock(errCard as never)
+    expect(err).toContain("## Agent result — reviewer (error)")
+    expect(err).toContain("provider timeout")
+    expect(agentCardContextBlock({ ...doneCard, status: "running" } as never)).toBeNull()
+  })
+
+  it("agentCardContextBlock caps oversized final text", async () => {
+    const { agentCardContextBlock, AGENT_NOTE_MAX_CHARS } = await import("@/lib/model-history")
+    const big = "x".repeat(AGENT_NOTE_MAX_CHARS + 500)
+    const block = agentCardContextBlock({ ...doneCard, finalText: big } as never)
+    expect(block).toContain("[… truncated")
+  })
+
+  it("messagesToModelMessages includes agent-card results as assistant text", () => {
+    const out = messagesToModelMessages([
+      msg({
+        id: "a1",
+        role: "assistant",
+        content: "özet",
+        parts: [
+          { type: "tool-call", toolCallId: "d1", toolName: "delegate_agents", input: {} },
+          doneCard,
+          { type: "tool-result", toolCallId: "d1", toolName: "delegate_agents", output: "{}" },
+          { type: "text", text: "özet" },
+        ],
+      }),
+    ])
+    const joined = JSON.stringify(out)
+    expect(joined).toContain("## Agent result — worker (done)")
+    expect(joined).toContain("FIXED: null deref")
+    expect(out.map((m) => m.role)).toEqual(["assistant", "tool", "assistant"])
+  })
+
+  it("appendWorkerResultNotes appends notes to the last assistant message", async () => {
+    const { appendWorkerResultNotes } = await import("@/lib/model-history")
+    const base = [{ role: "assistant" as const, content: [{ type: "text" as const, text: "özet" }] }]
+    const out = appendWorkerResultNotes(base, [doneCard as never])
+    expect(out).toHaveLength(1)
+    const content = out[0].content as Array<{ type: string; text: string }>
+    expect(content[content.length - 1].text).toContain("## Agent result — worker (done)")
+    // No cards → unchanged reference behavior.
+    expect(appendWorkerResultNotes(base, [])).toEqual(base)
+  })
+})

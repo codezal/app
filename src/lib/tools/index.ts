@@ -183,7 +183,12 @@ function formatHits(hits: SearchHit[]): string {
 // redid the work inline — 20k keeps multi-file reviews intact without flooding
 // the parent's context window.
 const SPAWN_OUTPUT_MAX = 20_000
-const WORKER_OUTPUT_MAX = 6000
+// Cap for a single worker's output inside the delegate_agents tool result the
+// parent model sees. Raised from 6 KB to 24 KB (pi parity ~50 KB per task):
+// the model must be able to reason over the substance of what workers did.
+// The full output is additionally persisted in the agent-card part and is
+// injected into the model history via appendWorkerResultNotes.
+const WORKER_OUTPUT_MAX = 24_000
 
 // Stall watchdog: abort a subagent whose stream goes silent (provider hang).
 // Slow providers can take >150s to first token on a large context, which the

@@ -38,6 +38,7 @@ import { listConnectedMcpInstructions } from "@/lib/mcp"
 import { buildBackgroundJobsNote } from "@/lib/stream/background-note"
 import { useJobsStore } from "@/store/jobs"
 import { buildSystemPrompt, buildDynamicContext } from "@/lib/system-prompt"
+import { appendWorkerResultNotes } from "@/lib/model-history"
 import { resolveMainEngine } from "@/lib/agents/runtime/roles"
 import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
 import { PrivacyScrubber, privacyActive } from "@/lib/privacy"
@@ -940,7 +941,10 @@ export function makeRunStream(deps: RunStreamDeps) {
         }
       }
 
-      useSessionsStore.getState().replaceModelMessagesFor(sid, [...history, ...finalMessages])
+      useSessionsStore.getState().replaceModelMessagesFor(
+        sid,
+        [...history, ...appendWorkerResultNotes(finalMessages, parts)],
+      )
 
       finalStopReason = detectStopReason(finalFinishReason, parts[parts.length - 1])
 
