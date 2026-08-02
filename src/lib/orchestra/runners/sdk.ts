@@ -20,7 +20,9 @@ Work discipline:
 - In the final summary, state what you did and the verification result (passed/failed) in one line; do not hide failures.`
 
 // Write-capable tools stripped from read-only runs (reviewer role). Mirrors the
-// plan-mode block list so read-only is enforced by the toolset, not the prompt.
+// plan-mode block list plus every other registered write/side-effecting tool
+// (spawn_agent spawns children with the full toolset; clone/worktree/PR tools
+// mutate the repo) so read-only is enforced by the toolset, not the prompt.
 const READ_ONLY_STRIP = new Set([
   "write_file",
   "edit_file",
@@ -33,6 +35,12 @@ const READ_ONLY_STRIP = new Set([
   "send_to_session",
   "review_changes",
   "propose_build",
+  "spawn_agent",
+  "clone_repo",
+  "create_worktree",
+  "remove_worktree",
+  "create_pr",
+  "schedule_task",
 ])
 
 export const startSdkWorker: RunnerStart = async ({
@@ -83,9 +91,13 @@ export const startSdkWorker: RunnerStart = async ({
           configWorkspace,
         )
         // Read-only runs (reviewer): strip write-capable tools so read-only is
-        // enforced by the toolset, not just the system prompt.
+        // enforced by the toolset, not just the system prompt. MCP tools are
+        // dropped too — a write-capable MCP server must not be reachable.
         if (config.readOnly) {
           for (const writeTool of READ_ONLY_STRIP) delete tools[writeTool]
+          for (const name of Object.keys(tools)) {
+            if (name.startsWith("mcp__")) delete tools[name]
+          }
         }
 
         emit({ type: "started" })
