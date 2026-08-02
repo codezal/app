@@ -1066,7 +1066,16 @@ export function makeRunStream(deps: RunStreamDeps) {
       // (the replaceModelMessagesFor call after result.response). For retries,
       // historyIn is already the pruned version (retryHistory = history), so
       // this correctly degrades.
-      useSessionsStore.getState().replaceModelMessagesFor(sid, [...historyIn, ...partial])
+      // Worker error notes ride along here too (cards live on the store
+      // message), so a failed/aborted delegation turn keeps its failure
+      // reasons in live history — matching the restart rebuild.
+      const storedTurnParts =
+        useSessionsStore.getState().sessions[sid]?.messages.find((mm) => mm.id === asstMsgId)
+          ?.parts ?? []
+      useSessionsStore.getState().replaceModelMessagesFor(
+        sid,
+        [...historyIn, ...appendWorkerResultNotes(partial, storedTurnParts)],
+      )
       patchFor(asstMsgId, {
         parts: [...parts],
         content: partialText,
