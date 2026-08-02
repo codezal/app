@@ -2255,7 +2255,7 @@ export default function App() {
           onBranch={onBranch}
           onRevert={(id) => void onRevert(id)}
           onReview={(id, path) => openFile(makeTurnDiffUri(id, path), { preview: true })}
-          onOpenAgentPanel={() => setPanelMode("agents")}
+          onOpenAgentPanel={() => {}}
           onAskSideChat={(question) => openSideChat(question)}
           onAskSplitChat={(question) => void askSelectionInSplit(question)}
           onContinue={() => void onSend(tStatic("messageList.continueAction"))}
