@@ -1,7 +1,7 @@
 // SDK worker runner — buildModel + streamText + buildAllTools reuse.
 import { streamText, isStepCount, type ModelMessage } from "ai"
 import { buildLanguageModel, transformHistory, buildProviderOptions } from "../../providers"
-import { buildAllTools } from "../../tools"
+import { buildAllTools, isMcpToolName } from "../../tools"
 import { findAgent } from "../../agents"
 import { useSettingsStore } from "@/store/settings"
 import { useApprovalsStore } from "@/store/approvals"
@@ -22,7 +22,8 @@ Work discipline:
 // Write-capable tools stripped from read-only runs (reviewer role). Mirrors the
 // plan-mode block list plus every other registered write/side-effecting tool
 // (spawn_agent spawns children with the full toolset; clone/worktree/PR tools
-// mutate the repo) so read-only is enforced by the toolset, not the prompt.
+// mutate the repo; browser_* interact with live sites) so read-only is
+// enforced by the toolset, not the prompt.
 const READ_ONLY_STRIP = new Set([
   "write_file",
   "edit_file",
@@ -41,6 +42,13 @@ const READ_ONLY_STRIP = new Set([
   "remove_worktree",
   "create_pr",
   "schedule_task",
+  "browser_navigate",
+  "browser_fill",
+  "browser_click",
+  "browser_type",
+  "browser_press",
+  "browser_select",
+  "browser_eval",
 ])
 
 export const startSdkWorker: RunnerStart = async ({
@@ -96,7 +104,7 @@ export const startSdkWorker: RunnerStart = async ({
         if (config.readOnly) {
           for (const writeTool of READ_ONLY_STRIP) delete tools[writeTool]
           for (const name of Object.keys(tools)) {
-            if (name.startsWith("mcp__")) delete tools[name]
+            if (isMcpToolName(name)) delete tools[name]
           }
         }
 
