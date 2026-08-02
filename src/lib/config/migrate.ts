@@ -71,7 +71,12 @@ function migrateV4(d: Record<string, unknown>): void {
   if (!supervisor || !Array.isArray(supervisor.pool)) return
   const pool = supervisor.pool.filter(
     (entry): entry is Record<string, unknown> =>
-      isRecord(entry) && entry.enabled !== false && isRecord(entry.engine),
+      isRecord(entry) &&
+      entry.enabled !== false &&
+      isRecord(entry.engine) &&
+      // Only in-process SDK engines can back a role pin — legacy acp/CLI
+      // entries have no provider/model mapping and would break delegation.
+      (entry.engine as Record<string, unknown>).kind === "sdk",
   )
   const roles: Record<string, unknown> = isRecord(supervisor.roles) ? supervisor.roles : {}
   for (const entry of pool) {

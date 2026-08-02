@@ -80,6 +80,22 @@ describe("migrateSettings — supervisor pool → roles (v4)", () => {
     expect(out.supervisor).not.toHaveProperty("pool")
   })
 
+  it("skips legacy acp/CLI pool entries (no provider/model mapping for role pins)", () => {
+    const out = migrateSettings({
+      schemaVersion: 3,
+      supervisor: {
+        enabled: true,
+        pool: [
+          { id: "a", agentName: "general", enabled: true, engine: { kind: "acp", providerId: "gemini-cli", modelId: "gemini-2.5-pro" } },
+          { id: "b", agentName: "general", enabled: true, engine: { kind: "sdk", providerId: "openai", modelId: "gpt-5.4" } },
+        ],
+      },
+    })
+    expect(out.supervisor.roles).toEqual({
+      worker: { provider: "openai", model: "gpt-5.4" },
+    })
+  })
+
   it("keeps already-migrated files untouched", () => {
     const out = migrateSettings({
       schemaVersion: 4,

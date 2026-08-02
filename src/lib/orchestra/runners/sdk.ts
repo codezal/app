@@ -1,7 +1,7 @@
 // SDK worker runner — buildModel + streamText + buildAllTools reuse.
 import { streamText, isStepCount, type ModelMessage } from "ai"
 import { buildLanguageModel, transformHistory, buildProviderOptions } from "../../providers"
-import { buildAllTools, isMcpToolName } from "../../tools"
+import { buildAllTools, READONLY_ALLOW } from "../../tools"
 import { findAgent } from "../../agents"
 import { useSettingsStore } from "@/store/settings"
 import { useApprovalsStore } from "@/store/approvals"
@@ -19,38 +19,16 @@ Work discipline:
 - If you changed code, verify it yourself BEFORE reporting: run the relevant tests and type checks, and inspect the output.
 - In the final summary, state what you did and the verification result (passed/failed) in one line; do not hide failures.`
 
-// Write-capable tools stripped from read-only runs (reviewer role). Mirrors the
-// plan-mode block list plus every other registered write/side-effecting tool
-// (spawn_agent spawns children with the full toolset; clone/worktree/PR tools
-// mutate the repo; browser_* interact with live sites) so read-only is
-// enforced by the toolset, not the prompt.
-const READ_ONLY_STRIP = new Set([
-  "write_file",
-  "edit_file",
-  "apply_patch",
-  "bash",
-  "bash_status",
-  "notebook_edit",
-  "monitor",
-  "remember",
-  "save_method",
-  "send_to_session",
-  "review_changes",
-  "propose_build",
-  "spawn_agent",
-  "delegate_agents",
-  "clone_repo",
-  "create_worktree",
-  "remove_worktree",
-  "create_pr",
-  "schedule_task",
-  "browser_navigate",
-  "browser_fill",
-  "browser_click",
-  "browser_type",
-  "browser_press",
-  "browser_select",
-  "browser_eval",
+// Read-only browser observation tools kept for reviewer runs (the mutating
+// browser_* tools are dropped with the allow-list below).
+const READ_ONLY_BROWSER = new Set([
+  "browser_screenshot",
+  "browser_snapshot",
+  "browser_read_console",
+  "browser_read_network",
+  "browser_scroll",
+  "browser_hover",
+  "browser_wait",
 ])
 
 export const startSdkWorker: RunnerStart = async ({
@@ -100,13 +78,14 @@ export const startSdkWorker: RunnerStart = async ({
           workerId,
           configWorkspace,
         )
-        // Read-only runs (reviewer): strip write-capable tools so read-only is
-        // enforced by the toolset, not just the system prompt. MCP tools are
-        // dropped too — a write-capable MCP server must not be reachable.
+        // Read-only runs (reviewer): keep ONLY read-only tools — an allow-list
+        // derived from the workspaceReadOnly set plus read-only browser
+        // observation. Everything else (writes, exec, delegation, PR/worktree,
+        // job control, MCP servers, cross-session writes) is dropped, so
+        // read-only is enforced by the toolset, not the system prompt.
         if (config.readOnly) {
-          for (const writeTool of READ_ONLY_STRIP) delete tools[writeTool]
           for (const name of Object.keys(tools)) {
-            if (isMcpToolName(name)) delete tools[name]
+            if (!READONLY_ALLOW.has(name) && !READ_ONLY_BROWSER.has(name)) delete tools[name]
           }
         }
 
