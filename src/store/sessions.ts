@@ -182,6 +182,20 @@ type SessionsState = {
 
   dropDetached: (id: string) => void
 
+  // Worker sessions (parallel agents): created by delegate_agents / spawn_agent,
+  // rendered as children of the parent in the sidebar, removed on completion.
+  createWorkerSession: (opts: {
+    ownerSessionId: string
+    title: string
+    provider: ProviderId
+    model: string
+    workspacePath?: string
+    handle?: string
+    systemPrompt?: string
+    readOnly?: boolean
+  }) => Promise<string>
+  removeWorkerSession: (id: string) => Promise<void>
+
   open: (id: string) => Promise<void>
 
   loadIntoPool: (id: string) => Promise<void>
@@ -348,6 +362,7 @@ function metaOf(s: Session): SessionMeta {
   if (s.archived) m.archived = true
   if (s.forkParentId) m.forkParentId = s.forkParentId
   if (s.routineId) m.routineId = s.routineId
+  if (s.ownerSessionId) m.ownerSessionId = s.ownerSessionId
   return m
 }
 
@@ -844,6 +859,71 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         delete sessions[id]
         return { sessions }
       })
+    },
+
+    createWorkerSession: async (opts) => {
+      const now = Date.now()
+      const s: Session = {
+        id: createId("session"),
+        title: opts.title,
+        updatedAt: now,
+        messages: [],
+        provider: opts.provider,
+        model: opts.model,
+        workspacePath: opts.workspacePath,
+        mode: "build",
+        delegationMode: "solo",
+        ownerSessionId: opts.ownerSessionId,
+        workspaceReadOnly: opts.readOnly,
+      }
+      if (opts.handle) s.handle = opts.handle
+      await upsertSessionRow(db, s)
+      setShadow(s.id, [])
+      seqOf.set(s.id, 0)
+      set((st) => ({
+        index: [metaOf(s), ...st.index],
+        sessions: { ...st.sessions, [s.id]: s },
+      }))
+      touchSeen(s.id)
+      return s.id
+    },
+
+    removeWorkerSession: async (id) => {
+      abortStream(id)
+      const t = persistTimers.get(id)
+      if (t) {
+        clearTimeout(t)
+        persistTimers.delete(id)
+      }
+      await deleteSessionRow(db, id)
+      dropShadow(id)
+      await clearSnapshotSession(id)
+      forgetScrollPosition(id)
+      clearToolBeat(id)
+      const wasActive = get().activeId === id
+      set((st) => {
+        const nextIndex = st.index.filter((m) => m.id !== id)
+        const sessions = { ...st.sessions }
+        delete sessions[id]
+        const streamingIds = { ...st.streamingIds }
+        delete streamingIds[id]
+        return {
+          index: nextIndex,
+          sessions,
+          streamingIds,
+          // If the user was viewing the worker, jump back to the parent.
+          ...(wasActive
+            ? {
+                activeId: sessions[st.sessions[id]?.ownerSessionId ?? ""]?.id ?? null,
+                active: sessions[st.sessions[id]?.ownerSessionId ?? ""] ?? null,
+                isDraft: false,
+              }
+            : {}),
+        }
+      })
+      if (wasActive && get().activeId) {
+        await get().open(get().activeId!)
+      }
     },
 
     open: async (id) => {

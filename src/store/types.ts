@@ -161,6 +161,10 @@ export type Session = {
   handle?: string
   archived?: boolean
   routineId?: string
+  // Worker sessions: the parent session that spawned this agent. Set at
+  // creation, never changes. Sidebar renders these as children of the parent;
+  // removed from the sidebar when the worker completes.
+  ownerSessionId?: string
   sideChats?: SideChatThread[]
   // Timestamp (ms) of the user's most recent message — drives sidebar ordering
   // and the per-row time. Falls back to updatedAt when absent (legacy sessions).
@@ -312,6 +316,11 @@ export type Settings = {
   // Pre-push code review — same as above but reviews the commits about to be
   // pushed (diff against upstream) before pushing. Default off.
   reviewBeforePush?: boolean
+  // Post-turn code review — when on, the turn-diff surface offers a one-click
+  // model review of the working-tree diff after a turn that modified files
+  // (emphasized for high-risk turns). Informational, blocks nothing. Default off
+  // (opt-in). See src/lib/turn-review.ts + src/lib/use-turn-review.tsx.
+  reviewAfterTurn?: boolean
   // When a pre-commit/pre-push review surfaces critical findings, block the
   // operation unless the user explicitly overrides ("commit anyway"). Only
   // meaningful while reviewBeforeCommit / reviewBeforePush are on. Default on.
@@ -355,7 +364,7 @@ export type Settings = {
 
 export type SessionMeta = Pick<
   Session,
-  "id" | "title" | "updatedAt" | "workspacePath" | "pinned" | "unread" | "archived" | "forkParentId" | "routineId" | "handle" | "lastUserMessageAt"
+  "id" | "title" | "updatedAt" | "workspacePath" | "pinned" | "unread" | "archived" | "forkParentId" | "routineId" | "handle" | "lastUserMessageAt" | "ownerSessionId"
 >
 
 export type ProjectMeta = {
