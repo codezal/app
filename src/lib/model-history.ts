@@ -47,7 +47,7 @@ function capText(text: string, maxChars: number): string {
 // subagent output in the session. The body is delimited as untrusted data
 // (subagent output may be prompt-injected; it is data, not instructions).
 // Done runs are intentionally skipped: their final text is already carried
-// verbatim by the persisted delegate_agents tool result (24 KB per worker),
+// verbatim by the persisted delegate_agents tool result (50 KB per worker),
 // so duplicating it would double context cost. Pending/running cards yield
 // nothing (they stream).
 export function agentCardContextBlock(card: AgentCardPart, maxChars = AGENT_NOTE_MAX_CHARS): string | null {
@@ -64,7 +64,7 @@ export function agentCardContextBlock(card: AgentCardPart, maxChars = AGENT_NOTE
 // Append worker-error notes onto the last assistant message of a turn's model
 // messages (both the live post-run path and the parts-rebuild path). Only
 // error/aborted cards are appended — done-card final text is already in the
-// persisted delegate_agents tool result (24 KB per worker), so duplicating it
+// persisted delegate_agents tool result (50 KB per worker), so duplicating it
 // would bloat the context. Appends to an existing assistant message only
 // (never adds a message), so modelMsgCount parity for truncateAfter/forkAt is
 // preserved in every turn shape.
