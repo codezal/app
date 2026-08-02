@@ -218,14 +218,35 @@ describe("agent results in model context (pi-style persistence)", () => {
     expect(out.map((m) => m.role)).toEqual(["assistant", "tool", "assistant"])
   })
 
-  it("appendWorkerResultNotes appends notes to the last assistant message", async () => {
+  it("appendWorkerResultNotes appends ONLY error/aborted notes (done text already in tool result)", async () => {
     const { appendWorkerResultNotes } = await import("@/lib/model-history")
     const base = [{ role: "assistant" as const, content: [{ type: "text" as const, text: "özet" }] }]
-    const out = appendWorkerResultNotes(base, [doneCard as never])
+    // Done card → no duplicate note.
+    expect(appendWorkerResultNotes(base, [doneCard as never])).toEqual(base)
+    // Error card → note appended to the last assistant message, no new message.
+    const out = appendWorkerResultNotes(base, [errCard as never])
     expect(out).toHaveLength(1)
     const content = out[0].content as Array<{ type: string; text: string }>
-    expect(content[content.length - 1].text).toContain("## Agent result — worker (done)")
+    expect(content[content.length - 1].text).toContain("## Agent result — reviewer (error)")
     // No cards → unchanged reference behavior.
     expect(appendWorkerResultNotes(base, [])).toEqual(base)
+  })
+
+  it("appendWorkerResultNotes never adds a message when no assistant exists", async () => {
+    const { appendWorkerResultNotes } = await import("@/lib/model-history")
+    const base = [{ role: "tool" as const, content: [{ type: "tool-result" as const, toolCallId: "t", toolName: "x", output: { type: "text" as const, value: "o" } }] }]
+    expect(appendWorkerResultNotes(base, [errCard as never])).toEqual(base)
+  })
+
+  it("rebuild skips card notes on turns without a tool call (modelMsgCount parity)", () => {
+    const out = messagesToModelMessages([
+      msg({
+        id: "a1",
+        role: "assistant",
+        content: "",
+        parts: [doneCard, errCard],
+      }),
+    ])
+    expect(out).toEqual([])
   })
 })
