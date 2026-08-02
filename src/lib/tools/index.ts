@@ -1,4 +1,4 @@
-import { streamText, generateText, isStepCount, tool, type ToolSet } from "ai"
+import { streamText, generateText, isStepCount, tool, type ToolSet, type ModelMessage } from "ai"
 import { z } from "zod"
 import { listDirAbs, readFileAbs, writeFileAbs, editFileAbs } from "./fs"
 import { runBash } from "./shell"
@@ -138,7 +138,8 @@ import { db } from "@/lib/db"
 import { ensureHistorySchema, getThreadMessages, searchThreads } from "@/lib/harness-history/store"
 import { useJobsStore, DEFAULT_WAIT_MS, type BackgroundJob } from "@/store/jobs"
 import { recordToolCall } from "@/store/tool-telemetry"
-import { estimateTextTokens } from "@/lib/tokens"
+import { estimateTextTokens, estimateMessagesTokens } from "@/lib/tokens"
+import { pruneToolOutputs } from "@/lib/compact"
 import { buildMcpTools, listPluginMcps, listConnectedMcpResources, readMcpResource } from "../mcp"
 import { listPluginHooks } from "../hooks"
 import { createId } from "@/lib/id"
@@ -2335,12 +2336,24 @@ export function buildTools(
           const sumAc = new AbortController()
           const sumTimer = setTimeout(() => sumAc.abort(), AGENT_SUMMARY_TIMEOUT_MS)
           try {
-            const resp = await lastResult.response
+            let sumInput: ModelMessage[] = await lastResult.responseMessages
+            // A long tool loop with no final text can carry a lot of output —
+            // prune before summarizing so the summary call itself cannot blow
+            // the context window (mirrors run-stream's empty-final guard).
+            const sumTokens = estimateMessagesTokens(sumInput)
+            if (sumTokens > 60_000) {
+              const { messages: pruned } = pruneToolOutputs(sumInput, {
+                tailTurns: 2,
+                protectTokens: 40_000,
+                minGain: 1,
+              })
+              sumInput = pruned
+            }
             const wrap = await generateText({
               model,
               allowSystemInMessages: true,
               messages: [
-                ...resp.messages,
+                ...sumInput,
                 { role: "user", content: "Summarize your findings so far as the final answer." },
               ],
               abortSignal: sumAc.signal,

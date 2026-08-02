@@ -896,10 +896,15 @@ export function makeRunStream(deps: RunStreamDeps) {
         throw new Error("stream ended without a terminal finish — connection dropped mid-turn")
       }
 
-      // kaybediyordu. Tam history'yi replace ile yaz.
-      const resp = await result.response
+      // Rewrite the full history. `response.messages` contains ONLY the FINAL
+      // step's messages — in multi-step tool loops every intermediate step's
+      // tool-call/tool-result evidence would vanish from the persisted history,
+      // so later turns "forgot" the files read / commands run (the alzheimer
+      // symptom). `responseMessages` is the accumulated response messages of
+      // ALL steps (it does not include the request messages).
+      const respMessages = await result.responseMessages
       const cleanMessages = stripVisibleToolProtocolMessages(
-        stripSuppressedToolMessages(resp.messages, suppressedCalls),
+        stripSuppressedToolMessages(respMessages, suppressedCalls),
       )
       let finalMessages = cleanMessages
 
@@ -1042,6 +1047,7 @@ export function makeRunStream(deps: RunStreamDeps) {
       if (streamResult) {
         for (const p of [
           streamResult.response,
+          streamResult.responseMessages,
           streamResult.usage,
           streamResult.totalUsage,
           streamResult.finishReason,
