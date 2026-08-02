@@ -4,8 +4,6 @@ export { DEFAULT_SUPERVISOR_SETTINGS, RunSupervisor } from "./supervisor"
 export {
   resolveRoleEngine,
   resolveMainEngine,
-  resolveSmallEngine,
-  smallModelFor,
   workerConfigForRole,
   rolesCatalogForPrompt,
 } from "./roles"

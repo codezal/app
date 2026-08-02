@@ -341,7 +341,7 @@ function recordDoomAndWarn(tool: string, input: unknown, ownerSessionId: string)
   )
 }
 
-const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch", "notebook_edit", "monitor", "remember", "save_method", "send_to_session"])
+const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch", "notebook_edit", "monitor", "remember", "save_method", "send_to_session", "review_changes"])
 
 const READ_ONLY_EXTRA = new Set([
   "repo_overview",

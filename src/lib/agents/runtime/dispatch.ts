@@ -58,6 +58,7 @@ async function diffSince(repoPath: string, baseSha: string): Promise<string | nu
   try {
     const stat = await runGit(repoPath, ["diff", "--stat", `${baseSha}..HEAD`])
     const body = await runGit(repoPath, ["diff", `${baseSha}..HEAD`])
+    if (!body.stdout.trim()) return null
     const capped = body.stdout.length > MAX_REVIEW_DIFF_CHARS
       ? body.stdout.slice(0, MAX_REVIEW_DIFF_CHARS) + "\n…(diff truncated)"
       : body.stdout
@@ -103,8 +104,9 @@ export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Prom
   input.signal?.addEventListener("abort", abort, { once: true })
   const deadline = setTimeout(abort, input.settings.maxWallClockMs)
   const baseSha = await currentHead(input.session.workspacePath)
+  let raw: Awaited<ReturnType<typeof dispatchWorkers>> | undefined
   try {
-    const raw = await dispatchWorkers(
+    raw = await dispatchWorkers(
       {
         parentProvider: input.session.provider,
         parentModel: input.session.model,
@@ -126,17 +128,39 @@ export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Prom
     })
     return normalized
   } catch (error) {
-    // Fail hard, but never leave worker tracking stuck at "running" (that would
-    // inflate existingChildCount for later delegations in the same turn).
-    for (const runId of runIds) {
+    // Never leave worker tracking stuck at "running" (that would inflate
+    // existingChildCount for later delegations in the same turn). Only error
+    // runs still in flight — finished ones keep their real results.
+    const failRun = (runId: string) => {
+      const run = useAgentRunsStore.getState().runs[runId]
+      if (!run || run.status !== "running") return
       useAgentRunsStore.getState().finish(runId, {
         status: "error",
         output: "",
         errorMessage: errorMessage(error),
-        durationMs: Date.now() - (useAgentRunsStore.getState().runs[runId]?.startedAt ?? Date.now()),
+        durationMs: Date.now() - (run.startedAt ?? Date.now()),
       })
     }
-    throw error
+    if (!raw) {
+      // Workers never ran — fail hard.
+      runIds.forEach(failRun)
+      throw error
+    }
+    // Workers completed but merge/review failed: surface their results plus an
+    // error note instead of throwing, so the model doesn't retry and duplicate
+    // the merged work.
+    const normalized = raw.map(({ workerIdx: _workerIdx, workerId: _workerId, ...result }) => result)
+    normalized.forEach((result, index) => {
+      const runId = runIds[index]
+      if (runId) useAgentRunsStore.getState().finish(runId, result)
+    })
+    normalized.push({
+      status: "error",
+      output: "",
+      errorMessage: errorMessage(error),
+      durationMs: 0,
+    })
+    return normalized
   } finally {
     clearTimeout(deadline)
     input.signal?.removeEventListener("abort", abort)
@@ -197,6 +221,16 @@ async function autoReview(
       workerId: `review-${Date.now()}`,
       status: "done",
       output: review.output,
+      durationMs: review.durationMs,
+    })
+  } else {
+    // Surface the failed/no-op review to the parent model instead of dropping it.
+    results.push({
+      workerIdx: results.length + 1,
+      workerId: `review-${Date.now()}`,
+      status: "error",
+      output: "",
+      errorMessage: review.errorMessage ?? `Reviewer run failed (${review.status})`,
       durationMs: review.durationMs,
     })
   }

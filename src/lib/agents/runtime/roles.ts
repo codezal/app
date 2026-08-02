@@ -53,42 +53,6 @@ export function resolveMainEngine(input: {
   }
 }
 
-// Resolve the engine used by an internal one-shot call (titles, summaries,
-// prompt enhance, suggestions, routing). The `small` role wins when pinned;
-// otherwise fall back to the provider's built-in cheap model, then the session
-// model. Returns null when nothing usable is found.
-export function resolveSmallEngine(input: {
-  settings: SupervisorSettings
-  providerId: ProviderId
-  modelId: string
-  catalogCheapModel?: string | null
-}): { providerId: ProviderId; modelId: string } | null {
-  const pinned = resolveRoleEngine(input.settings, "small")
-  if (pinned && pinned.kind === "sdk") {
-    return { providerId: pinned.providerId, modelId: pinned.modelId }
-  }
-  if (input.catalogCheapModel) return { providerId: input.providerId, modelId: input.catalogCheapModel }
-  return { providerId: input.providerId, modelId: input.modelId }
-}
-
-// Small-model helper compatible with the existing pickSmallModel signature —
-// returns a model id when a cheaper model exists for the provider, honoring the
-// `small` role pin first.
-export function smallModelFor(
-  settings: SupervisorSettings,
-  providerId: ProviderId,
-  modelId: string,
-  catalogCheapModel?: string | null,
-): string | null {
-  const engine = resolveSmallEngine({
-    settings,
-    providerId,
-    modelId,
-    catalogCheapModel,
-  })
-  return engine ? engine.modelId : null
-}
-
 // Build the WorkerConfig for a delegated child run of a given role.
 export function workerConfigForRole(input: {
   role: AgentRoleId
@@ -130,7 +94,7 @@ export function rolesCatalogForPrompt(
     const cfg: RoleModelConfig | undefined = settings.roles?.[role]
     if (cfg?.provider && cfg.model) {
       lines.push(`- **${role}**: ${cfg.provider}/${cfg.model}`)
-    } else if (role === "worker" || role === "reviewer") {
+    } else {
       lines.push(`- **${role}**: inherits the session model (${session.provider}/${session.model})`)
     }
   }

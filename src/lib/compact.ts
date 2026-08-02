@@ -9,7 +9,7 @@ import type { ProviderId } from "./providers"
 import { buildLanguageModel } from "./providers"
 import { isCodingAgentGated } from "./providers/provider-quirks"
 import { compactionModelFor, contextCap } from "./pricing"
-import { pickSmallModel } from "./small-model"
+import { smallModelCall, pickSmallModel } from "./small-model"
 import type { ProvidersCatalog } from "./providers-catalog"
 import { estimateTextTokens } from "./tokens"
 import type { AutoCompactSettings, Settings } from "@/store/types"
@@ -157,6 +157,7 @@ export function resolveCompactModel(
   activeModel: string,
   override: string | undefined,
   catalog: ProvidersCatalog | undefined,
+  settings?: Settings,
 ): { provider: ProviderId; model: string } {
   if (override && override.includes("/")) {
     const [p, m] = override.split("/", 2)
@@ -164,6 +165,10 @@ export function resolveCompactModel(
   }
   const cm = compactionModelFor(activeProvider)
   if (cm.model) return { provider: cm.provider as ProviderId, model: cm.model }
+  if (settings) {
+    const small = smallModelCall({ catalog, providerId: activeProvider, modelId: activeModel, settings })
+    return { provider: small.providerId, model: small.modelId }
+  }
   const small = pickSmallModel(catalog, activeProvider)
   if (small) return { provider: activeProvider, model: small }
   return { provider: activeProvider, model: activeModel }
@@ -222,7 +227,7 @@ async function summarizeOldMessages(
   usedProvider: ProviderId
   usedModel: string
 }> {
-  const { provider, model } = resolveCompactModel(activeProvider, activeModel, overrideModel, catalog)
+  const { provider, model } = resolveCompactModel(activeProvider, activeModel, overrideModel, catalog, appSettings)
   const llm = await buildLanguageModel({ providerId: provider, modelId: model, settings: appSettings })
 
   const transcript = renderTranscript(oldMessages)

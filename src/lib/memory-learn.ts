@@ -156,6 +156,7 @@ export async function extractMemories(opts: {
     opts.activeModel,
     opts.overrideModel,
     opts.catalog,
+    opts.settings,
   )
   const llm = await buildLanguageModel({
     providerId: provider,
