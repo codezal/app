@@ -2064,15 +2064,21 @@ export function buildTools(
             .reverse()
             .find((message) => message.role === "assistant" && message.pending)
           if (!pendingMessage) return "Pending assistant message not found"
-          const [result] = await dispatchSupervisorAgents({
+          const results = await dispatchSupervisorAgents({
             session: parentSess,
             parentMessageId: pendingMessage.id,
             settings: supervisorSettings,
             dispatches: [{ role: "worker", task }],
             signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
           })
-          void fireSubagentStop(result.status)
-          if (result.status !== "done") return `Agent error: ${result.errorMessage ?? result.status}`
+          // The worker result may be followed by an error note (merge/review
+          // failure) — surface it instead of swallowing it.
+          const errorNote = results.find((r) => r.status === "error")
+          const result = results[0]
+          void fireSubagentStop(errorNote ? "error" : result.status)
+          if (errorNote || result.status !== "done") {
+            return `Agent error: ${errorNote?.errorMessage ?? result.errorMessage ?? result.status}`
+          }
           return `# ${agent.name} summary\n${truncateForContext(result.output, SPAWN_OUTPUT_MAX)}`
         }
 
