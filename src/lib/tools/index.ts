@@ -2340,11 +2340,14 @@ export function buildTools(
             // request), so the summarizer would not even know the task — put
             // the original prompt back at the front, mirroring the wire shape
             // ([user task] + step messages) and the run-stream empty-final
-            // guard's `[...history, ...cleanMessages]`.
-            let sumInput: ModelMessage[] = [
-              { role: "user", content: task },
-              ...(await lastResult.responseMessages),
-            ]
+            // guard's `[...history, ...cleanMessages]`. Skip the prepend when
+            // the turn produced nothing: two consecutive user messages would
+            // be rejected by role-alternation-strict providers (Anthropic).
+            const turnMessages = await lastResult.responseMessages
+            let sumInput: ModelMessage[] =
+              turnMessages.length > 0
+                ? [{ role: "user", content: task }, ...turnMessages]
+                : turnMessages
             // A long tool loop with no final text can carry a lot of output —
             // prune before summarizing so the summary call itself cannot blow
             // the context window. tailTurns must be 0 here: with only the one
