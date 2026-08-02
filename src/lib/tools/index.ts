@@ -2381,9 +2381,16 @@ export function buildTools(
             // Hard bound, pairing-safe: keep the task + the newest messages;
             // if the newest window starts with a tool message, pull in its
             // assistant tool-call so strict providers (Anthropic) never see a
-            // tool_result without the preceding tool_use.
-            let idx = sumInput.length
-            let acc = 0
+            // tool_result without the preceding tool_use. Reserve budget for
+            // the task and the closing "Summarize" prompt, and always keep at
+            // least the newest message — dropping everything would leave the
+            // summarizer with no findings at all.
+            const reserved = estimateMessagesTokens([
+              { role: "user", content: task },
+              { role: "user", content: "Summarize your findings so far as the final answer." },
+            ])
+            let idx = Math.max(1, sumInput.length - 1)
+            let acc = reserved + (idx > 1 ? estimateMessagesTokens(sumInput.slice(idx)) : 0)
             while (idx > 1) {
               const tok = estimateMessagesTokens(sumInput.slice(idx - 1, idx))
               if (acc + tok > sumBudget) break
