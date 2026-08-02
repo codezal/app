@@ -2336,14 +2336,24 @@ export function buildTools(
           const sumAc = new AbortController()
           const sumTimer = setTimeout(() => sumAc.abort(), AGENT_SUMMARY_TIMEOUT_MS)
           try {
-            let sumInput: ModelMessage[] = await lastResult.responseMessages
+            // responseMessages contains only assistant/tool messages (no
+            // request), so the summarizer would not even know the task — put
+            // the original prompt back at the front, mirroring the wire shape
+            // ([user task] + step messages) and the run-stream empty-final
+            // guard's `[...history, ...cleanMessages]`.
+            let sumInput: ModelMessage[] = [
+              { role: "user", content: task },
+              ...(await lastResult.responseMessages),
+            ]
             // A long tool loop with no final text can carry a lot of output —
             // prune before summarizing so the summary call itself cannot blow
-            // the context window (mirrors run-stream's empty-final guard).
+            // the context window. tailTurns must be 0 here: with only the one
+            // task user-message, pruneToolOutputs' tail protection would set
+            // protectFrom = 0 and bail out without pruning anything.
             const sumTokens = estimateMessagesTokens(sumInput)
             if (sumTokens > 60_000) {
               const { messages: pruned } = pruneToolOutputs(sumInput, {
-                tailTurns: 2,
+                tailTurns: 0,
                 protectTokens: 40_000,
                 minGain: 1,
               })
