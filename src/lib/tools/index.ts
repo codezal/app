@@ -2077,7 +2077,11 @@ export function buildTools(
           const result = results[0]
           void fireSubagentStop(errorNote ? "error" : result.status)
           if (errorNote || result.status !== "done") {
-            return `Agent error: ${errorNote?.errorMessage ?? result.errorMessage ?? result.status}`
+            const detail = errorNote?.errorMessage ?? result.errorMessage ?? result.status
+            const partial = result.output?.trim()
+              ? `\n\nWorker output:\n${truncateForContext(result.output, SPAWN_OUTPUT_MAX)}`
+              : ""
+            return `Agent error: ${detail}${partial}`
           }
           return `# ${agent.name} summary\n${truncateForContext(result.output, SPAWN_OUTPUT_MAX)}`
         }

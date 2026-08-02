@@ -163,6 +163,14 @@ export function resolveCompactModel(
     const [p, m] = override.split("/", 2)
     return { provider: p as ProviderId, model: m }
   }
+  // The Settings → Agent Orchestration `small` role pin wins over provider
+  // compaction presets so users can force their chosen cheap model.
+  if (settings) {
+    const pin = settings.supervisor?.roles?.small
+    if (pin?.provider && pin.model) {
+      return { provider: pin.provider, model: pin.model }
+    }
+  }
   const cm = compactionModelFor(activeProvider)
   if (cm.model) return { provider: cm.provider as ProviderId, model: cm.model }
   if (settings) {
