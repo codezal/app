@@ -136,6 +136,7 @@ import { UpdateToast } from "@/components/UpdateToast"
 import type { Update } from "@tauri-apps/plugin-updater"
 import { abortStream } from "@/lib/run-registry"
 import { makeRunStream } from "@/lib/stream/run-stream"
+import { setWorkerStreamFn } from "@/lib/worker-session"
 import { decideTurnGate } from "@/lib/stream/turn-gate"
 import { inlinesThinkTags } from "@/lib/providers/provider-quirks"
 import { createThinkSplitter, type ThinkSplitter } from "@/lib/stream/think-split"
@@ -903,6 +904,9 @@ export default function App() {
     recordAuxUsage,
     sanitizeHistoryForProvider,
   })
+  // Register the stream function so worker-session dispatch can run full
+  // session streams for parallel agents.
+  setWorkerStreamFn((sid, asstMsgId, history) => runStream(sid, asstMsgId, history))
 
   async function runCompaction(sid: string, force = false): Promise<boolean> {
     if (compactionInFlight.has(sid)) return false

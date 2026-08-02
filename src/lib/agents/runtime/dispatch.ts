@@ -1,13 +1,15 @@
 import type { Session } from "@/store/types"
-import { dispatchWorkers } from "@/lib/orchestra/runtime"
-import { findRepoRoot, runGit } from "@/lib/tools/worktree"
-import { mergeWorkerBranches } from "@/lib/orchestra/isolation"
 import { errorMessage } from "@/lib/errors"
+import { runGit } from "@/lib/tools/worktree"
 import { RunSupervisor } from "./supervisor"
-import { resolveRoleEngine, workerConfigForRole } from "./roles"
+import { resolveRoleEngine } from "./roles"
 import type { AgentRoleId, AgentRunResult, SupervisorSettings } from "./types"
 import { useAgentRunsStore } from "@/store/agent-runs"
 import { createId } from "@/lib/id"
+import {
+  dispatchWorkerSessions,
+  type WorkerSessionDispatch,
+} from "@/lib/worker-session"
 
 export type DelegateAgentsInput = {
   session: Session
@@ -17,21 +19,6 @@ export type DelegateAgentsInput = {
   signal?: AbortSignal
 }
 
-const MAX_REVIEW_DIFF_CHARS = 40_000
-
-// Deterministic reviewer contract (Kun-style structured findings). The diff is
-// passed in the task; the worker never touches the working tree.
-export const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer. Review the diff provided in the task and produce a findings report.
-
-Return a markdown report with:
-1. **Verdict**: one line — "Approved", "Approved with nits", or "Changes requested".
-2. **Findings**: for each issue — severity (\`critical\` | \`warning\` | \`nit\`), \`file:line\`, what the issue is, why it matters, and a concrete suggested fix.
-
-Rules:
-- Only report real, actionable issues; do not invent problems.
-- Prioritize correctness, security, and hidden behavior over style.
-- Do not modify any files. This is a read-only review.`
-
 function engineFor(session: Session, settings: SupervisorSettings, role: AgentRoleId) {
   return (
     resolveRoleEngine(settings, role, session) ?? {
@@ -40,32 +27,6 @@ function engineFor(session: Session, settings: SupervisorSettings, role: AgentRo
       modelId: session.model,
     }
   )
-}
-
-async function currentHead(workspacePath?: string): Promise<string | null> {
-  if (!workspacePath) return null
-  const repoPath = await findRepoRoot(workspacePath)
-  if (!repoPath) return null
-  try {
-    const out = await runGit(repoPath, ["rev-parse", "HEAD"])
-    return out.stdout.trim() || null
-  } catch {
-    return null
-  }
-}
-
-async function diffSince(repoPath: string, baseSha: string): Promise<string | null> {
-  try {
-    const stat = await runGit(repoPath, ["diff", "--stat", `${baseSha}..HEAD`])
-    const body = await runGit(repoPath, ["diff", `${baseSha}..HEAD`])
-    if (!body.stdout.trim()) return null
-    const capped = body.stdout.length > MAX_REVIEW_DIFF_CHARS
-      ? body.stdout.slice(0, MAX_REVIEW_DIFF_CHARS) + "\n…(diff truncated)"
-      : body.stdout
-    return `<diff-stat>\n${stat.stdout.trim() || "(empty)"}\n</diff-stat>\n<diff>\n${capped}\n</diff>`
-  } catch {
-    return null
-  }
 }
 
 export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Promise<AgentRunResult[]> {
@@ -79,14 +40,8 @@ export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Prom
     signal: input.signal,
     dispatches: input.dispatches,
   })
-  const workers = resolved.map((dispatch, index) =>
-    workerConfigForRole({
-      role: dispatch.role,
-      engine: engineFor(input.session, input.settings, dispatch.role),
-      idx: index + 1,
-      session: input.session,
-    }),
-  )
+
+  // Register runs for budget tracking.
   const runIds = input.dispatches.map(() => createId("worker"))
   for (const [index, dispatch] of input.dispatches.entries()) {
     useAgentRunsStore.getState().start({
@@ -99,38 +54,45 @@ export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Prom
       startedAt: Date.now() + index,
     })
   }
-  const controller = new AbortController()
-  const abort = () => controller.abort()
-  input.signal?.addEventListener("abort", abort, { once: true })
-  const deadline = setTimeout(abort, input.settings.maxWallClockMs)
-  const baseSha = await currentHead(input.session.workspacePath)
-  let raw: Awaited<ReturnType<typeof dispatchWorkers>> | undefined
+
+  // Build session-based worker dispatches.
+  const workerDispatches: WorkerSessionDispatch[] = resolved.map((dispatch, index) => {
+    const engine = engineFor(input.session, input.settings, dispatch.role)
+    const provider = engine.kind === "sdk" ? engine.providerId : input.session.provider
+    const model = engine.kind === "sdk" ? engine.modelId : input.session.model
+    const role = input.dispatches[index]?.role ?? "worker"
+    return {
+      task: dispatch.task,
+      title: `⚙ ${role} · task-${index + 1}`,
+      provider,
+      model,
+      workspacePath: input.session.workspacePath,
+      handle: `${role}-${index + 1}-${input.session.id.slice(-6)}`,
+      readOnly: role === "reviewer",
+    }
+  })
+
   try {
-    raw = await dispatchWorkers(
-      {
-        parentProvider: input.session.provider,
-        parentModel: input.session.model,
-        workers,
-        maxParallel: input.settings.maxParallelRuns,
-      },
-      input.dispatches.map((dispatch, index) => ({ workerIdx: index + 1, task: dispatch.task })),
-      input.parentMessageId,
-      input.session.id,
-      input.session.workspacePath,
-      controller.signal,
-    )
-    await mergeSuccessfulRuns(input, raw)
-    await autoReview(input, raw, baseSha, controller.signal)
-    const normalized = raw.map(({ workerIdx: _workerIdx, workerId: _workerId, ...result }) => result)
-    normalized.forEach((result, index) => {
+    const results = await dispatchWorkerSessions({
+      parentSessionId: input.session.id,
+      dispatches: workerDispatches,
+      signal: input.signal,
+    })
+
+    const normalized: AgentRunResult[] = results.map((r, index) => {
       const runId = runIds[index]
+      const result: AgentRunResult = {
+        status: r.status,
+        output: r.output,
+        errorMessage: r.errorMessage,
+        durationMs: r.durationMs,
+      }
       if (runId) useAgentRunsStore.getState().finish(runId, result)
+      return result
     })
     return normalized
   } catch (error) {
-    // Never leave worker tracking stuck at "running" (that would inflate
-    // existingChildCount for later delegations in the same turn). Only error
-    // runs still in flight — finished ones keep their real results.
+    // Never leave worker tracking stuck at "running".
     const failRun = (runId: string) => {
       const run = useAgentRunsStore.getState().runs[runId]
       if (!run || run.status !== "running") return
@@ -141,100 +103,24 @@ export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Prom
         durationMs: Date.now() - (run.startedAt ?? Date.now()),
       })
     }
-    if (!raw) {
-      // Workers never ran — fail hard.
-      runIds.forEach(failRun)
-      throw error
-    }
-    // Workers completed but merge/review failed: surface their results plus an
-    // error note instead of throwing, so the model doesn't retry and duplicate
-    // the merged work.
-    const normalized = raw.map(({ workerIdx: _workerIdx, workerId: _workerId, ...result }) => result)
-    normalized.forEach((result, index) => {
-      const runId = runIds[index]
-      if (runId) useAgentRunsStore.getState().finish(runId, result)
-    })
-    normalized.push({
-      status: "error",
-      output: "",
-      errorMessage: errorMessage(error),
-      durationMs: 0,
-    })
-    return normalized
-  } finally {
-    clearTimeout(deadline)
-    input.signal?.removeEventListener("abort", abort)
+    runIds.forEach(failRun)
+    throw error
   }
 }
 
-async function mergeSuccessfulRuns(
-  input: DelegateAgentsInput,
-  results: Awaited<ReturnType<typeof dispatchWorkers>>,
-): Promise<void> {
-  if (input.settings.mergePolicy !== "safe-auto" || !input.session.workspacePath) return
-  const branches = results
-    .filter((result) => result.status === "done" && result.committed && result.branch)
-    .map((result) => result.branch as string)
-  if (branches.length === 0) return
-  const repoPath = await findRepoRoot(input.session.workspacePath)
-  if (!repoPath) return
-  const outcomes = await mergeWorkerBranches(repoPath, branches)
-  for (const outcome of outcomes) {
-    const result = results.find((candidate) => candidate.branch === outcome.branch)
-    if (!result) continue
-    result.isolationNote = outcome.status === "merged"
-      ? `merged into parent (${outcome.mergeSha ?? "unknown"})`
-      : outcome.note ?? (outcome.conflictFiles?.length ? `merge conflict: ${outcome.conflictFiles.join(", ")}` : outcome.status)
-  }
-}
+const MAX_REVIEW_DIFF_CHARS = 40_000
 
-// Optional post-delegation review: when enabled and workers committed changes,
-// a reviewer run reviews the merged diff and is appended as an extra result.
-async function autoReview(
-  input: DelegateAgentsInput,
-  results: Awaited<ReturnType<typeof dispatchWorkers>>,
-  baseSha: string | null,
-  signal: AbortSignal,
-): Promise<void> {
-  if (!input.settings.autoReview) return
-  // The reviewer diffs baseSha..HEAD — worker changes only land in HEAD under
-  // the safe-auto merge policy. Manual merges (or conflicts) would show the
-  // reviewer an empty/wrong diff, so skip.
-  if (input.settings.mergePolicy !== "safe-auto") return
-  if (!baseSha || !input.session.workspacePath) return
-  const committed = results.some((r) => r.status === "done" && r.committed)
-  if (!committed) return
-  const repoPath = await findRepoRoot(input.session.workspacePath)
-  if (!repoPath) return
-  const diff = await diffSince(repoPath, baseSha)
-  if (!diff) return
-  const review = await runReviewer({
-    session: input.session,
-    parentMessageId: input.parentMessageId,
-    settings: input.settings,
-    diff,
-    signal,
-  })
-  if (review.status === "done") {
-    results.push({
-      workerIdx: results.length + 1,
-      workerId: `review-${Date.now()}`,
-      status: "done",
-      output: review.output,
-      durationMs: review.durationMs,
-    })
-  } else {
-    // Surface the failed/no-op review to the parent model instead of dropping it.
-    results.push({
-      workerIdx: results.length + 1,
-      workerId: `review-${Date.now()}`,
-      status: "error",
-      output: "",
-      errorMessage: review.errorMessage ?? `Reviewer run failed (${review.status})`,
-      durationMs: review.durationMs,
-    })
-  }
-}
+// Deterministic reviewer contract (Kun-style structured findings).
+export const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer. Review the diff provided in the task and produce a findings report.
+
+Return a markdown report with:
+1. **Verdict**: one line — "Approved", "Approved with nits", or "Changes requested".
+2. **Findings**: for each issue — severity (\`critical\` | \`warning\` | \`nit\`), \`file:line\`, what the issue is, why it matters, and a concrete suggested fix.
+
+Rules:
+- Only report real, actionable issues; do not invent problems.
+- Prioritize correctness, security, and hidden behavior over style.
+- Do not modify any files. This is a read-only review.`
 
 // Collect the working-tree diff (staged + unstaged tracked changes) for a
 // manual review_changes call. Returns null when there is nothing to review.
@@ -255,8 +141,7 @@ export async function collectWorkingDiff(repoPath: string): Promise<string | nul
   }
 }
 
-// Run a single reviewer pass over a diff using the `reviewer` role engine
-// (inherits the session model when not pinned). Streams an agent card.
+// Run a single reviewer pass over a diff as a read-only worker session.
 export async function runReviewer(input: {
   session: Session
   parentMessageId: string
@@ -265,43 +150,27 @@ export async function runReviewer(input: {
   signal?: AbortSignal
 }): Promise<AgentRunResult> {
   const reviewer = engineFor(input.session, input.settings, "reviewer")
-  const idx = 1
-  const [result] = await dispatchWorkers(
-    {
-      parentProvider: input.session.provider,
-      parentModel: input.session.model,
-      workers: [
-        workerConfigForRole({
-          role: "reviewer",
-          engine: reviewer,
-          idx,
-          session: input.session,
-          systemPrompt: REVIEW_SYSTEM_PROMPT,
-          label: "reviewer",
-        }),
-      ],
-      maxParallel: 1,
-    },
-    [{ workerIdx: idx, task: `Review these changes:\n\n${input.diff}` }],
-    input.parentMessageId,
-    input.session.id,
-    input.session.workspacePath,
-    input.signal,
-  )
+  const provider = reviewer.kind === "sdk" ? reviewer.providerId : input.session.provider
+  const model = reviewer.kind === "sdk" ? reviewer.modelId : input.session.model
+  const [result] = await dispatchWorkerSessions({
+    parentSessionId: input.session.id,
+    dispatches: [
+      {
+        task: `Review these changes:\n\n${input.diff}`,
+        title: "⚙ reviewer",
+        provider,
+        model,
+        workspacePath: input.session.workspacePath,
+        readOnly: true,
+      },
+    ],
+    signal: input.signal,
+  })
   if (!result) return { status: "error", output: "", errorMessage: "Reviewer run returned no result", durationMs: 0 }
-  const rest = {
+  return {
     status: result.status,
     output: result.output,
-    durationMs: result.durationMs,
-    tokensIn: result.tokensIn,
-    tokensOut: result.tokensOut,
     errorMessage: result.errorMessage,
-    isolated: result.isolated,
-    branch: result.branch,
-    committed: result.committed,
-    changedFiles: result.changedFiles,
-    diffSummary: result.diffSummary,
-    isolationNote: result.isolationNote,
+    durationMs: result.durationMs,
   }
-  return rest
 }
