@@ -29,6 +29,7 @@ const READ_ONLY_STRIP = new Set([
   "edit_file",
   "apply_patch",
   "bash",
+  "bash_status",
   "notebook_edit",
   "monitor",
   "remember",
