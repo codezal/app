@@ -112,7 +112,7 @@ describe("computeStats — rankings & splits", () => {
     expect(s.topProvider?.key).toBe("openai")
   })
   it("mode split counts sessions per mode", () => {
-    expect(s.modeSplit).toEqual({ build: 2, plan: 1, orchestra: 0 })
+    expect(s.modeSplit).toEqual({ build: 2, plan: 1 })
   })
   it("reasoning split counts per effort", () => {
     expect(s.reasoningSplit).toEqual({ high: 2, medium: 1 })

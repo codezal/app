@@ -11,7 +11,7 @@ import { streamText, tool, isStepCount } from "ai"
 import { z } from "zod"
 import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
-import { pickSmallModel } from "@/lib/small-model"
+import { smallModelCall } from "@/lib/small-model"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { useSettingsStore } from "@/store/settings"
 import { useSessionsStore } from "@/store/sessions"
@@ -70,14 +70,19 @@ export async function predictNextEdit(args: NextEditArgs): Promise<string> {
   const sess = useSessionsStore.getState().active
   const providerId = (sess?.provider ?? settings.defaultProvider) as ProviderId
   const catalog = settings.providerCatalog?.data as ProvidersCatalog | undefined
-  const small = pickSmallModel(catalog, providerId)
-  const modelId = small ?? null
+  const engine = smallModelCall({
+    catalog,
+    providerId,
+    modelId: sess?.model ?? settings.defaultModel,
+    settings,
+  })
+  const modelId = engine.modelId
   if (!modelId) return ""
 
-  const model = await buildLanguageModel({ providerId, modelId, settings })
+  const model = await buildLanguageModel({ providerId: engine.providerId, modelId, settings })
   const prefix = args.prefix.slice(-PREFIX_CAP)
   const suffix = args.suffix.slice(0, SUFFIX_CAP)
-  const gated = isCodingAgentGated(providerId)
+  const gated = isCodingAgentGated(engine.providerId)
   const tools = gated
     ? { noop: tool({ description: "unused", inputSchema: z.object({}), execute: async () => "" }) }
     : undefined

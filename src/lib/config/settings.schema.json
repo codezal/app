@@ -323,35 +323,6 @@
         }
       }
     },
-    "imageGeneration": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "default": false,
-          "type": "boolean"
-        },
-        "providerId": {
-          "default": "",
-          "type": "string"
-        },
-        "baseUrl": {
-          "type": "string"
-        },
-        "apiKey": {
-          "type": "string"
-        },
-        "model": {
-          "default": "",
-          "type": "string"
-        },
-        "defaultSize": {
-          "type": "string"
-        },
-        "timeoutMs": {
-          "type": "number"
-        }
-      }
-    },
     "providerCatalog": {
       "type": "object",
       "propertyNames": {
@@ -534,13 +505,14 @@
         "enabled": false,
         "routing": "hybrid",
         "autoDelegate": true,
+        "autoReview": false,
         "maxParallelRuns": 3,
         "maxChildRunsPerTurn": 5,
         "maxDepth": 1,
         "maxWallClockMs": 1800000,
         "isolation": "auto",
         "mergePolicy": "safe-auto",
-        "pool": []
+        "roles": {}
       },
       "type": "object",
       "properties": {
@@ -555,6 +527,10 @@
         },
         "autoDelegate": {
           "default": true,
+          "type": "boolean"
+        },
+        "autoReview": {
+          "default": false,
           "type": "boolean"
         },
         "maxParallelRuns": {
@@ -597,83 +573,72 @@
             "manual"
           ]
         },
-        "pool": {
-          "default": [],
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
+        "roles": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "orchestrator": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                }
               },
-              "agentName": {
-                "type": "string",
-                "minLength": 1
-              },
-              "enabled": {
-                "type": "boolean"
-              },
-              "label": {
-                "type": "string"
-              },
-              "engine": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "const": "sdk"
-                      },
-                      "providerId": {
-                        "type": "string"
-                      },
-                      "modelId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "providerId",
-                      "modelId"
-                    ],
-                    "additionalProperties": {}
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "const": "acp"
-                      },
-                      "providerId": {
-                        "type": "string"
-                      },
-                      "modelId": {
-                        "type": "string"
-                      },
-                      "command": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "providerId"
-                    ],
-                    "additionalProperties": {}
-                  }
-                ]
-              }
+              "additionalProperties": {}
             },
-            "required": [
-              "id",
-              "agentName",
-              "enabled",
-              "engine"
-            ],
-            "additionalProperties": {}
-          }
+            "planner": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {}
+            },
+            "worker": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {}
+            },
+            "reviewer": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {}
+            },
+            "small": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": {}
         }
       }
     },

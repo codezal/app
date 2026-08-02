@@ -1,7 +1,7 @@
 import type { ProviderId, ApiKeys, OAuthCredential, ProviderConfig, ReasoningEffort, CustomProvider } from "@/lib/providers"
 import type { McpServerConfig } from "@/lib/mcp"
 import type { ModelMessage } from "ai"
-import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
+import type { AgentCardPart } from "@/lib/orchestra/types"
 import type { Locale } from "@/lib/i18n/types"
 import type { Appearance } from "@/lib/theme"
 import type { TokenSaverSettings } from "@/lib/token-savers/types"
@@ -11,20 +11,6 @@ import type { PermissionRule } from "@/lib/permission/types"
 import type { SupervisorSettings } from "@/lib/agents/runtime"
 
 export type Role = "user" | "assistant" | "system" | "tool"
-
-// Image attached to a user message — stored as a base64 data URL so it can be
-// fed straight to the AI SDK image part and to the thumbnail <img> render
-// without a round-trip to disk. Large images are downscaled before storage
-// (see src/lib/image.ts) to keep session payloads and token counts sane.
-export type MessageImage = {
-  id: string
-  dataUrl?: string
-  ref?: string
-  mime: string
-  name?: string
-  width?: number
-  height?: number
-}
 
 export type MessageFile = {
   id: string
@@ -60,7 +46,6 @@ export type Message = {
   role: Role
   content: string
   parts?: Part[]
-  images?: MessageImage[]
   files?: MessageFile[]
   pdfs?: MessagePdf[]
   pending?: boolean
@@ -103,7 +88,7 @@ export type AutoCompactSettings = {
   keepLast: number
 }
 
-export type AgentMode = "build" | "plan" | "orchestra"
+export type AgentMode = "build" | "plan"
 export type DelegationMode = "inherit" | "solo" | "adaptive"
 
 export type SddStage = "requirement" | "design" | "prototype" | "plan" | "build" | "verify"
@@ -166,7 +151,6 @@ export type Session = {
   usage?: SessionUsage
   mode?: AgentMode
   delegationMode?: DelegationMode
-  orchestra?: OrchestraConfig
   goal?: SessionGoal
   todos?: TodoItem[]
   reasoningEffort?: ReasoningEffort
@@ -249,38 +233,6 @@ export type FirecrawlConfig = {
   apiKey?: string
 }
 
-// Image generation wire protocol — how the request/response is shaped.
-//  - openai-image: POST {baseUrl}/images/generations, response data[].b64_json|url
-//    (OpenAI gpt-image + any OpenAI-compatible endpoint: zenmux, OpenRouter, …)
-//  - minimax-image: POST {baseUrl}/v1/image_generation, response data.image_urls[]
-export type ImageGenerationProtocol = "openai-image" | "minimax-image"
-
-// Image generation config — enables the `generate_image` tool. Two sourcing modes:
-//  - Preset: providerId points at a configured chat provider (e.g. "openai") and
-//    we reuse its API key + base URL. protocol is inferred from the provider.
-//  - Custom: providerId is "custom" (or empty) and the user supplies baseUrl +
-//    apiKey + protocol directly (any OpenAI-compatible / MiniMax image endpoint).
-// The API key, when custom, is a secret → stored in the OS keychain, never on disk
-// (mirrors webSearch/firecrawl). The tool is hidden from the model unless enabled
-// and a usable key resolves.
-export type ImageGenerationConfig = {
-  enabled: boolean
-  // "openai" | "gemini" | "minimax" → named preset (protocol + base derived);
-  // "" / "custom" → custom OpenAI-compatible endpoint (baseUrl + apiKey below).
-  providerId: string
-  // Base URL — prefilled from the preset, overridable (proxy / region). For custom
-  // mode this is the only source. protocol is no longer stored: it is derived from
-  // providerId at resolve time (preset.protocol, else openai-image for custom).
-  baseUrl?: string
-  apiKey?: string
-  // Model name sent to the service (e.g. "gpt-image-1", "image-01").
-  model: string
-  // Optional default "WxH" or "auto"; used when the model doesn't specify a size.
-  defaultSize?: string
-  // Per-request timeout (ms). Hi-res generation can take minutes. Default 180000.
-  timeoutMs?: number
-}
-
 export type CachedProviderCatalog = {
   data: Record<string, unknown>
   fetchedAt: number
@@ -312,8 +264,6 @@ export type Settings = {
   autoCompact: AutoCompactSettings
   webSearch?: WebSearchConfig
   firecrawl?: FirecrawlConfig
-  // Optional image generation — enables the generate_image tool when configured.
-  imageGeneration?: ImageGenerationConfig
   providerCatalog?: CachedProviderCatalog
   hooks?: HookConfig[]
   // Theme/typography/UX flags — managed by the Appearance settings tab.

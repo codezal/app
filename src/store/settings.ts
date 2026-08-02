@@ -22,7 +22,6 @@ import type { Settings } from "./types"
 // kirletmesin diye); load'da webSearch.apiKey / firecrawl.apiKey'e hydrate edilir.
 const TOOL_WEBSEARCH_SECRET = "tool:websearch"
 const TOOL_FIRECRAWL_SECRET = "tool:firecrawl"
-const TOOL_IMAGEGEN_SECRET = "tool:imagegen"
 
 // Secrets (apiKeys + OAuth credentials + custom-provider headers) live in the OS
 // keychain, never on disk. Strip them before any settings.json write so no
@@ -37,11 +36,6 @@ function stripSecrets(s: Settings): Settings {
     return copy
   })
   const webSearch = s.webSearch ? { ...s.webSearch, apiKey: undefined } : undefined
-  // imageGeneration: only apiKey is a secret — keep the rest of the config on disk,
-  // strip just the key (custom-mode key; preset mode reuses a provider key elsewhere).
-  const imageGeneration = s.imageGeneration
-    ? { ...s.imageGeneration, apiKey: undefined }
-    : undefined
   return {
     ...s,
     apiKeys: {},
@@ -49,7 +43,6 @@ function stripSecrets(s: Settings): Settings {
     customProviders,
     webSearch,
     firecrawl: undefined,
-    imageGeneration,
   }
 }
 
@@ -59,7 +52,7 @@ type SettingsState = {
   load: () => Promise<void>
   update: (patch: Partial<Settings>) => Promise<void>
   setApiKey: (provider: keyof Settings["apiKeys"], key: string) => Promise<void>
-  setToolSecret: (tool: "websearch" | "firecrawl" | "imagegen", key: string) => Promise<void>
+  setToolSecret: (tool: "websearch" | "firecrawl", key: string) => Promise<void>
   // OAuth / extended credentials.
   setCredential: (provider: ProviderId, cred: OAuthCredential | null) => Promise<void>
   // Per-provider config (baseURL, headers, custom options).
@@ -170,26 +163,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await setApiKeySecret(TOOL_FIRECRAWL_SECRET, fcDiskKey)
       kc.apiKeys[TOOL_FIRECRAWL_SECRET] = fcDiskKey
     }
-    const igDiskKey = merged.imageGeneration?.apiKey
-    if (igDiskKey && igDiskKey.trim() && !kc.apiKeys[TOOL_IMAGEGEN_SECRET]) {
-      hadDiskSecrets = true
-      await setApiKeySecret(TOOL_IMAGEGEN_SECRET, igDiskKey)
-      kc.apiKeys[TOOL_IMAGEGEN_SECRET] = igDiskKey
-    }
     if (merged.webSearch && kc.apiKeys[TOOL_WEBSEARCH_SECRET]) {
       merged.webSearch.apiKey = kc.apiKeys[TOOL_WEBSEARCH_SECRET]
     }
     if (kc.apiKeys[TOOL_FIRECRAWL_SECRET]) {
       merged.firecrawl = { apiKey: kc.apiKeys[TOOL_FIRECRAWL_SECRET] }
     }
-    // imageGeneration: multi-field config, only apiKey is keychain-backed → hydrate
-    // the key onto the existing config (don't replace the whole block like firecrawl).
-    if (merged.imageGeneration && kc.apiKeys[TOOL_IMAGEGEN_SECRET]) {
-      merged.imageGeneration.apiKey = kc.apiKeys[TOOL_IMAGEGEN_SECRET]
-    }
     delete kc.apiKeys[TOOL_WEBSEARCH_SECRET]
     delete kc.apiKeys[TOOL_FIRECRAWL_SECRET]
-    delete kc.apiKeys[TOOL_IMAGEGEN_SECRET]
 
     merged.apiKeys = kc.apiKeys
     merged.credentials = kc.credentials
@@ -237,9 +218,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const id =
       tool === "websearch"
         ? TOOL_WEBSEARCH_SECRET
-        : tool === "firecrawl"
-          ? TOOL_FIRECRAWL_SECRET
-          : TOOL_IMAGEGEN_SECRET
+        : TOOL_FIRECRAWL_SECRET
     await setApiKeySecret(id, key)
     const cur = get().settings
     const trimmed = key.trim()
@@ -256,15 +235,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     } else if (tool === "firecrawl") {
       next = { ...cur, firecrawl: trimmed ? { apiKey: trimmed } : undefined }
     } else {
-      // imageGeneration: multi-field config — preserve the rest, set only the key.
-      // The other fields are written via update() from the settings UI; here we
-      // just mirror the keychain value onto whatever config currently exists.
-      const ig = cur.imageGeneration ?? {
-        enabled: false,
-        providerId: "",
-        model: "",
-      }
-      next = { ...cur, imageGeneration: { ...ig, apiKey: trimmed || undefined } }
+      next = cur
     }
     set({ settings: next })
     await persistSettings(next)

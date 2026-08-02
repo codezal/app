@@ -153,7 +153,7 @@ export function StatsTab() {
             <Insight
               icon={CalendarDays}
               label={t("settings.stats.modeSplit")}
-              value={`${stats.modeSplit.build} · ${stats.modeSplit.plan} · ${stats.modeSplit.orchestra}`}
+              value={`${stats.modeSplit.build} · ${stats.modeSplit.plan}`}
               sub={t("settings.stats.modeLegend")}
             />
             <Insight

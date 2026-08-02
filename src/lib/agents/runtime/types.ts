@@ -13,25 +13,39 @@ export type EngineCapabilities = {
   cancellation: "cooperative" | "hard"
 }
 
-export type SupervisorPoolEntry = {
-  id: string
-  agentName: string
-  enabled: boolean
-  label?: string
-  engine: AgentEngineRef
+// Fixed orchestration roles. Every role resolves to a provider/model pair
+// (optional — unset fields inherit the session's provider/model), so users can
+// route cheap models to easy tasks and strong models to hard ones.
+export type AgentRoleId = "orchestrator" | "planner" | "worker" | "reviewer" | "small"
+
+export const AGENT_ROLES: AgentRoleId[] = [
+  "orchestrator",
+  "planner",
+  "worker",
+  "reviewer",
+  "small",
+]
+
+// Per-role model mapping. Empty provider/model → inherit session model.
+export type RoleModelConfig = {
+  provider?: ProviderId
+  model?: string
 }
 
 export type SupervisorSettings = {
   enabled: boolean
   routing: "hybrid"
   autoDelegate: boolean
+  // When on, a reviewer run reviews the merged diff after a delegation and
+  // appends structured findings (uses the `reviewer` role).
+  autoReview: boolean
   maxParallelRuns: number
   maxChildRunsPerTurn: number
   maxDepth: 1
   maxWallClockMs: number
   isolation: "auto" | "none" | "worktree"
   mergePolicy: "safe-auto" | "manual"
-  pool: SupervisorPoolEntry[]
+  roles: Partial<Record<AgentRoleId, RoleModelConfig>>
 }
 
 export type AgentRunContext = {
@@ -47,7 +61,9 @@ export type AgentRunSpec = {
   sessionId: string
   depth: number
   agentName: string
-  engine: AgentEngineRef
+  // Resolved by the executor (role → engine); the supervisor itself stays
+  // engine-agnostic.
+  engine?: AgentEngineRef
   task: string
   context?: AgentRunContext
   signal: AbortSignal
@@ -100,7 +116,7 @@ export type SupervisorDispatch = {
   existingChildCount?: number
   context?: AgentRunContext
   signal?: AbortSignal
-  dispatches: Array<{ poolEntryId: string; task: string }>
+  dispatches: Array<{ role: AgentRoleId; task: string }>
 }
 
 export type AgentRunExecutor = (run: AgentRunSpec) => Promise<AgentRunResult>

@@ -48,7 +48,7 @@ import type { ProviderId, ReasoningEffort } from "@/lib/providers"
 import { createId } from "@/lib/id"
 import { t as tStatic } from "@/lib/i18n"
 import type { ModelMessage } from "ai"
-import type { AgentCardPart, OrchestraConfig } from "@/lib/orchestra/types"
+import type { AgentCardPart } from "@/lib/orchestra/types"
 import type { AgentMode, Message, Part, ProjectMeta, Session, SessionGoal, SessionMeta, SideChatMessage, SideChatThread, TodoItem } from "./types"
 
 
@@ -260,7 +260,6 @@ type SessionsState = {
   ) => void
   removeSideChatFor: (sessionId: string, threadId: string) => void
 
-  setOrchestra: (cfg: OrchestraConfig | undefined) => void
 
   setHandleFor: (sessionId: string, handle: string | undefined) => void
 
@@ -1285,7 +1284,6 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         return { ...s, sideChats: next, updatedAt: Date.now() }
       }),
 
-    setOrchestra: (cfg) => mutActive((s) => ({ ...s, orchestra: cfg, updatedAt: Date.now() })),
 
     setHandleFor: (sessionId, handle) => {
       const norm = handle && handle.trim() ? handle.trim() : undefined
@@ -1631,7 +1629,6 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         openFiles: [],
         activeFile: null,
         mode: a.mode,
-        ...(a.orchestra ? { orchestra: { ...a.orchestra } } : {}),
         ...(a.reasoningEffort ? { reasoningEffort: a.reasoningEffort } : {}),
         ...(a.permission ? { permission: [...a.permission] } : {}),
         ...(a.todos?.length ? { todos: a.todos.map((t) => ({ ...t })) } : {}),
@@ -1706,7 +1703,6 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         openFiles: [],
         activeFile: null,
         mode: src.mode,
-        ...(src.orchestra ? { orchestra: { ...src.orchestra } } : {}),
         ...(src.reasoningEffort ? { reasoningEffort: src.reasoningEffort } : {}),
         ...(src.permission ? { permission: [...src.permission] } : {}),
         ...(src.todos?.length ? { todos: src.todos.map((t) => ({ ...t })) } : {}),
@@ -1750,7 +1746,6 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
         openFiles: [],
         activeFile: null,
         mode: src.mode,
-        ...(src.orchestra ? { orchestra: { ...src.orchestra } } : {}),
         ...(src.reasoningEffort ? { reasoningEffort: src.reasoningEffort } : {}),
         ...(src.permission ? { permission: [...src.permission] } : {}),
         ...(src.todos?.length ? { todos: src.todos.map((t) => ({ ...t })) } : {}),

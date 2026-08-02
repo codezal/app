@@ -1,11 +1,19 @@
 export { capabilitiesForEngine } from "./capabilities"
 export { sanitizeRunContext } from "./context"
-export { DEFAULT_SUPERVISOR_SETTINGS, RunSupervisor, findSupervisorPoolEntry } from "./supervisor"
-export { workerConfigForPoolEntry, workerExecutionAdapter } from "./orchestra-adapter"
-export { dispatchSupervisorAgents } from "./dispatch"
+export { DEFAULT_SUPERVISOR_SETTINGS, RunSupervisor } from "./supervisor"
+export {
+  resolveRoleEngine,
+  resolveMainEngine,
+  resolveSmallEngine,
+  smallModelFor,
+  workerConfigForRole,
+  rolesCatalogForPrompt,
+} from "./roles"
+export { dispatchSupervisorAgents, runReviewer, collectWorkingDiff, REVIEW_SYSTEM_PROMPT } from "./dispatch"
 export type { DelegateAgentsInput } from "./dispatch"
 export type {
   AgentEngineRef,
+  AgentRoleId,
   AgentRunContext,
   AgentRun,
   AgentRunEvent,
@@ -13,7 +21,8 @@ export type {
   AgentRunResult,
   AgentRunSpec,
   EngineCapabilities,
+  RoleModelConfig,
   SupervisorDispatch,
-  SupervisorPoolEntry,
   SupervisorSettings,
 } from "./types"
+export { AGENT_ROLES } from "./types"

@@ -48,10 +48,14 @@ export const startSdkWorker: RunnerStart = async ({
         const modelId = config.model ?? settings.defaultModel
 
         let systemPrompt = DEFAULT_SYSTEM
-        const presetName = config.presetAgent ?? settings.defaultAgent
-        if (presetName) {
-          const ag = await findAgent(configWorkspace, presetName)
-          if (ag) systemPrompt = ag.systemPrompt
+        if (config.systemPrompt) {
+          systemPrompt = config.systemPrompt
+        } else {
+          const presetName = config.presetAgent ?? settings.defaultAgent
+          if (presetName) {
+            const ag = await findAgent(configWorkspace, presetName)
+            if (ag) systemPrompt = ag.systemPrompt
+          }
         }
 
         const model = await buildLanguageModel({ providerId: provider, modelId, settings })

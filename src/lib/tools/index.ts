@@ -31,6 +31,7 @@ import CREATE_PR_DESC from "./prompts/create_pr.txt?raw"
 import SKILL_DESC from "./prompts/skill.txt?raw"
 import SPAWN_AGENT_DESC from "./prompts/spawn_agent.txt?raw"
 import DELEGATE_AGENTS_DESC from "./prompts/delegate_agents.txt?raw"
+import REVIEW_CHANGES_DESC from "./prompts/review_changes.txt?raw"
 import REMEMBER_DESC from "./prompts/remember.txt?raw"
 import NOTEBOOK_EDIT_DESC from "./prompts/notebook_edit.txt?raw"
 import NOTIFY_DESC from "./prompts/notify.txt?raw"
@@ -53,13 +54,9 @@ import BROWSER_SCROLL_DESC from "./prompts/browser_scroll.txt?raw"
 import BROWSER_HOVER_DESC from "./prompts/browser_hover.txt?raw"
 import BROWSER_WAIT_DESC from "./prompts/browser_wait.txt?raw"
 import BROWSER_EVAL_DESC from "./prompts/browser_eval.txt?raw"
-import GENERATE_IMAGE_DESC from "./prompts/generate_image.txt?raw"
 import { editNotebook } from "./notebook"
 import { startMonitor, stopMonitor, listMonitors } from "./monitor"
 import { sendDesktopNotification } from "../notify"
-import { resolveImageGen, generateImage } from "@/lib/image-gen"
-import { writeBinaryFileSafe } from "@/lib/fs-safe"
-import { useGeneratedImages } from "@/store/generated-images"
 import { emitMonitor } from "../monitor-bus"
 import { emitSessionMessage } from "../session-message-bus"
 import { resolveHandle, listPeers, handleTaken, normHandle, rateOk } from "../session-inbox"
@@ -145,7 +142,7 @@ import { estimateTextTokens } from "@/lib/tokens"
 import { buildMcpTools, listPluginMcps, listConnectedMcpResources, readMcpResource } from "../mcp"
 import { listPluginHooks } from "../hooks"
 import { createId } from "@/lib/id"
-import type { Message, Settings } from "@/store/types"
+import type { Message } from "@/store/types"
 import { isAbsolutePath, resolveInWorkspace, resolveAny, WorkspaceError, assertRealPathWithinWorkspace } from "./paths"
 import { humanSize } from "@/lib/open"
 import { withLock } from "../lock"
@@ -824,14 +821,6 @@ export const READONLY_ALLOW = new Set<string>([
   "mcp_resource", "tool_search",
 ])
 
-function imageGenConfigured(settings: Settings): boolean {
-  const c = settings.imageGeneration
-  if (!c?.enabled || !c.model?.trim()) return false
-  const isCustom = !c.providerId || c.providerId === "custom"
-  if (isCustom) return Boolean(c.baseUrl?.trim() && c.apiKey?.trim())
-  return Boolean(c.providerId)
-}
-
 export async function buildAllTools(
   workspace: string | undefined,
   mcpServers: Parameters<typeof buildMcpTools>[0] = [],
@@ -843,7 +832,6 @@ export async function buildAllTools(
   const local = buildTools(workspace, ownerSessionId, configWorkspace, maxReadChars, readChunkLimit)
   const merged: ToolSet = { ...local }
   if (!useSettingsStore.getState().settings.firecrawl?.apiKey) delete merged.firecrawl
-  if (!imageGenConfigured(useSettingsStore.getState().settings)) delete merged.generate_image
   Object.assign(merged, browserToolSet(ownerSessionId))
   merged.search_harness_history = tool({
     description:
@@ -980,10 +968,6 @@ export async function buildAllTools(
     })
   }
   const mode = useSessionsStore.getState().sessions[ownerSessionId]?.mode ?? "build"
-  if (mode !== "orchestra") {
-    delete merged.dispatch_workers
-    delete merged.merge_workers
-  }
   if (mode === "plan") {
     // Plan mode is read-only. The runtime gate already blocks these tools, but
     // advertising them to the model causes futile retry loops (it keeps calling
@@ -1010,11 +994,7 @@ export async function buildAllTools(
     useSettingsStore.getState().settings.supervisor ??
     (await import("@/lib/agents/runtime/supervisor")).DEFAULT_SUPERVISOR_SETTINGS
   const delegationMode = useSessionsStore.getState().sessions[ownerSessionId]?.delegationMode ?? "solo"
-  if (
-    delegationMode === "solo" ||
-    !supervisor.enabled ||
-    !supervisor.pool.some((entry) => entry.enabled)
-  ) {
+  if (delegationMode === "solo" || !supervisor.enabled) {
     delete merged.delegate_agents
   }
   if (getEffectiveSettings(configWorkspace).memory?.autonomousRemember === false) {
@@ -1602,45 +1582,6 @@ export function buildTools(
       },
     }),
 
-    // Sends the request to the configured image endpoint and saves the result under generated-images/.
-    generate_image: tool({
-      description: GENERATE_IMAGE_DESC,
-      inputSchema: z.object({
-        prompt: z.string().describe("Detailed description of the image to generate"),
-        size: z
-          .string()
-          .optional()
-          .describe('Image size "WxH" (e.g. "1024x1024") or "auto"'),
-      }),
-      execute: async ({ prompt, size }, { toolCallId }) => {
-        const settings = useSettingsStore.getState().settings
-        const r = await resolveImageGen(settings)
-        if (!r.resolved) {
-          return `Image generation unavailable: ${r.error}`
-        }
-        let img
-        try {
-          img = await generateImage(prompt, r.resolved, size)
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e)
-          return `Image generation failed: ${redactInjectionAttempts(msg).text}`
-        }
-        const comma = img.dataUrl.indexOf(",")
-        const base64 = comma >= 0 ? img.dataUrl.slice(comma + 1) : img.dataUrl
-        const sub = img.mime.split("/")[1]?.split(";")[0]?.toLowerCase() ?? ""
-        const ext = /^[a-z0-9]{1,5}$/.test(sub) ? (sub === "jpeg" ? "jpg" : sub) : "png"
-        const rel = `generated-images/${createId("image")}.${ext}`
-        try {
-          const abs = resolveInWorkspace(workspace, rel)
-          await writeBinaryFileSafe(abs, base64)
-        } catch (e) {
-          return `Image generated but could not be saved: ${e instanceof Error ? e.message : String(e)}`
-        }
-        useGeneratedImages.getState().add(toolCallId, img.dataUrl)
-        return `Image generated and saved to ${rel}. It is shown to the user.`
-      },
-    }),
-
     remember: tool({
       description: REMEMBER_DESC,
       inputSchema: z.object({
@@ -1992,74 +1933,18 @@ export function buildTools(
       },
     }),
 
-    dispatch_workers: tool({
-      description:
-        "ORCHESTRA MODE: dispatch one or more tasks to the worker pool in PARALLEL. " +
-        "When all workers finish, results return as a JSON list. Workers operate independently " +
-        "and have no direct communication with each other; you must synthesize the result. The current worker pool " +
-        "is listed in the system prompt catalog.",
-      inputSchema: z.object({
-        dispatches: z
-          .array(
-            z.object({
-              workerIdx: z
-                .number()
-                .int()
-                .min(1)
-                .max(5)
-                .describe("Worker index in the pool (1-5)"),
-              task: z
-                .string()
-                .describe("Task for the worker: clear, self-contained, and concise"),
-            }),
-          )
-          .min(1)
-          .max(5),
-      }),
-      execute: async ({ dispatches }, ctx) => {
-        const sess = useSessionsStore.getState().sessions[ownerSessionId]
-        if (!sess?.orchestra || sess.mode !== "orchestra") {
-          throw new Error("Orchestra mode is not active; dispatch_workers cannot be called")
-        }
-        const pendingMsg = [...sess.messages]
-          .reverse()
-          .find((m) => m.role === "assistant" && m.pending)
-        if (!pendingMsg) throw new Error("Pending assistant message not found")
-
-        // Propagate the parent streamText abort signal to workers (Composer "stop").
-        const parentSignal = (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal
-
-        const { dispatchWorkers } = await import("../orchestra/runtime")
-        const results = await dispatchWorkers(
-          sess.orchestra,
-          dispatches,
-          pendingMsg.id,
-          ownerSessionId,
-          sess.workspacePath,
-          parentSignal,
-        )
-        const trimmed = results.map((r) => ({
-          ...r,
-          output: truncateForContext(r.output, WORKER_OUTPUT_MAX),
-          changedFiles:
-            Array.isArray(r.changedFiles) && r.changedFiles.length > 50
-              ? [...r.changedFiles.slice(0, 50), `... +${r.changedFiles.length - 50} more files`]
-              : r.changedFiles,
-          errorMessage: r.errorMessage
-            ? truncateForContext(r.errorMessage, 2000)
-            : r.errorMessage,
-        }))
-        return JSON.stringify(trimmed, null, 2)
-      },
-    }),
-
     delegate_agents: tool({
       description: DELEGATE_AGENTS_DESC,
       inputSchema: z.object({
         dispatches: z
           .array(
             z.object({
-              poolEntryId: z.string().min(1).describe("Enabled pool entry id from the Agent Pool"),
+              role: z
+                .enum(["worker", "reviewer"])
+                .optional()
+                .describe(
+                  'Agent role to run this task as: "worker" (default — implementation, writes code) or "reviewer" (read-only code review). The role\'s model comes from Settings → Agent Orchestration; unset roles inherit the session model.',
+                ),
               task: z.string().min(1).describe("Clear, self-contained subtask"),
             }),
           )
@@ -2079,7 +1964,10 @@ export function buildTools(
           session,
           parentMessageId: parentMessage.id,
           settings: useSettingsStore.getState().settings.supervisor,
-          dispatches,
+          dispatches: dispatches.map((d) => ({
+            role: d.role ?? "worker",
+            task: d.task,
+          })),
           signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
         })
         return JSON.stringify(
@@ -2093,40 +1981,35 @@ export function buildTools(
       },
     }),
 
-    merge_workers: tool({
-      description:
-        "ORCHESTRA MODE: conflict-aware merge of isolated worker branches (codezal/wk-*) into the current branch. " +
-        "Each writing worker commits to its own branch after dispatch_workers; this tool merges them sequentially. " +
-        "If the parent working tree is DIRTY, it safely skips to avoid risking the user's uncommitted work. " +
-        "Instead of forcing conflicts, it reports per branch; conflicted merges are aborted and the rest continue. " +
-        "After successful merges, VERIFY with build/tests. Take branch names from the 'branch' field in dispatch_workers results.",
-      inputSchema: z.object({
-        branches: z
-          .array(z.string())
-          .min(1)
-          .describe("Worker branch names to merge (for example 'codezal/wk-1-1-ab12cd34')"),
-      }),
-      execute: async ({ branches }) => {
-        const sess = useSessionsStore.getState().sessions[ownerSessionId]
-        if (!sess?.orchestra || sess.mode !== "orchestra") {
-          throw new Error("Orchestra mode is not active; merge_workers cannot be called")
-        }
-        const wsPath = sess.workspacePath
-        if (!wsPath) return "No workspace; cannot merge."
+    review_changes: tool({
+      description: REVIEW_CHANGES_DESC,
+      inputSchema: z.object({}),
+      execute: async (_args, ctx) => {
+        await gateFor("review_changes", {})
+        const session = useSessionsStore.getState().sessions[ownerSessionId]
+        if (!session) throw new Error("Session not found")
+        const wsPath = session.workspacePath
+        if (!wsPath) return "No workspace; nothing to review."
         const repoPath = await findRepoRoot(wsPath)
-        if (!repoPath) return "Not a git repo; cannot merge."
-        await gateFor("merge_workers", { branches })
-        const { mergeWorkerBranches } = await import("../orchestra/isolation")
-        const results = await mergeWorkerBranches(repoPath, branches)
-        return results
-          .map((r) => {
-            if (r.status === "merged") return `✅ ${r.branch} → merged (${r.mergeSha})`
-            if (r.status === "conflict")
-              return `⚠️ ${r.branch} → CONFLICT: ${r.conflictFiles?.join(", ") ?? "?"} (aborted, not merged)`
-            if (r.status === "skipped") return `⏭️ ${r.branch} → skipped: ${r.note ?? ""}`
-            return `❌ ${r.branch} → error: ${r.note ?? ""}`
-          })
-          .join("\n")
+        if (!repoPath) return "Not a git repo; nothing to review."
+        const { collectWorkingDiff, runReviewer } = await import("@/lib/agents/runtime")
+        const diff = await collectWorkingDiff(repoPath)
+        if (!diff) return "No uncommitted changes to review."
+        const pendingMessage = [...session.messages]
+          .reverse()
+          .find((message) => message.role === "assistant" && message.pending)
+        if (!pendingMessage) throw new Error("Pending assistant message not found")
+        const result = await runReviewer({
+          session,
+          parentMessageId: pendingMessage.id,
+          settings: useSettingsStore.getState().settings.supervisor,
+          diff,
+          signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
+        })
+        if (result.status !== "done") {
+          return `Review failed: ${result.errorMessage ?? result.status}`
+        }
+        return result.output || "(reviewer returned no findings)"
       },
     }),
 
@@ -2168,21 +2051,24 @@ export function buildTools(
         }
 
         const supervisorSettings = useSettingsStore.getState().settings.supervisor
-        const { findSupervisorPoolEntry, dispatchSupervisorAgents } = await import(
+        const { resolveRoleEngine, dispatchSupervisorAgents } = await import(
           "@/lib/agents/runtime"
         )
-        const poolEntry = findSupervisorPoolEntry(supervisorSettings, name)
-        if (poolEntry && poolEntry.engine.kind !== "sdk") {
-          const parent = useSessionsStore.getState().sessions[ownerSessionId]
-          const pendingMessage = parent
-            ? [...parent.messages].reverse().find((message) => message.role === "assistant" && message.pending)
-            : undefined
-          if (!parent || !pendingMessage) return "Pending assistant message not found"
+        // When the supervisor is on and the worker role is pinned to a specific
+        // engine, run the subagent as a delegated worker run instead of an
+        // in-process spawn (lets the user route subagent work to another model).
+        const parentSess = useSessionsStore.getState().sessions[ownerSessionId]
+        const workerEngine = resolveRoleEngine(supervisorSettings, "worker", parentSess)
+        if (supervisorSettings.enabled && workerEngine && parentSess) {
+          const pendingMessage = [...parentSess.messages]
+            .reverse()
+            .find((message) => message.role === "assistant" && message.pending)
+          if (!pendingMessage) return "Pending assistant message not found"
           const [result] = await dispatchSupervisorAgents({
-            session: parent,
+            session: parentSess,
             parentMessageId: pendingMessage.id,
             settings: supervisorSettings,
-            dispatches: [{ poolEntryId: poolEntry.id, task }],
+            dispatches: [{ role: "worker", task }],
             signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
           })
           void fireSubagentStop(result.status)
@@ -2212,7 +2098,7 @@ export function buildTools(
         const liveWorkspace = parent.workspacePath || workspace
         const fullSet = buildTools(liveWorkspace, ownerSessionId, configWorkspace)
         const subTools: ToolSet = {}
-        const SUBAGENT_STRIP = new Set(["spawn_agent", "delegate_agents", "dispatch_workers", "merge_workers"])
+        const SUBAGENT_STRIP = new Set(["spawn_agent", "delegate_agents", "review_changes"])
         if (agent.tools && agent.tools.length > 0) {
           for (const t of agent.tools) {
             if (!SUBAGENT_STRIP.has(t) && fullSet[t]) subTools[t] = fullSet[t]

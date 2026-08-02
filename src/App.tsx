@@ -48,15 +48,12 @@ const SearchOverlay = lazy(() =>
 )
 import { ApprovalModal } from "@/components/ApprovalModal"
 import { QuestionModal } from "@/components/QuestionModal"
-// Routines / Fork / Orchestra — lazy: conditionally mounted overlays.
+// Routines / Fork / Agent panes — lazy: conditionally mounted overlays.
 const AutopilotPage = lazy(() =>
   import("@/components/RoutinesOverlay").then((m) => ({ default: m.AutopilotPage })),
 )
 const ForkDialog = lazy(() =>
   import("@/components/ForkDialog").then((m) => ({ default: m.ForkDialog })),
-)
-const OrchestraConfigModal = lazy(() =>
-  import("@/components/OrchestraConfigModal").then((m) => ({ default: m.OrchestraConfigModal })),
 )
 import { Select } from "@/components/Select"
 const HelpOverlay = lazy(() =>
@@ -105,7 +102,6 @@ import {
 } from "@/lib/memory-learn"
 import { watchWorkspace } from "@/lib/file-watcher"
 import { DEFAULT_TOKEN_SAVERS } from "@/lib/token-savers/types"
-import { loadImageDataUrl } from "@/lib/image-store"
 import { costUsd } from "@/lib/pricing"
 import {
   shouldCompact,
@@ -151,7 +147,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import { useJobsStore } from "@/store/jobs"
 import { useSettingsStore } from "@/store/settings"
 import { resolveEffectiveSettings, getEffectiveSettings } from "@/lib/config"
-import type { Message, MessageImage, MessageFile, MessagePdf } from "@/store/types"
+import type { Message, MessageFile, MessagePdf } from "@/store/types"
 import { registerDropTarget } from "@/lib/internal-drag"
 import { t as tStatic } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -298,7 +294,6 @@ export default function App() {
   const [sidebarHidden, setSidebarHidden] = useState(false)
   const [chatScrolled, setChatScrolled] = useState(false)
   const [userThemes, setUserThemes] = useState<ThemePreset[]>([])
-  const [showOrchestra, setShowOrchestra] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [sideChatOpen, setSideChatOpen] = useState(false)
   const [sideChatThreadId, setSideChatThreadId] = useState<string | null>(null)
@@ -1054,7 +1049,6 @@ export default function App() {
 
   async function onSend(
     text: string,
-    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     // baloncukta chip render edilir.
@@ -1076,7 +1070,7 @@ export default function App() {
 
     const activeNow = useSessionsStore.getState().active
     if (!activeNow) return
-    await dispatchTurn(activeNow.id, text, images, override, meta, files, pdfs)
+    await dispatchTurn(activeNow.id, text, override, meta, files, pdfs)
   }
 
   // AI Review (PRPanel "AI Review" butonu) → mevcut /review komutunu subtask olarak
@@ -1087,7 +1081,7 @@ export default function App() {
       if (!rendered) return
       const compact = `/review${args ? ` ${args}` : ""}`
       const body = `Bunu bir alt-görev olarak \`spawn_agent\` ile çalıştır ve sonucu özetle:\n\n${rendered}`
-      void onSend(compact, undefined, undefined, body)
+      void onSend(compact, undefined, body)
     }
     window.addEventListener("codezal:run-review", onRunReview as EventListener)
     return () => window.removeEventListener("codezal:run-review", onRunReview as EventListener)
@@ -1227,7 +1221,6 @@ export default function App() {
 
   async function onSendSplit(
     text: string,
-    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -1237,7 +1230,7 @@ export default function App() {
     if (!splitId) return
     if (!useSessionsStore.getState().sessions[splitId]) return
     await useSessionsStore.getState().commitDetached(splitId)
-    await dispatchTurn(splitId, text, images, override, meta, files, pdfs)
+    await dispatchTurn(splitId, text, override, meta, files, pdfs)
   }
 
   // settings warm → UserPromptSubmit hook → auto-compaction → user/asst push →
@@ -1245,7 +1238,6 @@ export default function App() {
   async function dispatchTurn(
     sid: string,
     text: string,
-    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -1264,7 +1256,6 @@ export default function App() {
       preparing: preparingTurns.has(sid),
       hasAttachments:
         meta !== undefined ||
-        (images?.length ?? 0) > 0 ||
         (files?.length ?? 0) > 0 ||
         (pdfs?.length ?? 0) > 0,
     })
@@ -1288,7 +1279,7 @@ export default function App() {
 
     preparingTurns.add(sid)
     try {
-      await dispatchTurnInner(sid, text, images, override, meta, files, pdfs)
+      await dispatchTurnInner(sid, text, override, meta, files, pdfs)
     } finally {
       preparingTurns.delete(sid)
     }
@@ -1297,7 +1288,6 @@ export default function App() {
   async function dispatchTurnInner(
     sid: string,
     text: string,
-    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -1363,7 +1353,7 @@ export default function App() {
 
       const snapM = useSessionsStore.getState().sessions[sid]!
       const metaModel = await buildUserContent(meta, undefined)
-      const visibleModel = await buildUserContent(effectiveText, images)
+      const visibleModel = await buildUserContent(effectiveText)
       const turnUsers: ModelMessage[] = [
         { role: "user", content: metaModel },
         { role: "user", content: visibleModel },
@@ -1406,7 +1396,6 @@ export default function App() {
       id: createId("message"),
       role: "user",
       content: text,
-      ...(images && images.length ? { images } : {}),
       ...(files && files.length ? { files } : {}),
       ...(pdfs && pdfs.length ? { pdfs } : {}),
       modelMsgCount: 1,
@@ -1422,7 +1411,7 @@ export default function App() {
     useSessionsStore.getState().pushMessageFor(sid, asstMsg)
 
     const snap = useSessionsStore.getState().sessions[sid]!
-    const userContent = await buildUserContent(effectiveText + fileRefsText, images, pdfs, pdfNative)
+    const userContent = await buildUserContent(effectiveText + fileRefsText, pdfs, pdfNative)
     let history: ModelMessage[]
     if (snap.modelMessages) {
       history = [...snap.modelMessages, { role: "user", content: userContent }]
@@ -2016,9 +2005,6 @@ export default function App() {
       case "help":
         setShowHelp(true)
         return
-      case "orchestra":
-        setShowOrchestra(true)
-        return
       case "goal": {
         const trimmed = args.trim()
         if (trimmed.toLowerCase() === "stop" || trimmed.toLowerCase() === "cancel") {
@@ -2112,13 +2098,12 @@ export default function App() {
   }
 
 
-  // Build the AI SDK user-message content from text + optional images. No images
-  // → plain string (unchanged behaviour). With images → a parts array (empty
-  // text is dropped). The image part carries the base64 data URL; the AI SDK
-  // re-encodes it per provider, so no provider-specific handling is needed here.
+  // Build the AI SDK user-message content from text + optional PDFs. No PDFs
+  // → plain string (unchanged behaviour). With PDFs → a parts array (empty
+  // text is dropped). PDF content is either a native file part (when the model
+  // supports it) or extracted text.
   async function buildUserContent(
     text: string,
-    images?: MessageImage[],
     pdfs?: MessagePdf[],
     // Model native PDF destekliyor mu (modalities.input "pdf"). true → AI SDK
     pdfNative?: boolean,
@@ -2126,27 +2111,16 @@ export default function App() {
     | string
     | Array<
         | { type: "text"; text: string }
-        | { type: "image"; image: string; mediaType?: string }
         | { type: "file"; data: string; mediaType: string; filename?: string }
       >
   > {
-    const hasImages = !!images && images.length > 0
     const hasPdfs = !!pdfs && pdfs.length > 0
-    if (!hasImages && !hasPdfs) return text
+    if (!hasPdfs) return text
     const parts: Array<
       | { type: "text"; text: string }
-      | { type: "image"; image: string; mediaType?: string }
       | { type: "file"; data: string; mediaType: string; filename?: string }
     > = []
     if (text.trim()) parts.push({ type: "text", text })
-    if (images) {
-      for (const im of images) {
-        const image = im.dataUrl ?? (im.ref ? await loadImageDataUrl(im.ref, im.mime) : "")
-        // mediaType keeps openai-compatible converters from sniffing a bare
-        // top-level "image" type; DashScope needs a full image/* subtype.
-        if (image) parts.push({ type: "image", image, mediaType: im.mime || undefined })
-      }
-    }
     if (pdfs) {
       for (const p of pdfs) {
         if (pdfNative) {
@@ -2312,7 +2286,6 @@ export default function App() {
           onSend={onSend}
           onAbort={onAbort}
           onSlashAction={(a, args) => void onSlashAction(a, args)}
-          onOpenOrchestra={() => setShowOrchestra(true)}
           onRemember={(txt, scope) => void onRemember(txt, scope)}
           queued={queuedActive}
           onQueue={(txt) => {
@@ -2362,7 +2335,7 @@ export default function App() {
         {tStatic("a11y.skipToContent")}
       </a>
       <Toaster />
-      <MascotOverlay hidden={showSettings || showRoutines || showOrchestra || showHelp} />
+      <MascotOverlay hidden={showSettings || showRoutines || showHelp} />
       {settingsLoaded && !settings.onboardingCompleted && (
         <Suspense fallback={null}>
           <Onboarding />
@@ -2589,12 +2562,6 @@ export default function App() {
       {showSearch && (
         <Suspense fallback={null}>
           <SearchOverlay open={showSearch} onClose={() => setShowSearch(false)} />
-        </Suspense>
-      )}
-
-      {showOrchestra && (
-        <Suspense fallback={null}>
-          <OrchestraConfigModal onClose={() => setShowOrchestra(false)} />
         </Suspense>
       )}
 

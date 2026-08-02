@@ -17,6 +17,10 @@ export type WorkerConfig = {
   presetAgent?: string
   acpCommand?: string
   label?: string
+  // Deterministic per-run system prompt (takes precedence over presetAgent).
+  // Used by role runs (e.g. the reviewer contract) so prompts don't depend on
+  // user-authored agent files.
+  systemPrompt?: string
 }
 
 export type OrchestraConfig = {

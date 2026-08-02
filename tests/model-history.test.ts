@@ -114,24 +114,11 @@ describe("messagesToModelMessages", () => {
     expect(out).toEqual([{ role: "user", content: "devam" }])
   })
 
-  it("attaches stored images to the user message", () => {
+  it("empty user content → dropped (no model-visible part)", () => {
     const out = messagesToModelMessages([
-      msg({
-        id: "u1",
-        role: "user",
-        content: "buna bak",
-        images: [{ id: "i1", dataUrl: "data:image/png;base64,AAA", mime: "image/png" }],
-      }),
+      msg({ id: "u1", role: "user", content: "   " }),
     ])
-    expect(out).toEqual([
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "buna bak" },
-          { type: "image", image: "data:image/png;base64,AAA", mediaType: "image/png" },
-        ],
-      },
-    ])
+    expect(out).toEqual([])
   })
 
   it("falls back to content when parts carry nothing model-visible", () => {

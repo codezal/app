@@ -95,18 +95,6 @@ const PermissionRuleSchema = z
   })
   .loose()
 
-const AgentEngineSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("sdk"), providerId: z.string(), modelId: z.string() }).loose(),
-  z
-    .object({
-      kind: z.literal("acp"),
-      providerId: z.string(),
-      modelId: z.string().optional(),
-      command: z.string().optional(),
-    })
-    .loose(),
-])
-
 function boundedInt(defaultValue: number, min: number, max: number) {
   return z
     .number()
@@ -115,31 +103,36 @@ function boundedInt(defaultValue: number, min: number, max: number) {
     .catch(defaultValue)
 }
 
+const RoleModelConfigSchema = z
+  .object({
+    provider: z.string().optional(),
+    model: z.string().optional(),
+  })
+  .loose()
+
 function supervisorSchema(d: Settings["supervisor"]) {
   return z
     .object({
       enabled: z.boolean().catch(d.enabled),
       routing: z.literal("hybrid").catch(d.routing),
       autoDelegate: z.boolean().catch(d.autoDelegate),
+      autoReview: z.boolean().catch(d.autoReview),
       maxParallelRuns: boundedInt(d.maxParallelRuns, 1, 5),
       maxChildRunsPerTurn: boundedInt(d.maxChildRunsPerTurn, 1, 5),
       maxDepth: z.literal(1).catch(1),
       maxWallClockMs: boundedInt(d.maxWallClockMs, 1_000, 30 * 60 * 1000),
       isolation: z.enum(["auto", "none", "worktree"]).catch(d.isolation),
       mergePolicy: z.enum(["safe-auto", "manual"]).catch(d.mergePolicy),
-      pool: z
-        .array(
-          z
-            .object({
-              id: z.string().min(1),
-              agentName: z.string().min(1),
-              enabled: z.boolean(),
-              label: z.string().optional(),
-              engine: AgentEngineSchema,
-            })
-            .loose(),
-        )
-        .catch(d.pool),
+      roles: z
+        .object({
+          orchestrator: RoleModelConfigSchema.optional(),
+          planner: RoleModelConfigSchema.optional(),
+          worker: RoleModelConfigSchema.optional(),
+          reviewer: RoleModelConfigSchema.optional(),
+          small: RoleModelConfigSchema.optional(),
+        })
+        .loose()
+        .catch(d.roles),
     })
     .catch(d)
 }
@@ -229,20 +222,6 @@ export function makeSchema(d: Settings) {
         .optional()
         .catch(undefined),
       firecrawl: z.object({ apiKey: z.string().optional() }).optional().catch(undefined),
-      // Image generation — enables generate_image when configured. Lenient: a bad
-      // protocol/field degrades this block to undefined, not the whole settings.
-      imageGeneration: z
-        .object({
-          enabled: z.boolean().catch(false),
-          providerId: z.string().catch(""),
-          baseUrl: z.string().optional(),
-          apiKey: z.string().optional(),
-          model: z.string().catch(""),
-          defaultSize: z.string().optional(),
-          timeoutMs: z.number().optional(),
-        })
-        .optional()
-        .catch(undefined),
       providerCatalog: looseRecord.optional(),
       hooks: z.array(HookSchema).optional().catch(d.hooks),
       // Free-form blobs — validated loosely, repaired/merged by their own modules.

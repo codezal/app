@@ -2,7 +2,7 @@ import { streamText, tool, isStepCount } from "ai"
 import { z } from "zod"
 import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
-import { pickSmallModel } from "@/lib/small-model"
+import { smallModelCall } from "@/lib/small-model"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import type { Settings } from "@/store/types"
 
@@ -27,16 +27,22 @@ export async function enhancePrompt(args: {
   signal?: AbortSignal
 }): Promise<string> {
   const catalog = args.settings.providerCatalog?.data as ProvidersCatalog | undefined
-  const modelId = pickSmallModel(catalog, args.providerId) ?? args.fallbackModel
+  const engine = smallModelCall({
+    catalog,
+    providerId: args.providerId,
+    modelId: args.fallbackModel ?? "",
+    settings: args.settings,
+  })
+  const modelId = engine.modelId || args.fallbackModel
   if (!modelId) throw new Error("No available model")
 
   const model = await buildLanguageModel({
-    providerId: args.providerId,
+    providerId: engine.providerId,
     modelId,
     settings: args.settings,
   })
   // Gated providers (Kimi For Coding, Z.AI Coding) 403 bare generate calls.
-  const gated = isCodingAgentGated(args.providerId)
+  const gated = isCodingAgentGated(engine.providerId)
   const tools = gated
     ? { noop: tool({ description: "unused", inputSchema: z.object({}), execute: async () => "" }) }
     : undefined

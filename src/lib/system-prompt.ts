@@ -11,15 +11,16 @@ import { loadMethodsCatalog } from "./methods"
 import { buildSkillsPromptSection } from "./skills"
 import { readWorkspaceAgents, readUserAgents, buildAgentsCatalog } from "./agents"
 import { listPluginAgents } from "./agents/plugin"
-import type { OrchestraConfig } from "./orchestra/types"
 import { briefModeSection } from "./token-savers"
 import type { TokenSaverSettings } from "./token-savers/types"
 import { useI18nStore, languageName } from "./i18n"
 import { useSettingsStore } from "@/store/settings"
 import { sddAssistantPreamble } from "./sdd-prompts"
 import type { SddStage } from "@/store/types"
+import type { ProviderId } from "./providers"
 import type { SupervisorSettings } from "@/lib/agents/runtime"
 import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
+import { rolesCatalogForPrompt } from "@/lib/agents/runtime/roles"
 import { COMMIT_ATTRIBUTION_TRAILER } from "./commit-attribution"
 import { BASE_SYSTEM } from "./prompts/base-system"
 
@@ -97,10 +98,12 @@ const FAMILY_OVERLAY: Record<ModelFamily, string> = {
 export type SystemPromptInput = {
   workspacePath?: string
   modelLabel?: string
-  mode?: "plan" | "build" | "orchestra"
+  mode?: "plan" | "build"
   sddStage?: SddStage
   sddRequirementPath?: string
-  orchestra?: OrchestraConfig
+  // Current session provider/model — used by the agent-roles catalog to show
+  // which roles inherit the session model.
+  session?: { provider: ProviderId; model: string }
   // Token-saver toggles — when Brief Mode is enabled, an extra directive is
   // injected so the model responds in compressed style.
   tokenSavers?: TokenSaverSettings
@@ -245,64 +248,9 @@ function buildGoalBlock(g: { text: string; iter: number; maxIter: number; paused
   ].join("\n")
 }
 
-function buildOrchestraCatalog(cfg: OrchestraConfig): string {
-  const lines = [
-    "## ORCHESTRA MODE ACTIVE",
-    "You are an orchestra conductor — alongside your own tool loop you can dispatch parallel work to the worker pool.",
-    "Available agents in the worker pool:",
-    "",
-  ]
-  for (const w of cfg.workers) {
-    const modelInfo =
-      w.kind === "sdk"
-        ? `${w.provider ?? "?"}/${w.model ?? "?"}`
-        : `${w.kind} CLI${w.model ? ` (model hint: ${w.model})` : ""}`
-    const yoloTag = w.yolo ? " · YOLO" : ""
-    const presetTag = w.presetAgent ? ` · preset: ${w.presetAgent}` : ""
-    lines.push(`- **worker-${w.idx}** (${modelInfo}${yoloTag}${presetTag})`)
-  }
-  lines.push("")
-  lines.push(
-    "For complex tasks, dispatch 1-5 workers in parallel with `dispatch_workers([{workerIdx, task}, ...])`. " +
-      "The tool returns a status/output JSON per worker. You synthesize the results and dispatch again if needed.",
-  )
-  lines.push("")
-  lines.push("### Dispatch discipline")
-  lines.push(
-    "- **Synthesize — never lazy-delegate.** When workers report findings, read and understand them yourself, then write the next task as a concrete spec (file paths, line numbers, exact change). Never write \"based on your findings\" — that hands your own thinking to the worker.",
-  )
-  lines.push(
-    "- **Self-contained tasks.** Workers cannot see this conversation or each other. Every `task` string must carry all the context it needs: paths, signatures, error text, and what \"done\" looks like.",
-  )
-  lines.push(
-    "- **Parallelize independent work**, but keep write-heavy tasks that touch the same files to one worker at a time.",
-  )
-  lines.push(
-    "- **Verify by proof.** For non-trivial changes, dispatch a separate verifier worker that runs tests/typecheck and exercises edge cases — prove it works, don't just confirm it exists. Investigate failures; don't wave them off as unrelated.",
-  )
-  lines.push("")
-  lines.push("Task spec — bad vs good:")
-  lines.push("- Bad: \"Fix the bug we found\" · \"Based on the research, implement the fix\"")
-  lines.push(
-    "- Good: \"Fix the null deref in src/auth/validate.ts:42 — `user` is undefined when the session expires but the token is still cached. Add a null check before user.id; return 401 'Session expired'. Run the auth tests + typecheck, then report.\"",
-  )
-  return lines.join("\n")
-}
-
-function buildSupervisorCatalog(supervisor: SupervisorSettings): string {
-  const entries = supervisor.pool.filter((entry) => entry.enabled)
-  if (!supervisor.enabled || entries.length === 0) return ""
-  const lines = [
-    "## AVAILABLE AGENT POOL",
-    "You may delegate independent subtasks with delegate_agents. Choose only pool entry ids listed here.",
-    "Explicit user assignments override automatic routing. Synthesize all child results yourself.",
-    "",
-  ]
-  for (const entry of entries) {
-    const model = entry.engine.modelId ? `/${entry.engine.modelId}` : ""
-    lines.push(`- **${entry.id}**: ${entry.agentName} · ${entry.engine.providerId}${model}`)
-  }
-  return lines.join("\n")
+function buildAgentRolesCatalog(supervisor: SupervisorSettings, session: SystemPromptInput["session"]): string {
+  if (!supervisor.enabled) return ""
+  return rolesCatalogForPrompt(supervisor, session ?? { provider: "openai", model: "" })
 }
 
 function buildPeerCatalog(
@@ -363,7 +311,7 @@ export async function buildSystemPrompt({
   mode = "build",
   sddStage,
   sddRequirementPath,
-  orchestra,
+  session,
   tokenSavers,
   memory,
   deferredTools,
@@ -429,15 +377,12 @@ export async function buildSystemPrompt({
     )
   }
 
-  if (mode === "orchestra" && orchestra) {
-    parts.push("\n" + buildOrchestraCatalog(orchestra))
-  }
-
   const supervisorCatalog =
     (delegationMode ?? "solo") === "solo"
       ? ""
-      : buildSupervisorCatalog(
+      : buildAgentRolesCatalog(
           useSettingsStore.getState().settings.supervisor ?? DEFAULT_SUPERVISOR_SETTINGS,
+          session,
         )
   if (mode !== "plan" && supervisorCatalog) parts.push("\n" + supervisorCatalog)
 

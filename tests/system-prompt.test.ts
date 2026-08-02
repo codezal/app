@@ -34,7 +34,21 @@ vi.mock("@/lib/i18n", () => ({
 vi.mock("@/store/settings", () => ({
   useSettingsStore: {
     getState: vi.fn().mockReturnValue({
-      settings: { narrateProgress: true },
+      settings: {
+        narrateProgress: true,
+        supervisor: {
+          enabled: false,
+          autoDelegate: true,
+          autoReview: false,
+          maxParallelRuns: 3,
+          maxChildRunsPerTurn: 5,
+          maxDepth: 1,
+          maxWallClockMs: 1000,
+          isolation: "auto",
+          mergePolicy: "safe-auto",
+          roles: {},
+        },
+      },
     }),
   },
 }))
@@ -122,7 +136,7 @@ describe("buildSystemPrompt", () => {
     expect(r).not.toContain("PLAN MODE ACTIVE")
   })
 
-  it("delegationMode eksik → solo; adaptive → supervisor kataloğu", async () => {
+  it("delegationMode eksik → solo; adaptive → AGENT ORCHESTRATION kataloğu", async () => {
     mockSettings.mockReturnValue({
       settings: {
         narrateProgress: true,
@@ -130,27 +144,24 @@ describe("buildSystemPrompt", () => {
           enabled: true,
           routing: "hybrid",
           autoDelegate: true,
+          autoReview: false,
           maxParallelRuns: 3,
           maxChildRunsPerTurn: 5,
           maxDepth: 1,
           maxWallClockMs: 30 * 60 * 1000,
           isolation: "auto",
           mergePolicy: "safe-auto",
-          pool: [
-            {
-              id: "reviewer",
-              agentName: "reviewer",
-              enabled: true,
-              engine: { kind: "sdk", providerId: "openai", modelId: "gpt-test" },
-            },
-          ],
+          roles: {
+            reviewer: { provider: "openai", model: "gpt-test" },
+          },
         },
       },
     } as ReturnType<typeof useSettingsStore.getState>)
     const legacy = await buildSystemPrompt({})
     const adaptive = await buildSystemPrompt({ delegationMode: "adaptive" })
-    expect(legacy).not.toContain("AVAILABLE AGENT POOL")
-    expect(adaptive).toContain("AVAILABLE AGENT POOL")
+    expect(legacy).not.toContain("AGENT ORCHESTRATION")
+    expect(adaptive).toContain("AGENT ORCHESTRATION")
+    expect(adaptive).toContain("reviewer")
   })
 
   it("memory sections memory priority ile modele empoze edilir", async () => {
@@ -165,17 +176,17 @@ describe("buildSystemPrompt", () => {
     expect(joined).toContain("Follow repo rules.")
   })
 
-  it("orchestra modu + workers → ORCHESTRA MODE ACTIVE bloğu", async () => {
+  it("delegation aktif ama supervisor kapalı → AGENT ORCHESTRATION bloğu yok", async () => {
     const r = await buildSystemPrompt({
-      mode: "orchestra",
-      orchestra: {
-        workers: [
-          { idx: 0, kind: "sdk", provider: "anthropic", model: "claude-haiku-4-5" },
-        ],
-      },
+      delegationMode: "adaptive",
+      session: { provider: "anthropic", model: "claude-haiku-4-5" },
     })
-    expect(r).toContain("ORCHESTRA MODE ACTIVE")
-    expect(r).toContain("worker-0")
+    expect(r).not.toContain("AGENT ORCHESTRATION")
+  })
+
+  it("delegation solo → AGENT ORCHESTRATION bloğu yok", async () => {
+    const r = await buildSystemPrompt({ delegationMode: "solo" })
+    expect(r).not.toContain("AGENT ORCHESTRATION")
   })
 
   it("activeGoal → ACTIVE GOAL bloğu buildDynamicContext'te, cache-stable system prompt'ta DEĞİL", async () => {

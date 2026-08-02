@@ -7,7 +7,6 @@ import type {
   AgentRunResult,
   AgentRunSpec,
   SupervisorDispatch,
-  SupervisorPoolEntry,
   SupervisorSettings,
 } from "./types"
 
@@ -15,23 +14,19 @@ export const DEFAULT_SUPERVISOR_SETTINGS: SupervisorSettings = {
   enabled: false,
   routing: "hybrid",
   autoDelegate: true,
+  autoReview: false,
   maxParallelRuns: 3,
   maxChildRunsPerTurn: 5,
   maxDepth: 1,
   maxWallClockMs: 30 * 60 * 1000,
   isolation: "auto",
   mergePolicy: "safe-auto",
-  pool: [],
+  roles: {},
 }
 
-export function findSupervisorPoolEntry(
-  settings: SupervisorSettings,
-  agentName: string,
-): SupervisorPoolEntry | null {
-  if (!settings.enabled) return null
-  return settings.pool.find((entry) => entry.enabled && entry.agentName === agentName) ?? null
-}
-
+// Validates limits and eligibility; returns the dispatches that may run.
+// Role → engine resolution is the caller's job (see roles.ts) so the
+// supervisor stays deterministic and testable.
 export class RunSupervisor {
   private readonly settings: SupervisorSettings
 
@@ -40,33 +35,28 @@ export class RunSupervisor {
   }
 
   async dispatch(input: SupervisorDispatch, execute: AgentRunExecutor): Promise<AgentRunResult[]> {
-    const entries = this.resolve(input)
+    const dispatches = this.resolve(input)
     const semaphore = new Semaphore(this.settings.maxParallelRuns)
     return await Promise.all(
-      entries.map((entry, index) =>
-        semaphore.run(() => this.executeOne(input, entry, index, execute)),
+      dispatches.map((dispatch) =>
+        semaphore.run(() => this.executeOne(input, dispatch, execute)),
       ),
     )
   }
 
-  resolve(input: SupervisorDispatch): SupervisorPoolEntry[] {
+  resolve(input: SupervisorDispatch): SupervisorDispatch["dispatches"] {
     if (!this.settings.enabled) throw new Error("Agent Supervisor is not enabled")
     if (input.depth >= this.settings.maxDepth) throw new Error("Agent delegation depth limit reached")
     if (input.dispatches.length === 0) throw new Error("At least one child run is required")
     if ((input.existingChildCount ?? 0) + input.dispatches.length > this.settings.maxChildRunsPerTurn) {
       throw new Error(`Agent child run limit exceeded (${this.settings.maxChildRunsPerTurn})`)
     }
-    return input.dispatches.map(({ poolEntryId }) => {
-      const entry = this.settings.pool.find((candidate) => candidate.id === poolEntryId)
-      if (!entry?.enabled) throw new Error(`Supervisor pool entry is not enabled: ${poolEntryId}`)
-      return entry
-    })
+    return input.dispatches
   }
 
   private async executeOne(
     input: SupervisorDispatch,
-    entry: SupervisorPoolEntry,
-    index: number,
+    dispatch: SupervisorDispatch["dispatches"][number],
     execute: AgentRunExecutor,
   ): Promise<AgentRunResult> {
     const startedAt = Date.now()
@@ -79,9 +69,8 @@ export class RunSupervisor {
       parentRunId: input.parentRunId,
       sessionId: input.sessionId,
       depth: input.depth + 1,
-      agentName: entry.agentName,
-      engine: entry.engine,
-      task: input.dispatches[index].task,
+      agentName: dispatch.role,
+      task: dispatch.task,
       context: sanitizeRunContext(input.context),
       signal: controller.signal,
     }

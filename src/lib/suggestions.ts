@@ -7,7 +7,7 @@ import { streamText, tool, isStepCount } from "ai"
 import { z } from "zod"
 import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
-import { pickSmallModel } from "@/lib/small-model"
+import { smallModelCall } from "@/lib/small-model"
 import type { ProvidersCatalog } from "@/lib/providers-catalog"
 import { gitStatus } from "@/lib/git"
 import { useI18nStore, languageName } from "@/lib/i18n"
@@ -117,10 +117,15 @@ export async function generateSuggestions(opts: {
   goal?: string
   todos?: string
 }): Promise<Suggestion[]> {
-  const modelId = pickSmallModel(opts.catalog, opts.providerId) ?? opts.modelId
-  const model = await buildLanguageModel({
+  const engine = smallModelCall({
+    catalog: opts.catalog,
     providerId: opts.providerId,
-    modelId,
+    modelId: opts.modelId,
+    settings: opts.settings,
+  })
+  const model = await buildLanguageModel({
+    providerId: engine.providerId,
+    modelId: engine.modelId,
     settings: opts.settings,
   })
 

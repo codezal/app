@@ -180,7 +180,6 @@ export type Messages = {
   composer: {
     placeholder: string
     placeholderPlanning: string
-    placeholderOrchestra: string
     // Prompt enhance button — optional; non-EN locales fall back to en.
     enhance?: string
     enhanceFailed?: string
@@ -193,7 +192,6 @@ export type Messages = {
     sendHint: string
     stop: string
     attach: string
-    attachImage: string
     attachFileOrPhoto: string
     attachFolder: string
     pickFolder: string
@@ -202,15 +200,11 @@ export type Messages = {
     folderRequired: string
     modeBuild: string
     modePlan: string
-    modeOrchestra: string
-    orchestraModeClose: string
       planMode: string
       multitask: string
     planModeTitle: string
-    orchestraModeTitle: string
     modeGoal?: string
     planMenuHint?: string
-    orchestraMenuHint?: string
     goalMenuHint?: string
     goalCardActive?: string
     goalCardPaused?: string
@@ -272,9 +266,6 @@ export type Messages = {
     pasteBinary?: string
     pasteTooLarge?: string
     pasteUnreadable?: string
-    imageUnsupported?: string
-    imageUnsupportedFormat?: string
-    imageDecodeFailed?: string
     externalEditorNotFound?: string
     externalEditorFailed?: string
     pdfTooLarge?: string
@@ -436,8 +427,6 @@ export type Messages = {
     toolBrowserNavIng?: string
     toolBrowserShot?: string
     toolBrowserShotIng?: string
-    toolGenImage?: string
-    toolGenImageIng?: string
     toolBrowserConsole?: string
     toolBrowserConsoleIng?: string
     toolBrowserNetwork?: string
@@ -1110,56 +1099,6 @@ export type Messages = {
     noRuns?: string
   }
 
-  orchestraModal: {
-    title: string
-    description: string
-    workers: string
-    addWorker: string
-    workerName: string
-    workerProvider: string
-    workerModel: string
-    workerSystemPrompt: string
-    workerTools: string
-    removeWorker: string
-    saveConfig: string
-    headerTitle: string
-    workerCount: string
-    parentTitle: string
-    parentHint: string
-    workerHeading: string
-    yoloCountWarn: string
-    yoloMsg: string
-    cliCountWarn: string
-    cliMsg: string
-    startHint: string
-    cancel: string
-    start: string
-    presetEmpty: string
-    presetTitle: string
-    yoloLabel: string
-    removeWorkerTitle: string
-    cliModelPlaceholder: string
-    kindSdk: string
-    kindSdkHint: string
-    kindClaude: string
-    kindClaudeHint: string
-    kindCodex: string
-    kindCodexHint: string
-    kindOpencode: string
-    kindOpencodeHint: string
-    // ACP runner — optional so only en/tr define them; other locales fall back to base (en).
-    kindAcp?: string
-    kindAcpHint?: string
-    kindKimi?: string
-    kindKimiHint?: string
-    kindGemini?: string
-    kindGeminiHint?: string
-    acpCommandPlaceholder?: string
-    acpConnect?: string
-    acpConnecting?: string
-    acpConnectTitle?: string
-    acpModelSelect?: string
-  }
 
   helpOverlay: {
     title: string
@@ -1279,7 +1218,6 @@ export type Messages = {
       cliAgents?: string
       mcp: string
       hooks: string
-      orchestra: string
       web: string
       autoCompact: string
       memory: string
@@ -1374,6 +1312,23 @@ export type Messages = {
       pickerOther: string
     }
     cliAgents?: {
+      autoReview?: string
+      autoReviewDesc?: string
+      rolesTitle?: string
+      roleOrchestrator?: string
+      roleDescOrchestrator?: string
+      rolePlanner?: string
+      roleDescPlanner?: string
+      roleWorker?: string
+      roleDescWorker?: string
+      roleReviewer?: string
+      roleDescReviewer?: string
+      roleSmall?: string
+      roleDescSmall?: string
+      roleInherit?: string
+      rolePin?: string
+      roleProvider?: string
+      roleModel?: string
       title: string
       description: string
       visible: string
@@ -1414,14 +1369,6 @@ export type Messages = {
       supervisorTitle?: string
       supervisorDesc?: string
       supervisorEnabled?: string
-      supervisorPool?: string
-      supervisorPoolEmpty?: string
-      supervisorAdd?: string
-      supervisorRemove?: string
-      supervisorAgent?: string
-      supervisorEngine?: string
-      supervisorProvider?: string
-      supervisorModel?: string
       supervisorParallel?: string
       supervisorChildren?: string
       delegationAdaptive?: string
@@ -1531,22 +1478,6 @@ export type Messages = {
       providerHint: string
     }
     // Image generation tab (optional — EN fallback for non-EN locales).
-    imageGen?: {
-      title: string
-      hint: string
-      enable: string
-      providerLabel: string
-      providerCustom: string
-      baseUrlLabel: string
-      baseUrlPh: string
-      apiKeyLabel: string
-      apiKeyReuseHint: string
-      modelLabel: string
-      modelPh: string
-      sizeLabel: string
-      timeoutLabel: string
-      qualityHint: string
-    }
     memory: {
       title: string
       description: string
@@ -1619,7 +1550,6 @@ export type Messages = {
       // Optional — Statistics tab label. Falls back to EN if missing.
       stats?: string
       // Optional — Image Generation tab label. Falls back to EN if missing.
-      imageGen?: string
       // Optional — Local Models tab label. Falls back to "Local Models" if missing.
       local?: string
       // Optional — Harness History tab label. Falls back to "History" if missing.
@@ -2025,9 +1955,9 @@ export type Messages = {
   }
 
   errorBanner?: {
+      multimodalImage?: string
     retryAfter: string
     contentFiltered?: string
-    multimodalImage?: string
   }
 
   chatSearch?: {
@@ -2225,7 +2155,6 @@ export type Messages = {
     sidebarLandmark: string
     contextLandmark: string
     toolbarLandmark: string
-    attachedImage: string
   }
 
   imageLightbox?: {

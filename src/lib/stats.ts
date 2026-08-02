@@ -128,7 +128,7 @@ export function computeStats(rows: SessionUsageRow[], opts: ComputeOpts = {}): S
   const modelMap = new Map<string, RankEntry>()
   const providerMap = new Map<string, RankEntry>()
   const projectMap = new Map<string, RankEntry>()
-  const modeSplit: Record<AgentMode, number> = { build: 0, plan: 0, orchestra: 0 }
+  const modeSplit: Record<AgentMode, number> = { build: 0, plan: 0 }
   const reasoningSplit: Record<string, number> = {}
   // day-start → aggregate for the heatmap.
   const dayAgg = new Map<number, { tokens: number; sessions: number; cost: number }>()

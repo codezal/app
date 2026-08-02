@@ -1,0 +1,3 @@
+Request a read-only code review of the current uncommitted changes (staged + unstaged) in the workspace. A reviewer agent (the `reviewer` role — its model comes from Settings → Agent Orchestration, inheriting the session model when not pinned) reviews the diff and returns a findings report with severity-ranked issues (critical/warning/nit) with file:line references and suggested fixes.
+
+Use this after implementing changes (especially after delegate_agents) before summarizing to the user, so you can fix issues the reviewer finds. The reviewer cannot edit files — fixing is your job.

@@ -1,4 +1,4 @@
-// preview.ts / generated-images.ts deseninde zustand. Disk I/O burada (fs-safe +
+// preview.ts deseninde zustand. Disk I/O burada (fs-safe +
 import { create } from "zustand"
 import { exists, mkdir, readDir } from "@tauri-apps/plugin-fs"
 import { readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"

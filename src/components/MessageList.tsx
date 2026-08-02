@@ -39,14 +39,11 @@ import { openWithDefault, revealInFinder } from "@/lib/open"
 import { Markdown } from "./Markdown"
 import { EditorContextMenu, type CtxMenuItem } from "./EditorContextMenu"
 import { CodeView } from "./CodeView"
-import { StoredImage } from "./StoredImage"
-import { ImageLightbox } from "./ImageLightbox"
 import { TodoList } from "./TodoList"
-import type { Message, MessageImage, MessageFile, MessagePdf, Part } from "@/store/types"
+import type { Message, MessageFile, MessagePdf, Part } from "@/store/types"
 import { useSessionsStore } from "@/store/sessions"
 import { useQuestionsStore } from "@/store/questions"
 import { useBrowserShots } from "@/store/browser-shots"
-import { useGeneratedImages } from "@/store/generated-images"
 import { useWriteDiffs } from "@/store/write-diffs"
 import { annotateIntraline, hunksForEdit, type DiffLine } from "@/lib/diff"
 import { parsePatchForUI } from "@/lib/tools/patch"
@@ -875,7 +872,7 @@ function BubbleImpl({
             <Dots />
           </div>
         ) : isUser ? (
-          <UserContent content={m.content} images={m.images} files={m.files} pdfs={m.pdfs} />
+          <UserContent content={m.content} files={m.files} pdfs={m.pdfs} />
         ) : m.parts && m.parts.length > 0 ? (
           <PartsRender
             parts={m.parts}
@@ -1122,17 +1119,14 @@ function TurnEditRow({ file, onReview }: { file: TurnEditFile; onReview?: (path:
 
 function UserContent({
   content,
-  images,
   files,
   pdfs,
 }: {
   content: string
-  images?: MessageImage[]
   files?: MessageFile[]
   pdfs?: MessagePdf[]
 }) {
   const t = useT()
-  const [lightbox, setLightbox] = useState<number | null>(null)
   const COLLAPSE_THRESHOLD = 10
   const COLLAPSED_LINES = 10
   const [collapsed, setCollapsed] = useState(true)
@@ -1141,26 +1135,6 @@ function UserContent({
   const displayContent = collapsed && collapsible ? contentLines.slice(0, COLLAPSED_LINES).join("\n") : content
   return (
     <div className="flex w-full flex-col items-end gap-1.5">
-      {images && images.length > 0 && (
-        <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
-          {images.map((im, i) => (
-            <StoredImage
-              key={im.id}
-              image={im}
-              onClick={() => setLightbox(i)}
-              className="max-h-[120px] max-w-[180px] w-auto cursor-pointer rounded-lg border border-codezal-hair object-cover transition hover:opacity-90"
-            />
-          ))}
-        </div>
-      )}
-      {lightbox !== null && images && (
-        <ImageLightbox
-          images={images}
-          index={lightbox}
-          onIndex={setLightbox}
-          onClose={() => setLightbox(null)}
-        />
-      )}
       {files && files.length > 0 && (
         <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
           {files.map((f) => (
@@ -1244,7 +1218,7 @@ function toolIcon(toolName: string): typeof Wrench {
   if (toolName === "spawn_agent" || toolName === "dispatch_workers") return Bot
   if (toolName === "load_skill") return Sparkles
   if (toolName === "clone_repo" || toolName.includes("worktree")) return GitBranch
-  if (toolName === "generate_image" || toolName === "browser_screenshot") return ImageIcon
+  if (toolName === "browser_screenshot") return ImageIcon
   if (toolName === "browser_read_console") return Terminal
   if (toolName === "browser_read_network") return Activity
   if (toolName === "browser_snapshot") return Eye
@@ -2070,10 +2044,6 @@ const ToolBody = memo(function ToolBody({
     return <ScreenshotBody toolCallId={call.toolCallId} fallback={result?.output} isError={result?.isError} />
   }
 
-  if (call.toolName === "generate_image") {
-    return <GeneratedImageBody toolCallId={call.toolCallId} fallback={result?.output} isError={result?.isError} />
-  }
-
   if (call.toolName === "edit_file") {
     const oldStr = String(input.old_string ?? "")
     const newStr = String(input.new_string ?? "")
@@ -2407,31 +2377,6 @@ function ScreenshotBody({
   )
 }
 
-function GeneratedImageBody({
-  toolCallId,
-  fallback,
-  isError,
-}: {
-  toolCallId: string
-  fallback?: string
-  isError?: boolean
-}) {
-  const img = useGeneratedImages((s) => s.byCallId[toolCallId])
-  if (isError && fallback) return <ErrorBlock text={fallback} />
-  if (!img) {
-    return fallback ? <div className="px-1 py-0.5 text-sm text-codezal-mute">{fallback}</div> : null
-  }
-  return (
-    <div className="overflow-hidden rounded-xl bg-codezal-chip p-2">
-      <img
-        src={img}
-        alt="generated image"
-        className="max-h-[440px] w-auto rounded-lg border border-codezal-hair"
-      />
-    </div>
-  )
-}
-
 function ErrorBlock({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false)
   const output = useMemo(() => stripCR(text).trimEnd(), [text])
@@ -2743,7 +2688,6 @@ const TOOL_VERB_KEYS: Record<string, { pastKey: string; ingKey: string }> = {
   spawn_agent: { pastKey: "messageList.agentCalled", ingKey: "messageList.agentCalled" },
   browser_navigate: { pastKey: "messageList.toolBrowserNav", ingKey: "messageList.toolBrowserNavIng" },
   browser_screenshot: { pastKey: "messageList.toolBrowserShot", ingKey: "messageList.toolBrowserShotIng" },
-  generate_image: { pastKey: "messageList.toolGenImage", ingKey: "messageList.toolGenImageIng" },
   browser_read_console: { pastKey: "messageList.toolBrowserConsole", ingKey: "messageList.toolBrowserConsoleIng" },
   browser_read_network: { pastKey: "messageList.toolBrowserNetwork", ingKey: "messageList.toolBrowserNetworkIng" },
   browser_snapshot: { pastKey: "messageList.toolBrowserSnap", ingKey: "messageList.toolBrowserSnapIng" },

@@ -38,6 +38,8 @@ import { listConnectedMcpInstructions } from "@/lib/mcp"
 import { buildBackgroundJobsNote } from "@/lib/stream/background-note"
 import { useJobsStore } from "@/store/jobs"
 import { buildSystemPrompt, buildDynamicContext } from "@/lib/system-prompt"
+import { resolveMainEngine } from "@/lib/agents/runtime/roles"
+import { DEFAULT_SUPERVISOR_SETTINGS } from "@/lib/agents/runtime/supervisor"
 import { PrivacyScrubber, privacyActive } from "@/lib/privacy"
 
 function lastUserText(history: ModelMessage[]): string | undefined {
@@ -214,9 +216,18 @@ export function makeRunStream(deps: RunStreamDeps) {
         .patchMessageFor(sid, asstMsgId, { pending: false, content: note, parts: [{ type: "text", text: note }], endedAt: Date.now() })
       return
     }
-    // Per-turn override (slash command `model:` frontmatter); session stays unchanged.
-    const provider = override?.provider ?? cur.provider
-    const modelId = override?.model ?? cur.model
+    // Role-based engine resolution: plan-mode runs use the `planner` role,
+    // build-mode runs use the `orchestrator` role (Settings → Agent
+    // Orchestration). Per-turn override (slash command `model:` frontmatter)
+    // wins over roles; the session itself stays unchanged.
+    const resolvedEngine = resolveMainEngine({
+      settings: settings.supervisor ?? DEFAULT_SUPERVISOR_SETTINGS,
+      session: cur,
+      mode: cur.mode === "plan" ? "plan" : "build",
+      override,
+    })
+    const provider = resolvedEngine.provider
+    const modelId = resolvedEngine.model
     const ac = new AbortController()
     setStreamAbort(sid, ac)
     useSessionsStore.getState().setStreamingFor(sid, true)
@@ -395,7 +406,7 @@ export function makeRunStream(deps: RunStreamDeps) {
               sddRequirementPath: sddDraft
                 ? sddRequirementPath(sddDraft.workspacePath, sddDraft.id)
                 : undefined,
-              orchestra: cur.orchestra,
+              session: { provider, model: modelId },
               tokenSavers: settings.tokenSavers,
               memory: eff.memory,
               deferredTools: deferred,

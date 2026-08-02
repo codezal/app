@@ -11,7 +11,6 @@ export const BUILTINS: SlashCommand[] = [
   { name: "workspace", description: "Choose workspace folder", scope: "builtin", action: "workspace" },
   { name: "search", description: "Search inside workspace", scope: "builtin", action: "search" },
   { name: "autopilot", description: "Open Autopilot", scope: "builtin", action: "routines" },
-  { name: "orchestra", description: "Multi-agent mode: distribute model work to the worker pool in parallel (configure pool + switch mode)", scope: "builtin", action: "orchestra" },
   { name: "plugins", description: "Manage plugins (SettingsDrawer)", scope: "builtin", action: "plugins" },
   { name: "sdd", description: "Start SDD pipeline: requirement -> design -> prototype -> plan -> build", scope: "builtin", action: "sdd" },
   { name: "settings", description: "Open settings", scope: "builtin", action: "settings" },

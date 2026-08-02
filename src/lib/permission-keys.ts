@@ -38,7 +38,7 @@ const TOOL_PERMISSION_MAP: Record<string, string> = {
   websearch: "websearch",
   spawn_agent: "task",
   delegate_agents: "task",
-  dispatch_workers: "task",
+  review_changes: "task",
   load_skill: "skill",
   question: "question",
   todo_write: "todowrite",

@@ -12,7 +12,6 @@ export type SlashAction =
   | "search"
   | "routines"
   | "settings"
-  | "orchestra"
   | "plugins"
   | "goal"
   | "codemap-index"

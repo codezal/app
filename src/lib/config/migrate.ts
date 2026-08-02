@@ -11,7 +11,7 @@
 
 import { DEFAULT_APPEARANCE } from "@/lib/theme"
 
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 4
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v)
@@ -62,9 +62,35 @@ function migrateV2(d: Record<string, unknown>, ctx: MigrateCtx): void {
   }
 }
 
+// v3 → v4: legacy supervisor pool entries become role pins. The first enabled
+// write-capable entry maps to `worker`, an entry whose agent name mentions
+// review maps to `reviewer`; everything else is dropped (roles are optional —
+// unset roles inherit the session model).
+function migrateV4(d: Record<string, unknown>): void {
+  const supervisor = isRecord(d.supervisor) ? d.supervisor : null
+  if (!supervisor || !Array.isArray(supervisor.pool)) return
+  const pool = supervisor.pool.filter(
+    (entry): entry is Record<string, unknown> =>
+      isRecord(entry) && entry.enabled !== false && isRecord(entry.engine),
+  )
+  const roles: Record<string, unknown> = isRecord(supervisor.roles) ? supervisor.roles : {}
+  for (const entry of pool) {
+    const agentName = typeof entry.agentName === "string" ? entry.agentName.toLowerCase() : ""
+    const engine = entry.engine as Record<string, unknown>
+    const role = /review/.test(agentName) ? "reviewer" : "worker"
+    if (roles[role]) continue
+    const provider = typeof engine.providerId === "string" ? engine.providerId : undefined
+    const model = typeof engine.modelId === "string" ? engine.modelId : undefined
+    if (provider && model) roles[role] = { provider, model }
+  }
+  supervisor.roles = roles
+  delete supervisor.pool
+}
+
 const MIGRATORS: { to: number; run: (d: Record<string, unknown>, ctx: MigrateCtx) => void }[] = [
   { to: 1, run: migrateV1 },
   { to: 2, run: migrateV2 },
+  { to: 4, run: migrateV4 },
 ]
 
 // Apply legacy-shape migrations to raw settings data. Returns a new object

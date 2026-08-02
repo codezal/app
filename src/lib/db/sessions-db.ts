@@ -1,7 +1,7 @@
 //   session: id,project_path(=workspacePath),title,updated_at kolon; gerisi data
-//            (provider,model,openFiles,activeFile,usage,mode,orchestra,goal,todos,
+//            (provider,model,openFiles,activeFile,usage,mode,goal,todos,
 //   message: id,idx,role,content,model_msg_count kolon; gerisi data
-//            (images(base64),pending,snapshotBase). parts AYRI tabloda.
+//            (pending,snapshotBase). parts AYRI tabloda.
 //   part: (message_id, idx) positional key; data = tam Part nesnesi. Streaming'de
 import type { Db } from "./driver"
 import type { ModelMessage } from "ai"

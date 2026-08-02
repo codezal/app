@@ -1,12 +1,31 @@
 //
 import { modelsForProvider, modelDetail, type ProvidersCatalog } from "./providers-catalog"
 import type { ProviderId } from "./providers"
+import type { Settings } from "@/store/types"
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
 const MONTH_MS = 1000 * 60 * 60 * 24 * 30
 
 type Scored = { id: string; cost: number; age: number; small: boolean }
+
+// Resolve the engine for an internal one-shot call (titles, summaries, prompt
+// enhance, suggestions, routing). The Settings → Agent Orchestration `small`
+// role wins when pinned (may be a different provider); otherwise fall back to
+// the provider's built-in cheap model, then the session model.
+export function smallModelCall(args: {
+  catalog?: ProvidersCatalog
+  providerId: ProviderId
+  modelId: string
+  settings?: Settings
+}): { providerId: ProviderId; modelId: string } {
+  const pin = args.settings?.supervisor?.roles?.small
+  if (pin?.provider && pin.model) {
+    return { providerId: pin.provider, modelId: pin.model }
+  }
+  const cheap = pickSmallModel(args.catalog, args.providerId)
+  return { providerId: args.providerId, modelId: cheap ?? args.modelId }
+}
 
 export function pickSmallModel(
   catalog: ProvidersCatalog | undefined,

@@ -41,3 +41,50 @@ describe("migrateSettings — onboardingCompleted (v2)", () => {
     expect(out.onboardingCompleted).toBeUndefined() // but not marked existing
   })
 })
+
+describe("migrateSettings — supervisor pool → roles (v4)", () => {
+  it("maps the first enabled write-capable entry to worker and review entries to reviewer", () => {
+    const out = migrateSettings({
+      schemaVersion: 3,
+      supervisor: {
+        enabled: true,
+        pool: [
+          { id: "a", agentName: "general", enabled: true, engine: { kind: "sdk", providerId: "openai", modelId: "gpt-5.4" } },
+          { id: "b", agentName: "code-reviewer", enabled: true, engine: { kind: "sdk", providerId: "anthropic", modelId: "claude-sonnet-4-5" } },
+          { id: "c", agentName: "general", enabled: false, engine: { kind: "sdk", providerId: "openai", modelId: "gpt-5-mini" } },
+        ],
+      },
+    })
+    expect(out.supervisor).toMatchObject({
+      enabled: true,
+      roles: {
+        worker: { provider: "openai", model: "gpt-5.4" },
+        reviewer: { provider: "anthropic", model: "claude-sonnet-4-5" },
+      },
+    })
+    expect(out.supervisor).not.toHaveProperty("pool")
+    expect(out.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+  })
+
+  it("drops legacy pools entirely when nothing maps", () => {
+    const out = migrateSettings({
+      schemaVersion: 3,
+      supervisor: {
+        enabled: true,
+        pool: [
+          { id: "a", agentName: "general", enabled: false, engine: { kind: "sdk", providerId: "openai", modelId: "gpt-5.4" } },
+        ],
+      },
+    })
+    expect(out.supervisor.roles).toEqual({})
+    expect(out.supervisor).not.toHaveProperty("pool")
+  })
+
+  it("keeps already-migrated files untouched", () => {
+    const out = migrateSettings({
+      schemaVersion: 4,
+      supervisor: { enabled: true, roles: { worker: { provider: "openai", model: "gpt-5.4" } } },
+    })
+    expect(out.supervisor.roles).toEqual({ worker: { provider: "openai", model: "gpt-5.4" } })
+  })
+})
