@@ -19,6 +19,22 @@ Work discipline:
 - If you changed code, verify it yourself BEFORE reporting: run the relevant tests and type checks, and inspect the output.
 - In the final summary, state what you did and the verification result (passed/failed) in one line; do not hide failures.`
 
+// Write-capable tools stripped from read-only runs (reviewer role). Mirrors the
+// plan-mode block list so read-only is enforced by the toolset, not the prompt.
+const READ_ONLY_STRIP = new Set([
+  "write_file",
+  "edit_file",
+  "apply_patch",
+  "bash",
+  "notebook_edit",
+  "monitor",
+  "remember",
+  "save_method",
+  "send_to_session",
+  "review_changes",
+  "propose_build",
+])
+
 export const startSdkWorker: RunnerStart = async ({
   workerId,
   config,
@@ -66,6 +82,11 @@ export const startSdkWorker: RunnerStart = async ({
           workerId,
           configWorkspace,
         )
+        // Read-only runs (reviewer): strip write-capable tools so read-only is
+        // enforced by the toolset, not just the system prompt.
+        if (config.readOnly) {
+          for (const writeTool of READ_ONLY_STRIP) delete tools[writeTool]
+        }
 
         emit({ type: "started" })
 

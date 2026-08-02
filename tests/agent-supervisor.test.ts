@@ -142,6 +142,7 @@ describe("agent orchestration roles", () => {
       model: "gpt-5.4",
       yolo: false,
       label: "worker",
+      readOnly: false,
     })
     expect(
       workerConfigForRole({
@@ -158,6 +159,7 @@ describe("agent orchestration roles", () => {
       provider: "anthropic",
       model: "claude-sonnet-4-5",
       systemPrompt: "review contract",
+      readOnly: true,
     })
   })
 

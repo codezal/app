@@ -21,6 +21,9 @@ export type WorkerConfig = {
   // Used by role runs (e.g. the reviewer contract) so prompts don't depend on
   // user-authored agent files.
   systemPrompt?: string
+  // Read-only runs (reviewer role) get write tools stripped at the runner —
+  // read-only is enforced by the toolset, not just the system prompt.
+  readOnly?: boolean
 }
 
 export type OrchestraConfig = {

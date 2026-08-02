@@ -75,6 +75,7 @@ export function workerConfigForRole(input: {
     yolo: false,
     label: input.label ?? input.role,
     systemPrompt: input.systemPrompt,
+    readOnly: input.role === "reviewer",
   }
 }
 
