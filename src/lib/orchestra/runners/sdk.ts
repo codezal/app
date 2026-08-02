@@ -37,6 +37,7 @@ const READ_ONLY_STRIP = new Set([
   "review_changes",
   "propose_build",
   "spawn_agent",
+  "delegate_agents",
   "clone_repo",
   "create_worktree",
   "remove_worktree",
