@@ -121,6 +121,10 @@ type LiveTerm = {
   pty: PtyHandle | null
   ptyReady: Promise<void>
   error: string | null
+  // M55: set by disposeLiveTerm BEFORE the spawn settles. The ptyReady IIFE
+  // checks it after each await so a disposed term neither leaks a spawned PTY
+  // nor wires handlers onto a disposed xterm.
+  disposed: boolean
 }
 
 const liveTerms = new Map<string, LiveTerm>()
@@ -354,6 +358,7 @@ function getOrCreateLiveTerm(
     pty: null,
     ptyReady: Promise.resolve(),
     error: null,
+    disposed: false,
   }
   liveTerms.set(sessionId, live)
 
@@ -375,6 +380,13 @@ function getOrCreateLiveTerm(
         cwd: opts.workspacePath,
         env,
       })
+      // M55: the term may have been disposed while spawn was pending (panel
+      // closed / session removed) — dispose the freshly-spawned PTY instead of
+      // orphaning it, and skip wiring handlers onto a dead xterm.
+      if (live.disposed) {
+        await handle.dispose().catch(() => {})
+        return
+      }
       live.pty = handle
       patch(sessionId, { running: true })
 
@@ -432,6 +444,9 @@ function getOrCreateLiveTerm(
 function disposeLiveTerm(sessionId: string) {
   const live = liveTerms.get(sessionId)
   if (!live) return
+  // M55: mark BEFORE tearing down so a pending ptyReady (mid-spawn) sees the
+  // flag and disposes its handle instead of orphaning it.
+  live.disposed = true
   liveTerms.delete(sessionId)
   void live.pty?.dispose()
   live.term.dispose()

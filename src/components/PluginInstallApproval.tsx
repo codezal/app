@@ -67,11 +67,17 @@ export function PluginInstallApproval({
   const [prevManifest, setPrevManifest] = useState(manifest)
   if (manifest !== prevManifest) {
     setPrevManifest(manifest)
+    // M61: a different manifest must not keep the PREVIOUS install's ack —
+    // plugin B would otherwise install pre-acked for high-risk permissions.
+    setAck(false)
     setSigStatus(isCuratedVerified ? "checking" : null)
   }
   const needsAck = highRisks.length > 0 || combos.length > 0
   const sigBlocks = sigStatus === "invalid"
-  const canConfirm = (!needsAck || ack) && !sigBlocks
+  // M62: while the signature is still being verified ("checking"), the install
+  // button stays disabled — the old code only blocked on an explicit "invalid".
+  const sigPending = sigStatus === "checking"
+  const canConfirm = (!needsAck || ack) && !sigBlocks && !sigPending
 
   // Combo key → translated {title, detail}
   const comboTranslations: Record<ComboKey, { title: string; detail: string }> = {

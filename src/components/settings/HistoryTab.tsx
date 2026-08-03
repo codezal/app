@@ -46,6 +46,9 @@ export function HistoryTab() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [openMsgs, setOpenMsgs] = useState<HarnessMessage[]>([])
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // M56: seq-guard for the per-thread message fetch — a slow load for thread A
+  // must not render its messages under thread B after B is opened.
+  const openSeq = useRef(0)
 
   useEffect(() => {
     let alive = true
@@ -116,10 +119,12 @@ export function HistoryTab() {
       return
     }
     setOpenId(id)
+    const seq = ++openSeq.current
     try {
-      setOpenMsgs(await getThreadMessages(db, id))
+      const msgs = await getThreadMessages(db, id)
+      if (seq === openSeq.current) setOpenMsgs(msgs)
     } catch {
-      setOpenMsgs([])
+      if (seq === openSeq.current) setOpenMsgs([])
     }
   }
 

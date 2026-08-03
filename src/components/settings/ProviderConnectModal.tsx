@@ -95,7 +95,11 @@ export function ProviderConnectModal({
         await openUrl(started.authorizeUrl)
       } else if (started.kind === "deviceCode") {
         await openUrl(started.verificationUri)
-        void pollDeviceCode(flow, started)
+        // M57: device-code polling OWNS oauthBusy (it set it true and clears it
+        // in ITS finally) — the outer finally below would clear it right after
+        // the poll started, letting a second flow begin mid-poll.
+        await pollDeviceCode(flow, started)
+        return
       }
     } catch (e) {
       setOauthError(errorMessage(e))

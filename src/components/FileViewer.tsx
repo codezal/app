@@ -102,6 +102,9 @@ export function FileViewer({ path, reloadSignal }: Props) {
     isMarkdownPath(path) ? readStoredMdMode() : "source",
   )
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  // M52: tracks the CURRENT live object URL so path changes / unmount always
+  // revoke it (state alone races in-flight reads).
+  const blobUrlRef = useRef<string>("")
 
   const [content, setContent] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -151,12 +154,22 @@ export function FileViewer({ path, reloadSignal }: Props) {
   useEffect(() => {
     if (!previewKind) return
     let alive = true
-    let url = ""
+    // M52: revoke the PREVIOUS blob URL when a new one is created, and the
+    // current one on unmount — in-flight reads that resolve after a path
+    // change used to leave their object URL dangling forever.
+    const revokePrev = () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = ""
+      }
+    }
     readFileSafe(path)
       .then((bytes) => {
         if (!alive) return
         const mime = previewKind === "pdf" ? "application/pdf" : mimeForImage(path)
-        url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }))
+        revokePrev()
+        const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }))
+        blobUrlRef.current = url
         setBlobUrl(url)
       })
       .catch((e) => {
@@ -164,7 +177,7 @@ export function FileViewer({ path, reloadSignal }: Props) {
       })
     return () => {
       alive = false
-      if (url) URL.revokeObjectURL(url)
+      revokePrev()
     }
   }, [path, previewKind])
 

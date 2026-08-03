@@ -86,6 +86,16 @@ export function PreviewPanel({ workspacePath, onClose }: Props) {
     [current],
   )
 
+  // M66: `allow-same-origin + allow-scripts` on a file:// preview lets arbitrary
+  // local HTML run scripts INSIDE the app's asset-protocol origin — it could
+  // read app data reachable from that origin. For local files drop
+  // allow-same-origin (the frame becomes an opaque origin; scripts still run
+  // for the page itself but cannot touch the app's origin). Remote URLs keep
+  // the full sandbox — the served page IS that origin.
+  const sandbox = current.startsWith("file://")
+    ? IFRAME_SANDBOX.replace("allow-same-origin", "").replace(/\s+/g, " ").trim()
+    : IFRAME_SANDBOX
+
   useEffect(() => {
     const u = usePreviewStore.getState().urlByWs[wsKey] ?? ""
     lastAppliedRef.current = u
@@ -302,10 +312,10 @@ export function PreviewPanel({ workspacePath, onClose }: Props) {
               style={{ width: size.w, height: size.h, transform: `scale(${zoom})`, transformOrigin: "top center" }}
               className="shrink-0 border border-codezal-hair bg-white shadow"
             >
-              <iframe key={reloadKey} src={iframeSrc} title="preview" sandbox={IFRAME_SANDBOX} className="h-full w-full border-0" />
+              <iframe key={reloadKey} src={iframeSrc} title="preview" sandbox={sandbox} className="h-full w-full border-0" />
             </div>
           ) : (
-            <iframe key={reloadKey} src={iframeSrc} title="preview" sandbox={IFRAME_SANDBOX} className="h-full w-full border-0 bg-white" />
+            <iframe key={reloadKey} src={iframeSrc} title="preview" sandbox={sandbox} className="h-full w-full border-0 bg-white" />
           )}
         </div>
       )}

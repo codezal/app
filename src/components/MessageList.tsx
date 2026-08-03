@@ -146,6 +146,14 @@ export function MessageList({
     setMatchIdx((i) => (matchIds.length ? (i + 1) % matchIds.length : 0))
   const gotoPrev = () =>
     setMatchIdx((i) => (matchIds.length ? (i - 1 + matchIds.length) % matchIds.length : 0))
+  // M63: `matchIds` is a fresh array on EVERY stream patch (messages changes
+  // identity per delta), so depending on it would scrollIntoView + flash the
+  // match on every token. Dep on a stable string of the current match set
+  // instead — only a real change in WHICH messages match triggers a scroll.
+  const matchKey = useMemo(
+    () => matchIds.join("\u0000") + "|" + matchIdx,
+    [matchIds, matchIdx],
+  )
   useEffect(() => {
     if (!searchOpen || matchIds.length === 0) return
     const id = matchIds[Math.min(matchIdx, matchIds.length - 1)]
@@ -155,7 +163,8 @@ export function MessageList({
     el.classList.add("cz-msg-hit")
     const tmo = window.setTimeout(() => el.classList.remove("cz-msg-hit"), 1400)
     return () => window.clearTimeout(tmo)
-  }, [searchOpen, matchIds, matchIdx])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable key deps
+  }, [searchOpen, matchKey])
   const [askSel, setAskSel] = useState<{ x: number; y: number; text: string } | null>(null)
   const [selMenu, setSelMenu] = useState<{ x: number; y: number; text: string } | null>(null)
   const onContentMouseUp = () => {

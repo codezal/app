@@ -1584,17 +1584,26 @@ function SessionItem({
             className="flex min-w-0 flex-1 items-center gap-1 truncate text-left outline-none"
           >
             {meta.forkParentId && (
-              <button
-                type="button"
+              // M54: <button> inside <button> is invalid HTML (double handler,
+              // focus/aria confusion) — render the fork icon as a role=button span.
+              <span
+                role="button"
+                tabIndex={0}
                 title={t("sidebar.forkGoToParent")}
                 onClick={(e) => {
                   e.stopPropagation()
                   useSessionsStore.getState().open(meta.forkParentId!)
                 }}
-                className="shrink-0 rounded p-0.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-accent"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation()
+                    useSessionsStore.getState().open(meta.forkParentId!)
+                  }
+                }}
+                className="shrink-0 cursor-pointer rounded p-0.5 text-codezal-mute transition-colors hover:bg-codezal-panel-2 hover:text-codezal-accent"
               >
                 <GitBranch className="h-3 w-3" aria-label={t("sidebar.forkAria")} />
-              </button>
+              </span>
             )}
             {meta.handle && (
               <span

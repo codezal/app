@@ -99,6 +99,10 @@ export function TurnReviewActions({
 
   async function runAction() {
     if (!workspacePath || !action || !commitMessage.trim()) return
+    // M59: busy guard — Cmd+Enter fires the same handler as the button, so
+    // without this a fast double-press commits twice (second one usually fails
+    // on a dirty/empty index, but the PR path could double-post).
+    if (busy) return
     setBusy(true)
     try {
       const initialStatus = await gitStatus(workspacePath)

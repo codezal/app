@@ -27,6 +27,13 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
   )
 }
 
+// M48: modal z-stack. Nested dialogs (e.g. an approval modal with a discard-
+// confirm on top) each register an Escape listener on `window` in the capture
+// phase — without a stack, Escape closes BOTH, so dismissing the top confirm
+// accidentally denied the approval underneath. Only the TOPMOST dialog handles
+// Escape.
+const dialogStack: Array<(e: globalThis.KeyboardEvent) => void> = []
+
 export function Dialog({
   onClose,
   children,
@@ -57,13 +64,21 @@ export function Dialog({
   useEffect(() => {
     if (!closeOnEscape) return
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        onClose()
-      }
+      // Only the topmost dialog consumes Escape.
+      const top = dialogStack[dialogStack.length - 1]
+      if (top !== onKey) return
+      e.preventDefault()
+      onClose()
     }
+    // Register as the top of the stack (push on mount, pop on cleanup). The
+    // removeEventListener in cleanup matches the capture=true registration.
+    dialogStack.push(onKey)
     window.addEventListener("keydown", onKey, true)
-    return () => window.removeEventListener("keydown", onKey, true)
+    return () => {
+      const idx = dialogStack.indexOf(onKey)
+      if (idx !== -1) dialogStack.splice(idx, 1)
+      window.removeEventListener("keydown", onKey, true)
+    }
   }, [closeOnEscape, onClose])
 
   const onPanelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {

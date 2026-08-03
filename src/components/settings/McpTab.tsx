@@ -797,6 +797,13 @@ function McpEditModal({
 }) {
   const t = useT()
   const [draft, setDraft] = useState<McpServerConfig>(initial)
+  // M53: env JSON textarea uses a LOCAL string draft. The old controlled
+  // value was `JSON.stringify(draft.env)` — a mid-edit invalid parse silently
+  // dropped the keystroke and the input "bounced back". Now the user edits the
+  // string freely; it is parsed and committed on blur (valid) or kept as text
+  // (invalid, error surfaced below).
+  const [envText, setEnvText] = useState(() => JSON.stringify(initial.env ?? {}, null, 2))
+  const [envError, setEnvError] = useState<string | null>(null)
   const transport = draft.transport ?? "http"
   const stdio = transport === "stdio"
   const nameTrim = draft.name.trim()
@@ -805,6 +812,26 @@ function McpEditModal({
 
   function patch(p: Partial<McpServerConfig>) {
     setDraft((d) => ({ ...d, ...p }))
+  }
+
+  function commitEnv() {
+    const raw = envText.trim()
+    if (!raw) {
+      setEnvError(null)
+      patch({ env: undefined })
+      return
+    }
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        setEnvError(null)
+        patch({ env: parsed as Record<string, string> })
+      } else {
+        setEnvError("env JSON object olmalı")
+      }
+    } catch (e) {
+      setEnvError(errorMessage(e))
+    }
   }
 
   return (
@@ -889,21 +916,14 @@ function McpEditModal({
                 />
               </div>
               <textarea
-                value={JSON.stringify(draft.env ?? {}, null, 0)}
-                onChange={(e) => {
-                  try {
-                    const parsed = JSON.parse(e.target.value || "{}")
-                    if (parsed && typeof parsed === "object") {
-                      patch({ env: parsed as Record<string, string> })
-                    }
-                  } catch {
-                    // Intentionally ignored.
-                  }
-                }}
+                value={envText}
+                onChange={(e) => setEnvText(e.target.value)}
+                onBlur={commitEnv}
                 placeholder={t("settings.drawer.mcpEnvPlaceholder")}
                 rows={3}
                 className="w-full resize-none rounded-lg border border-codezal bg-codezal-input px-3 py-2 font-mono text-base text-codezal-dim outline-none focus:border-codezal-accent"
               />
+              {envError && <p className="text-xs text-destructive">{envError}</p>}
             </>
           ) : (
             <>

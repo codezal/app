@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Dialog } from "@/components/Dialog"
 import { useT } from "@/lib/i18n/useT"
 
@@ -24,6 +24,15 @@ export function PromptDialog({
   const t = useT()
   const [value, setValue] = useState(initialValue)
   const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // M64: useState(initialValue) only seeds ONCE — reopening with a different
+  // initialValue kept the previous draft. Reset whenever the dialog opens.
+  /* eslint-disable react-hooks/set-state-in-effect -- sync external prop on open */
+  useEffect(() => {
+    if (open) setValue(initialValue)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on open only
+  }, [open])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!open) return null
 

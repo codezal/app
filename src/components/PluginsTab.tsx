@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   ExternalLink,
   Plus,
@@ -38,6 +38,8 @@ import { Section, Toggle } from "./settings/primitives"
 
 export function PluginsTab() {
   const t = useT()
+  // M60: seq-guard for the marketplace-index read (supersede stale fetches).
+  const indexSeq = useRef(0)
   const [marketplaces, setMarketplaces] = useState<RegisteredMarketplace[]>([])
   const [selectedMpId, setSelectedMpId] = useState<string | null>(null)
   const [index, setIndex] = useState<MarketplaceIndex | null>(null)
@@ -88,9 +90,17 @@ export function PluginsTab() {
     if (!selectedMpId) return
     const mp = marketplaces.find((m) => m.id === selectedMpId)
     if (!mp) return
+    // M60: cancel/supersede a stale marketplace-index read when the selection
+    // or marketplaces change mid-fetch — the old read would otherwise render
+    // another marketplace's plugins under the new one.
+    const seq = ++indexSeq.current
     void readMarketplaceIndex(mp.localPath)
-      .then(setIndex)
-      .catch((e) => setError(t("pluginsTab.indexReadFailed", { message: (e as Error).message })))
+      .then((idx) => {
+        if (seq === indexSeq.current) setIndex(idx)
+      })
+      .catch((e) => {
+        if (seq === indexSeq.current) setError(t("pluginsTab.indexReadFailed", { message: (e as Error).message }))
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMpId, marketplaces])
 

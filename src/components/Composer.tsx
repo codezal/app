@@ -911,7 +911,19 @@ export function Composer({
   }
 
   function performUndo() {
-    if (undoTimer.current) { clearTimeout(undoTimer.current); undoTimer.current = null }
+    if (undoTimer.current) {
+      clearTimeout(undoTimer.current)
+      undoTimer.current = null
+      // M50: flush the pending debounced push BEFORE popping — otherwise Cmd+Z
+      // within 300ms of a keystroke pops a stack that never received the
+      // current text, leaving it unreachable (no redo target).
+      const stack = undoStack.current
+      const idx = undoIdx.current
+      if (stack[idx] !== text) {
+        undoStack.current = [...stack.slice(0, idx + 1), text]
+        undoIdx.current = idx + 1
+      }
+    }
     const idx = undoIdx.current
     if (idx <= 0) return
     undoIdx.current = idx - 1
@@ -1491,12 +1503,13 @@ export function Composer({
           <button
             type="button"
             onClick={trySend}
-            disabled={(!text.trim() && fileRefs.length === 0 && pdfs.length === 0) || disabled || compacting}
+            // M49: images count too — an image-only message must be sendable.
+            disabled={(!text.trim() && images.length === 0 && fileRefs.length === 0 && pdfs.length === 0) || disabled || compacting}
             title={t("composer.sendHint")}
             aria-label={t("composer.send")}
             className={cn(
               "absolute bottom-1.5 right-1.5 z-10 flex h-[26px] w-[30px] items-center justify-center rounded-lg transition-colors",
-              (!text.trim() && fileRefs.length === 0 && pdfs.length === 0) || disabled || compacting
+              (!text.trim() && images.length === 0 && fileRefs.length === 0 && pdfs.length === 0) || disabled || compacting
                 ? "border border-codezal bg-codezal-panel-2 text-codezal-mute"
                 : "border border-transparent bg-codezal-accent text-accent-foreground shadow-sm hover:opacity-90",
             )}

@@ -893,9 +893,17 @@ function TreeLevel({
   const [error, setError] = useState<string | null>(null)
   const [ignored, setIgnored] = useState<Set<string>>(() => new Set())
 
+  // resetting per-path state on path change is intentional (M51).
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     let alive = true
-    if (!startExpanded && entries !== null) return
+    // M51: reset stale per-path state when the path changes — otherwise a
+    // collapsed→expanded tree for the NEW path briefly renders the PREVIOUS
+    // path's entries (and the debounced load would overwrite them later).
+    setEntries(null)
+    setError(null)
+    setIgnored(new Set())
+    if (!startExpanded) return
     readWorkspaceDir(path)
       .then((es) => {
         if (alive) setEntries(es)
@@ -908,6 +916,7 @@ function TreeLevel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     let alive = true

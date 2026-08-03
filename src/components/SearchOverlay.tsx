@@ -22,6 +22,8 @@ export function SearchOverlay({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // M58: latest search request seq — stale in-flight results are discarded.
+  const searchSeqRef = useRef(0)
 
   const active = useSessionsStore((s) => s.active)
   const openFile = useSessionsStore((s) => s.openFile)
@@ -50,15 +52,25 @@ export function SearchOverlay({ open, onClose }: Props) {
     }
     setError(null)
     setLoading(true)
+    // M58: monotonically increasing request seq — an in-flight search for an
+    // OLD query (debounce fires while a previous request is still running)
+    // must not overwrite the NEWER results when it lands late.
+    const seq = ++searchSeqRef.current
     const timer = setTimeout(() => {
       void searchWorkspace(active.workspacePath!, q, {
         regex,
         caseSensitive,
         glob: glob.trim() || undefined,
       })
-        .then(setHits)
-        .catch((e) => setError(errorMessage(e)))
-        .finally(() => setLoading(false))
+        .then((hits) => {
+          if (seq === searchSeqRef.current) setHits(hits)
+        })
+        .catch((e) => {
+          if (seq === searchSeqRef.current) setError(errorMessage(e))
+        })
+        .finally(() => {
+          if (seq === searchSeqRef.current) setLoading(false)
+        })
     }, 250)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps

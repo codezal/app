@@ -77,6 +77,14 @@ export function PRPanel({ workspacePath }: { workspacePath?: string }) {
     if (autoReview && phase === "ready" && workspacePath) startPrReviewDaemon(workspacePath)
   }, [autoReview, phase, workspacePath])
 
+  // M65: stop the daemon when the panel unmounts. startPrReviewDaemon is
+  // idempotent (singleton timer), but WITHOUT a cleanup the background tick
+  // kept running after the panel closed — posting duplicate reviews on the
+  // next tick cycle. Panel reopen restarts it via the effect above.
+  useEffect(() => {
+    return () => stopPrReviewDaemon()
+  }, [])
+
   const toggleAutoReview = useCallback(() => {
     const next = !autoReview
     writeDaemonConfig({ ...readDaemonConfig(), enabled: next })
