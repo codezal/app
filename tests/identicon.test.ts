@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest"
 import { hashString, identiconColor, identiconCells } from "@/lib/identicon"
-import { codenameFor } from "@/lib/orchestra/codenames"
 
 describe("hashString", () => {
   it("deterministik — aynı girdi aynı çıktı", () => {
@@ -44,18 +43,5 @@ describe("identiconCells", () => {
 
   it("deterministik", () => {
     expect(identiconCells("Fermi")).toEqual(identiconCells("Fermi"))
-  })
-})
-
-describe("codenameFor", () => {
-  it("deterministik", () => {
-    expect(codenameFor("worker-1")).toBe(codenameFor("worker-1"))
-  })
-
-  it("havuzdan tek kelimelik isim döner", () => {
-    const name = codenameFor("abc123")
-    expect(typeof name).toBe("string")
-    expect(name.length).toBeGreaterThan(0)
-    expect(name).not.toMatch(/\s/)
   })
 })

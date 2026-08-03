@@ -11,7 +11,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue("") }))
 
 import { Command } from "@tauri-apps/plugin-shell"
-import { remove } from "@tauri-apps/plugin-fs"
+import { remove, exists } from "@tauri-apps/plugin-fs"
 import { listWorktrees, listBranches, removeWorktree } from "@/lib/tools/worktree"
 
 let executeFn: ReturnType<typeof vi.fn>
@@ -107,6 +107,35 @@ describe("removeWorktree", () => {
       }) // list — /evil yok
     await expect(removeWorktree("/repo", "/evil/path")).rejects.toThrow(/not a registered worktree/)
     expect(vi.mocked(remove)).not.toHaveBeenCalled()
+  })
+
+  it("force=false iken git remove reddederse uncommitted work'u FS-level SİLMEZ (H13)", async () => {
+    // Registered, non-main worktree, but git refuses without --force (dirty).
+    executeFn
+      .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" }) // fsmonitor
+      .mockResolvedValueOnce({ code: 1, stdout: "", stderr: "contains modified files" }) // remove fail
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo-feat\nHEAD def\nbranch refs/heads/feature\n\n",
+        stderr: "",
+      }) // list
+    await expect(removeWorktree("/repo", "/repo-feat")).rejects.toThrow(/modified files/)
+    expect(vi.mocked(remove)).not.toHaveBeenCalled()
+  })
+
+  it("force=true iken git remove reddederse FS delete yapar", async () => {
+    vi.mocked(exists).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    executeFn
+      .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" }) // fsmonitor
+      .mockResolvedValueOnce({ code: 1, stdout: "", stderr: "contains modified files" }) // remove fail
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo-feat\nHEAD def\nbranch refs/heads/feature\n\n",
+        stderr: "",
+      }) // list
+      .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" }) // prune
+    await removeWorktree("/repo", "/repo-feat", true)
+    expect(vi.mocked(remove)).toHaveBeenCalledWith("/repo-feat", { recursive: true })
   })
 })
 

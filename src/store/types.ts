@@ -12,6 +12,20 @@ import type { SupervisorSettings } from "@/lib/agents/runtime"
 
 export type Role = "user" | "assistant" | "system" | "tool"
 
+// Image attached to a user message — stored as a base64 data URL so it can be
+// fed straight to the AI SDK image part and to the thumbnail <img> render
+// without a round-trip to disk. Large images are downscaled before storage
+// (see src/lib/image.ts) to keep session payloads and token counts sane.
+export type MessageImage = {
+  id: string
+  dataUrl?: string
+  ref?: string
+  mime: string
+  name?: string
+  width?: number
+  height?: number
+}
+
 export type MessageFile = {
   id: string
   path: string
@@ -46,6 +60,7 @@ export type Message = {
   role: Role
   content: string
   parts?: Part[]
+  images?: MessageImage[]
   files?: MessageFile[]
   pdfs?: MessagePdf[]
   pending?: boolean

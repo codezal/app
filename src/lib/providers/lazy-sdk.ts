@@ -18,6 +18,8 @@ const LOADERS: Record<string, () => Promise<ProviderFactory>> = {
     import("@ai-sdk/cohere").then((m) => m.createCohere as unknown as ProviderFactory),
   "@ai-sdk/deepinfra": () =>
     import("@ai-sdk/deepinfra").then((m) => m.createDeepInfra as unknown as ProviderFactory),
+  "@ai-sdk/google": () =>
+    import("@ai-sdk/google").then((m) => m.createGoogleGenerativeAI as unknown as ProviderFactory),
   "@ai-sdk/google-vertex": () =>
     import("@ai-sdk/google-vertex").then((m) => m.createVertex as unknown as ProviderFactory),
   "@ai-sdk/groq": () =>

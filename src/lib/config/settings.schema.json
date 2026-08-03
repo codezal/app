@@ -749,6 +749,10 @@
       "default": false,
       "type": "boolean"
     },
+    "reviewAfterTurn": {
+      "default": false,
+      "type": "boolean"
+    },
     "reviewBlockOnCritical": {
       "default": true,
       "type": "boolean"

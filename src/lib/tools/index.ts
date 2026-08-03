@@ -1831,6 +1831,24 @@ export function buildTools(
                 .describe(
                   'Agent role to run this task as: "worker" (default — implementation, writes code) or "reviewer" (read-only code review). The role\'s model comes from Settings → Agent Orchestration; unset roles inherit the session model.',
                 ),
+              agent: z
+                .string()
+                .optional()
+                .describe(
+                  "Optional named agent (subagent type) from the agent catalog to run this task as. Its model, prompt and permissions are used; it also labels the task card. Unset → plain role run.",
+                ),
+              description: z
+                .string()
+                .optional()
+                .describe(
+                  "A short (3-5 words) label for this task, shown on its task card. Unset → derived from the task.",
+                ),
+              task_id: z
+                .string()
+                .optional()
+                .describe(
+                  "Set only to resume a previous subagent session (pass a prior task's session id so the agent continues with its earlier context instead of starting fresh). Unset → new agent.",
+                ),
               task: z.string().min(1).describe("Clear, self-contained subtask"),
             }),
           )
@@ -1852,6 +1870,9 @@ export function buildTools(
           settings: useSettingsStore.getState().settings.supervisor,
           dispatches: dispatches.map((d) => ({
             role: d.role ?? "worker",
+            agent: d.agent,
+            description: d.description,
+            taskId: d.task_id,
             task: d.task,
           })),
           signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
@@ -1987,20 +2008,41 @@ export function buildTools(
         if (!provider || !modelId) return "Provider/model could not be determined"
         const liveWorkspace = parent?.workspacePath || workspace
 
-        const { dispatchWorkerSessions } = await import("@/lib/worker-session")
-        const [result] = await dispatchWorkerSessions({
-          parentSessionId: ownerSessionId,
-          dispatches: [
-            {
-              task: `[Agent: ${agent.name}]\n\n${agent.systemPrompt}\n\n---\n\nTask: ${task}`,
-              title: `⚙ ${agent.name}`,
-              provider,
-              model: modelId,
-              workspacePath: liveWorkspace,
-            },
-          ],
-          signal: (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal,
-        })
+        const dispatches = [
+          {
+            task: `[Agent: ${agent.name}]\n\n${agent.systemPrompt}\n\n---\n\nTask: ${task}`,
+            title: `⚙ ${agent.name}`,
+            provider,
+            model: modelId,
+            workspacePath: liveWorkspace,
+          },
+        ]
+        const signal = (ctx as { abortSignal?: AbortSignal } | undefined)?.abortSignal
+
+        // Attach an opencode-style task card (live + clickable) when the pending
+        // assistant message exists; otherwise run card-less.
+        const pendingMessage = parent
+          ? [...parent.messages].reverse().find((m) => m.role === "assistant" && m.pending)
+          : undefined
+        let results: import("@/lib/worker-session").WorkerSessionResult[]
+        if (parent && pendingMessage) {
+          const { dispatchWorkerSessionsWithCards } = await import("@/lib/agents/runtime")
+          results = await dispatchWorkerSessionsWithCards({
+            session: parent,
+            parentMessageId: pendingMessage.id,
+            dispatches,
+            cards: [{ agentType: agent.name, description: task.split("\n")[0]?.slice(0, 80) }],
+            signal,
+          })
+        } else {
+          const { dispatchWorkerSessions } = await import("@/lib/worker-session")
+          results = await dispatchWorkerSessions({
+            parentSessionId: ownerSessionId,
+            dispatches,
+            signal,
+          })
+        }
+        const [result] = results
 
         if (!result) {
           void fireSubagentStop("error")

@@ -11,14 +11,18 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 struct PtySession {
     master: Box<dyn portable_pty::MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    // The writer is behind its own mutex so a blocking write (PTY buffer full,
+    // child not reading stdin) only holds the per-session lock — never the
+    // global sessions lock. Otherwise pty_kill/pty_resize/pty_spawn deadlock
+    // on the global lock while pty_write blocks forever.
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
@@ -121,7 +125,7 @@ pub fn pty_spawn(
         id.clone(),
         PtySession {
             master: pair.master,
-            writer,
+            writer: Arc::new(Mutex::new(writer)),
             child,
         },
     );
@@ -183,21 +187,27 @@ pub fn pty_spawn(
 
 #[tauri::command]
 pub fn pty_write(state: State<'_, PtyManager>, id: String, data: String) -> Result<(), String> {
-    let mut sessions = state
-        .sessions
+    // Resolve the writer under the global lock, then release it before doing
+    // blocking I/O. A PTY buffer that fills up (child not reading stdin) can
+    // block write_all/flush indefinitely; holding the global lock during that
+    // block would deadlock every other pty_* command (including pty_kill).
+    let writer = {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| "lock poisoned".to_string())?;
+        sessions
+            .get(&id)
+            .ok_or_else(|| format!("pty bulunamadı: {}", id))?
+            .writer
+            .clone()
+    };
+    let mut w = writer
         .lock()
-        .map_err(|_| "lock poisoned".to_string())?;
-    let session = sessions
-        .get_mut(&id)
-        .ok_or_else(|| format!("pty bulunamadı: {}", id))?;
-    session
-        .writer
-        .write_all(data.as_bytes())
+        .map_err(|_| "writer lock poisoned".to_string())?;
+    w.write_all(data.as_bytes())
         .map_err(|e| format!("write: {}", e))?;
-    session
-        .writer
-        .flush()
-        .map_err(|e| format!("flush: {}", e))?;
+    w.flush().map_err(|e| format!("flush: {}", e))?;
     Ok(())
 }
 

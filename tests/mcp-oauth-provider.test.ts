@@ -3,13 +3,26 @@
 // Storage is mocked in-memory (pure-logic, node env).
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
-const { store } = vi.hoisted(() => ({ store: {} as Record<string, unknown> }))
+const { store, kc } = vi.hoisted(() => ({
+  store: {} as Record<string, unknown>,
+  kc: {} as Record<string, string>,
+}))
 
 vi.mock("@/lib/storage", () => ({
   readJson: async (path: string, fallback: unknown) =>
     path in store ? store[path] : fallback,
   writeJson: async (path: string, data: unknown) => {
     store[path] = data
+  },
+}))
+
+vi.mock("@/lib/providers/secret-store", () => ({
+  keychainGet: async (a: string) => kc[a] ?? null,
+  keychainSet: async (a: string, v: string) => {
+    kc[a] = v
+  },
+  keychainDelete: async (a: string) => {
+    delete kc[a]
   },
 }))
 
@@ -27,6 +40,7 @@ function makeProvider(name = "srv", url = SRV, opts: McpOAuthOptions = {}) {
 
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k]
+  for (const k of Object.keys(kc)) delete kc[k]
 })
 
 describe("CodezalMcpOAuthProvider", () => {

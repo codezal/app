@@ -148,6 +148,14 @@ export async function removeWorktree(repoPath: string, target: string, force = f
       `git worktree remove failed and '${target}' is not a registered worktree in this repo — not deleted: ${removeErr}`,
     )
   }
+  // git refused to remove WITHOUT --force — almost always uncommitted changes /
+  // dirty state. Never fall through to a recursive FS delete on a worktree the
+  // user did not force: that destroys uncommitted work. Require explicit force.
+  if (!force) {
+    throw new Error(
+      `git worktree remove failed (uncommitted changes?) — pass force to delete anyway: ${removeErr}`,
+    )
+  }
   if (await exists(target)) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {

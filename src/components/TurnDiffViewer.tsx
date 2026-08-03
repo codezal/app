@@ -2,6 +2,7 @@
 //
 import { useEffect, useMemo, useState } from "react"
 import { useSessionsStore } from "@/store/sessions"
+import { useSettingsStore } from "@/store/settings"
 import { toast } from "@/store/toast"
 import { useWriteDiffs } from "@/store/write-diffs"
 import { aggregateTurnEdits, turnEditsToUnifiedDiff } from "@/lib/turn-edits"
@@ -9,10 +10,12 @@ import { parseTurnDiffUri } from "@/lib/turn-diff-uri"
 import { DiffFileHeader, DiffView } from "./DiffView"
 import { CodeView } from "./CodeView"
 import { useT } from "@/lib/i18n/useT"
-import { ChevronsDownUp, ChevronsUpDown, File, Undo2, X } from "@/lib/icons"
+import { ChevronsDownUp, ChevronsUpDown, File, Loader2, Sparkles, Undo2, X } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { splitHunks } from "@/lib/hunk-revert"
 import type { DiffLine } from "@/lib/diff"
+import { classifyTurnRisk } from "@/lib/turn-review"
+import { useTurnReview } from "@/lib/use-turn-review"
 import { TurnReviewActions } from "./TurnReviewActions"
 
 export function TurnDiffViewer({ uri }: { uri: string }) {
@@ -48,6 +51,10 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
   const shownAdded = shown.reduce((s, x) => s + x.file.added, 0)
   const shownRemoved = shown.reduce((s, x) => s + x.file.removed, 0)
   const canRevert = !!message?.snapshotBase
+  const reviewAfterTurn = useSettingsStore((s) => s.settings.reviewAfterTurn ?? false)
+  const turnReview = useTurnReview(workspacePath)
+  const turnRisk = useMemo(() => classifyTurnRisk(edits.files.map((f) => f.path)), [edits])
+  const showTurnReview = reviewAfterTurn && edits.files.length > 0
 
   async function handleRevert() {
     if (!messageId || !canRevert) return
@@ -99,6 +106,31 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
               <ChevronsDownUp className="h-4 w-4" />
             </button>
           </div>
+        )}
+        {showTurnReview && (
+          <button
+            type="button"
+            onClick={() => void turnReview.reviewNow()}
+            disabled={turnReview.reviewing}
+            title={
+              turnRisk === "high"
+                ? t("messageList.turnAiReviewHighRisk")
+                : t("messageList.turnAiReview")
+            }
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+              turnRisk === "high"
+                ? "bg-codezal-accent/15 text-codezal-accent hover:bg-codezal-accent/25"
+                : "border border-codezal bg-codezal-panel text-codezal-dim hover:border-codezal-strong hover:bg-codezal-panel-2 hover:text-codezal-text",
+            )}
+          >
+            {turnReview.reviewing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {t("messageList.turnAiReview")}
+          </button>
         )}
         <TurnReviewActions workspacePath={workspacePath} suggestedTitle={sessionTitle} />
         {canRevert && (
@@ -170,6 +202,7 @@ export function TurnDiffViewer({ uri }: { uri: string }) {
           })
         )}
       </div>
+      {turnReview.dialog}
     </div>
   )
 }

@@ -100,6 +100,79 @@ describe("PrivacyScrubber", () => {
     })
     expect(s.scrubText("identity 12345678901")).toBe("identity [TCKN_1]")
   })
+
+  it("scrubs assistant tool-call input even when scrubAssistant is off (H3)", () => {
+    const s = new PrivacyScrubber(ON)
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "c1",
+            toolName: "edit_file",
+            input: { path: "a.ts", content: "contact ali@x.com" },
+          },
+        ],
+      } as unknown as ModelMessage,
+    ]
+    const out = s.scrubMessages(msgs)
+    const parts = out[0].content as Array<{ type: string; input?: { content?: string } }>
+    expect(parts[0].input?.content).toBe("contact [EMAIL_1]")
+    expect(s.verify(out)).toHaveLength(0)
+  })
+
+  it("scrubs tool-result output on role=tool messages (H3)", () => {
+    const s = new PrivacyScrubber(ON)
+    const msgs: ModelMessage[] = [
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "c1", toolName: "bash", output: "sent to veli@y.com" },
+        ],
+      } as unknown as ModelMessage,
+    ]
+    const out = s.scrubMessages(msgs)
+    const parts = out[0].content as Array<{ type: string; output?: string }>
+    expect(parts[0].output).toBe("sent to [EMAIL_1]")
+    expect(s.verify(out)).toHaveLength(0)
+  })
+
+  it("does NOT scrub assistant prose when scrubAssistant is off but verifies tool parts (H3)", () => {
+    const s = new PrivacyScrubber(ON)
+    const msgs: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "ok ali@x.com" },
+          {
+            type: "tool-call",
+            toolCallId: "c1",
+            toolName: "edit_file",
+            input: { content: "veli@y.com" },
+          },
+        ],
+      } as unknown as ModelMessage,
+    ]
+    const out = s.scrubMessages(msgs)
+    const parts = out[0].content as Array<{ type: string; text?: string; input?: { content?: string } }>
+    expect(parts[0].text).toBe("ok ali@x.com")
+    expect(parts[1].input?.content).toBe("[EMAIL_1]")
+    expect(s.verify(out)).toHaveLength(0)
+  })
+
+  it("fail-closed verify catches a leak in a tool-result output that was not scrubbed", () => {
+    const s = new PrivacyScrubber(ON)
+    const msgs: ModelMessage[] = [
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "c1", toolName: "bash", output: "leaked ayse@z.com" },
+        ],
+      } as unknown as ModelMessage,
+    ]
+    expect(s.verify(msgs).length).toBeGreaterThan(0)
+  })
 })
 
 describe("privacyActive", () => {

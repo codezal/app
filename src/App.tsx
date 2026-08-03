@@ -128,7 +128,6 @@ import { setAutostart, setKeepAwake } from "@/lib/autopilot-bg"
 import { subscribeMonitor } from "@/lib/monitor-bus"
 import { subscribeSessionMessage } from "@/lib/session-message-bus"
 import { enqueueInbox, takeInbox, framePeerMessage } from "@/lib/session-inbox"
-import { abortDispatchFor } from "@/lib/orchestra/runtime"
 import { pickWorkspaceFolder } from "@/lib/workspace"
 import { checkForUpdateOnLaunch, UPDATE_CHECK_INTERVAL_MS } from "@/lib/updater"
 import { useUpdateStore } from "@/store/update"
@@ -148,7 +147,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import { useJobsStore } from "@/store/jobs"
 import { useSettingsStore } from "@/store/settings"
 import { resolveEffectiveSettings, getEffectiveSettings } from "@/lib/config"
-import type { Message, MessageFile, MessagePdf } from "@/store/types"
+import { loadImageDataUrl } from "@/lib/image-store"
+import type { Message, MessageImage, MessageFile, MessagePdf } from "@/store/types"
 import { registerDropTarget } from "@/lib/internal-drag"
 import { t as tStatic } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -352,6 +352,9 @@ export default function App() {
   // into them; results flow back to the parent session automatically.
   const activeIsWorker = useSessionsStore((s) =>
     s.activeId ? !!s.sessions[s.activeId]?.ownerSessionId : false,
+  )
+  const activeWorkerOwnerId = useSessionsStore((s) =>
+    s.activeId ? s.sessions[s.activeId]?.ownerSessionId : undefined,
   )
   useTodoPanelAuto(panelMode, setPanelMode, activeStreaming)
   // AI-transient panes (agents / todo / preview): the AI opens them while it
@@ -1052,6 +1055,7 @@ export default function App() {
 
   async function onSend(
     text: string,
+    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     // baloncukta chip render edilir.
@@ -1073,7 +1077,7 @@ export default function App() {
 
     const activeNow = useSessionsStore.getState().active
     if (!activeNow) return
-    await dispatchTurn(activeNow.id, text, override, meta, files, pdfs)
+    await dispatchTurn(activeNow.id, text, images, override, meta, files, pdfs)
   }
 
   // AI Review (PRPanel "AI Review" butonu) → mevcut /review komutunu subtask olarak
@@ -1084,7 +1088,7 @@ export default function App() {
       if (!rendered) return
       const compact = `/review${args ? ` ${args}` : ""}`
       const body = `Bunu bir alt-görev olarak \`spawn_agent\` ile çalıştır ve sonucu özetle:\n\n${rendered}`
-      void onSend(compact, undefined, body)
+      void onSend(compact, undefined, undefined, body)
     }
     window.addEventListener("codezal:run-review", onRunReview as EventListener)
     return () => window.removeEventListener("codezal:run-review", onRunReview as EventListener)
@@ -1224,6 +1228,7 @@ export default function App() {
 
   async function onSendSplit(
     text: string,
+    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -1233,7 +1238,7 @@ export default function App() {
     if (!splitId) return
     if (!useSessionsStore.getState().sessions[splitId]) return
     await useSessionsStore.getState().commitDetached(splitId)
-    await dispatchTurn(splitId, text, override, meta, files, pdfs)
+    await dispatchTurn(splitId, text, images, override, meta, files, pdfs)
   }
 
   // settings warm → UserPromptSubmit hook → auto-compaction → user/asst push →
@@ -1241,6 +1246,7 @@ export default function App() {
   async function dispatchTurn(
     sid: string,
     text: string,
+    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -1259,6 +1265,7 @@ export default function App() {
       preparing: preparingTurns.has(sid),
       hasAttachments:
         meta !== undefined ||
+        (images?.length ?? 0) > 0 ||
         (files?.length ?? 0) > 0 ||
         (pdfs?.length ?? 0) > 0,
     })
@@ -1282,7 +1289,7 @@ export default function App() {
 
     preparingTurns.add(sid)
     try {
-      await dispatchTurnInner(sid, text, override, meta, files, pdfs)
+      await dispatchTurnInner(sid, text, images, override, meta, files, pdfs)
     } finally {
       preparingTurns.delete(sid)
     }
@@ -1291,6 +1298,7 @@ export default function App() {
   async function dispatchTurnInner(
     sid: string,
     text: string,
+    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -1399,6 +1407,7 @@ export default function App() {
       id: createId("message"),
       role: "user",
       content: text,
+      ...(images && images.length ? { images } : {}),
       ...(files && files.length ? { files } : {}),
       ...(pdfs && pdfs.length ? { pdfs } : {}),
       modelMsgCount: 1,
@@ -1414,7 +1423,7 @@ export default function App() {
     useSessionsStore.getState().pushMessageFor(sid, asstMsg)
 
     const snap = useSessionsStore.getState().sessions[sid]!
-    const userContent = await buildUserContent(effectiveText + fileRefsText, pdfs, pdfNative)
+    const userContent = await buildUserContent(effectiveText + fileRefsText, images, pdfs, pdfNative)
     let history: ModelMessage[]
     if (snap.modelMessages) {
       history = [...snap.modelMessages, { role: "user", content: userContent }]
@@ -2101,12 +2110,14 @@ export default function App() {
   }
 
 
-  // Build the AI SDK user-message content from text + optional PDFs. No PDFs
-  // → plain string (unchanged behaviour). With PDFs → a parts array (empty
-  // text is dropped). PDF content is either a native file part (when the model
-  // supports it) or extracted text.
+  // Build the AI SDK user-message content from text + optional images/PDFs.
+  // No attachments → plain string (unchanged behaviour). With attachments → a
+  // parts array (empty text is dropped). Image parts carry the base64 data URL;
+  // the AI SDK materializes them before the wire. PDF content is either a
+  // native file part (when the model supports it) or extracted text.
   async function buildUserContent(
     text: string,
+    images?: MessageImage[],
     pdfs?: MessagePdf[],
     // Model native PDF destekliyor mu (modalities.input "pdf"). true → AI SDK
     pdfNative?: boolean,
@@ -2114,16 +2125,25 @@ export default function App() {
     | string
     | Array<
         | { type: "text"; text: string }
+        | { type: "image"; image: string; mediaType?: string }
         | { type: "file"; data: string; mediaType: string; filename?: string }
       >
   > {
+    const hasImages = !!images && images.length > 0
     const hasPdfs = !!pdfs && pdfs.length > 0
-    if (!hasPdfs) return text
+    if (!hasImages && !hasPdfs) return text
     const parts: Array<
       | { type: "text"; text: string }
+      | { type: "image"; image: string; mediaType?: string }
       | { type: "file"; data: string; mediaType: string; filename?: string }
     > = []
     if (text.trim()) parts.push({ type: "text", text })
+    if (images) {
+      for (const im of images) {
+        const image = im.dataUrl ?? (im.ref ? await loadImageDataUrl(im.ref, im.mime) : "")
+        if (image) parts.push({ type: "image", image, mediaType: im.mime || undefined })
+      }
+    }
     if (pdfs) {
       for (const p of pdfs) {
         if (pdfNative) {
@@ -2176,7 +2196,6 @@ export default function App() {
 
   function onAbortFor(sid: string) {
     if (!sid) return
-    abortDispatchFor(sid)
     abortStream(sid)
     void useJobsStore.getState().killBySession(sid)
     setStreamingFor(sid, false)
@@ -2283,25 +2302,40 @@ export default function App() {
           </div>
         )}
         <QuestionModal />
-        <Composer
-          streaming={activeStreaming}
-          compacting={activeCompacting}
-          disabled={activeIsWorker}
-          placeholder={activeIsWorker ? tStatic("composer.workerReadOnly") : undefined}
-          onSend={onSend}
-          onAbort={onAbort}
-          onSlashAction={(a, args) => void onSlashAction(a, args)}
-          onRemember={(txt, scope) => void onRemember(txt, scope)}
-          queued={queuedActive}
-          onQueue={(txt) => {
-            const sid = useSessionsStore.getState().activeId
-            if (sid) enqueueMessage(sid, txt)
-          }}
-          onUnqueue={(i) => {
-            const sid = useSessionsStore.getState().activeId
-            if (sid) removeQueuedAt(sid, i)
-          }}
-        />
+        {activeIsWorker ? (
+          <div className="flex items-center justify-between gap-3 border-t border-codezal-hair bg-codezal-sidebar px-4 py-3">
+            <span className="min-w-0 truncate text-sm text-codezal-mute">
+              {tStatic("composer.workerNoSend")}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeWorkerOwnerId) void useSessionsStore.getState().open(activeWorkerOwnerId)
+              }}
+              className="shrink-0 rounded-md border border-codezal bg-codezal-chip/40 px-3 py-1.5 text-sm font-medium text-codezal-accent transition-colors hover:bg-codezal-chip"
+            >
+              {tStatic("composer.returnToParent")}
+            </button>
+          </div>
+        ) : (
+          <Composer
+            streaming={activeStreaming}
+            compacting={activeCompacting}
+            onSend={onSend}
+            onAbort={onAbort}
+            onSlashAction={(a, args) => void onSlashAction(a, args)}
+            onRemember={(txt, scope) => void onRemember(txt, scope)}
+            queued={queuedActive}
+            onQueue={(txt) => {
+              const sid = useSessionsStore.getState().activeId
+              if (sid) enqueueMessage(sid, txt)
+            }}
+            onUnqueue={(i) => {
+              const sid = useSessionsStore.getState().activeId
+              if (sid) removeQueuedAt(sid, i)
+            }}
+          />
+        )}
       </div>
     </>
   )

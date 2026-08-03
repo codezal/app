@@ -40,7 +40,10 @@ import { Markdown } from "./Markdown"
 import { EditorContextMenu, type CtxMenuItem } from "./EditorContextMenu"
 import { CodeView } from "./CodeView"
 import { TodoList } from "./TodoList"
-import type { Message, MessageFile, MessagePdf, Part } from "@/store/types"
+import { StoredImage } from "./StoredImage"
+import { AgentTaskCard } from "./AgentTaskCard"
+import { ThinkingOrb } from "thinking-orbs"
+import type { Message, MessageImage, MessageFile, MessagePdf, Part } from "@/store/types"
 import { useSessionsStore } from "@/store/sessions"
 import { useQuestionsStore } from "@/store/questions"
 import { useBrowserShots } from "@/store/browser-shots"
@@ -872,7 +875,7 @@ function BubbleImpl({
             <Dots />
           </div>
         ) : isUser ? (
-          <UserContent content={m.content} files={m.files} pdfs={m.pdfs} />
+          <UserContent content={m.content} images={m.images} files={m.files} pdfs={m.pdfs} />
         ) : m.parts && m.parts.length > 0 ? (
           <PartsRender
             parts={m.parts}
@@ -1119,10 +1122,12 @@ function TurnEditRow({ file, onReview }: { file: TurnEditFile; onReview?: (path:
 
 function UserContent({
   content,
+  images,
   files,
   pdfs,
 }: {
   content: string
+  images?: MessageImage[]
   files?: MessageFile[]
   pdfs?: MessagePdf[]
 }) {
@@ -1135,6 +1140,18 @@ function UserContent({
   const displayContent = collapsed && collapsible ? contentLines.slice(0, COLLAPSED_LINES).join("\n") : content
   return (
     <div className="flex w-full flex-col items-end gap-1.5">
+      {images && images.length > 0 && (
+        <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
+          {images.map((im) => (
+            <StoredImage
+              key={im.id}
+              image={im}
+              className="max-h-[120px] max-w-[180px] w-auto cursor-pointer rounded-lg border border-codezal-hair object-cover transition hover:opacity-90"
+              alt={im.name}
+            />
+          ))}
+        </div>
+      )}
       {files && files.length > 0 && (
         <div className="flex max-w-[72%] flex-wrap justify-end gap-2">
           {files.map((f) => (
@@ -1215,7 +1232,8 @@ function toolIcon(toolName: string): typeof Wrench {
     return ListChecks
   if (toolName === "webfetch") return Download
   if (toolName === "websearch") return Globe
-  if (toolName === "spawn_agent" || toolName === "dispatch_workers") return Bot
+  if (toolName === "spawn_agent" || toolName === "dispatch_workers" || toolName === "delegate_agents")
+    return Bot
   if (toolName === "load_skill") return Sparkles
   if (toolName === "clone_repo" || toolName.includes("worktree")) return GitBranch
   if (toolName === "browser_screenshot") return ImageIcon
@@ -1283,6 +1301,9 @@ function Blocks({
               className="text-md leading-[1.7] [&>:first-child]:mt-0 [&>:last-child]:mb-0"
             />
           )
+        }
+        if (b.kind === "agents") {
+          return <AgentTaskCard key={b.key} card={b.card} />
         }
         const isContextBlock = CONTEXT_TOOLS.has(b.calls[0].toolName)
         if (b.calls.length === 1 && !isContextBlock) {
@@ -1638,6 +1659,9 @@ const ToolRow = memo(function ToolRow({
   // spawn_agent: the full live card lives in the right panel (ContextPanel
   // "agents"). Clicking the row opens that panel instead of an inline body.
   const isAgent = call.toolName === "spawn_agent"
+  // Agent-invocation rows get an animated "listening" orb while running.
+  const isAgentInvoke =
+    call.toolName === "spawn_agent" || call.toolName === "delegate_agents"
 
   const labelColor =
     status === "error"
@@ -1659,7 +1683,17 @@ const ToolRow = memo(function ToolRow({
         aria-expanded={!isAgent && !noExpand ? open : undefined}
         className="group flex w-full items-center gap-2 rounded-r-lg px-2 py-1.5 text-left hover:bg-codezal-chip/40"
       >
-        {createElement(toolIcon(call.toolName), { className: cn("h-3.5 w-3.5 shrink-0", labelColor) })}
+        {isAgentInvoke && status === "running" ? (
+          <ThinkingOrb
+            state="listening"
+            size={20}
+            theme="dark"
+            className="h-5 w-5 shrink-0"
+            aria-label={displayLabel}
+          />
+        ) : (
+          createElement(toolIcon(call.toolName), { className: cn("h-3.5 w-3.5 shrink-0", labelColor) })
+        )}
         <span className={cn("shrink-0", labelColor)}>{displayLabel}</span>
         {ctxGrouped && displayName && <span className="shrink-0 text-codezal-mute">/</span>}
         <span className="min-w-0 truncate text-codezal-text">{displayName}</span>

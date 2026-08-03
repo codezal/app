@@ -34,11 +34,15 @@ export function ApprovalModal() {
         return
       }
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        // Always preventDefault: for risky tools we deliberately do nothing, and
+        // without a preventDefault the browser's default activation would click
+        // the focused "Deny" button — silently turning the user's Cmd+Enter
+        // (approve intent) into a deny.
+        e.preventDefault()
         const risky =
           checkDanger(req.tool, req.input) ||
           (req.findings?.some((f) => f.severity === "critical") ?? false)
         if (risky) return
-        e.preventDefault()
         decide(req.id, "once")
       }
     }

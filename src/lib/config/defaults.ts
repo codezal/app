@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   securityScan: true,
   reviewBeforeCommit: false,
   reviewBeforePush: false,
+  reviewAfterTurn: false,
   reviewBlockOnCritical: true,
   narrateProgress: true,
   crashReporting: true,

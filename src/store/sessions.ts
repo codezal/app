@@ -1104,7 +1104,29 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
             if (existingCards.length > 0) {
               const incomingHasCards = patch.parts.some((p) => p.type === "agent-card")
               if (!incomingHasCards) {
-                return { ...m, ...patch, parts: [...patch.parts, ...existingCards] }
+                // Re-insert each card after the same number of non-card parts it
+                // had before, so cards keep their original position (right after
+                // the tool calls) instead of drifting to the bottom as new text
+                // streams in below them.
+                const offsets: number[] = []
+                let nonCard = 0
+                for (const p of m.parts) {
+                  if (p.type === "agent-card") offsets.push(nonCard)
+                  else nonCard++
+                }
+                const merged: typeof patch.parts = []
+                let ci = 0
+                let placed = 0
+                for (const p of patch.parts) {
+                  merged.push(p)
+                  if (p.type !== "agent-card") placed++
+                  while (ci < existingCards.length && offsets[ci]! <= placed) {
+                    merged.push(existingCards[ci]!)
+                    ci++
+                  }
+                }
+                while (ci < existingCards.length) merged.push(existingCards[ci]!)
+                return { ...m, ...patch, parts: merged }
               }
             }
           }

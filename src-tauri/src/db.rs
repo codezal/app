@@ -112,6 +112,14 @@ fn to_file_uri(path: &str) -> String {
     format!("file:{enc}?immutable=1")
 }
 
+fn home_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let h = std::env::var_os("USERPROFILE");
+    #[cfg(not(windows))]
+    let h = std::env::var_os("HOME");
+    h.map(PathBuf::from)
+}
+
 #[tauri::command]
 pub fn db_select_external(
     path: String,
@@ -119,13 +127,42 @@ pub fn db_select_external(
     params: Vec<Value>,
 ) -> Result<Vec<Map<String, Value>>, String> {
     use rusqlite::OpenFlags;
-    if !sql.trim_start().to_ascii_uppercase().starts_with("SELECT") {
+
+    // Arbitrary-path guard: this command opens a SQLite file and runs SELECTs on
+    // it. Without containment it is a machine-wide read primitive (any SQLite DB
+    // on disk — browser profiles, other apps' data). Legit callers only read the
+    // user's own history DBs under the home dir, so restrict + canonicalize:
+    // canonicalize() also resolves symlinks, so a symlink pointing outside home
+    // is rejected even when the lexical path looks benign.
+    let home = home_dir().ok_or_else(|| "db_select_external: home dir bulunamadı".to_string())?;
+    let home_canon = std::fs::canonicalize(&home).map_err(err)?;
+    let target = std::fs::canonicalize(&path)
+        .map_err(|e| format!("db_select_external: path doğrulanamadı: {e}"))?;
+    if !target.starts_with(&home_canon) {
+        return Err("db_select_external: path home dizini dışında — erişim reddedildi".to_string());
+    }
+
+    // SELECT-only + no database-switching / pragma keywords. ATTACH could open
+    // arbitrary files even from a readonly connection; PRAGMA/VACUUM mutate.
+    let up = sql.to_ascii_uppercase();
+    let tokens: Vec<&str> = up
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.first().map(|s| *s) != Some("SELECT") {
         return Err("db_select_external: only SELECT allowed".to_string());
     }
+    if tokens
+        .iter()
+        .any(|t| ["ATTACH", "DETACH", "PRAGMA", "VACUUM"].contains(t))
+    {
+        return Err("db_select_external: ATTACH/PRAGMA/VACUUM/DETACH yasak".to_string());
+    }
+
     let ro = OpenFlags::SQLITE_OPEN_READ_ONLY;
     let ro_uri = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI;
-    let conn = Connection::open_with_flags(&path, ro)
-        .or_else(|_| Connection::open_with_flags(to_file_uri(&path), ro_uri))
+    let conn = Connection::open_with_flags(&target, ro)
+        .or_else(|_| Connection::open_with_flags(to_file_uri(&target.to_string_lossy()), ro_uri))
         .map_err(err)?;
     conn.busy_timeout(std::time::Duration::from_millis(3000))
         .map_err(err)?;

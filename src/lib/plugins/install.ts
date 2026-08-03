@@ -20,7 +20,7 @@ import {
 import { loadPlugin, unloadPlugin } from "./loader"
 import { appendAudit } from "./audit"
 import { computeDirFingerprint } from "./fingerprint"
-import { verifyManifestSignature } from "./signing"
+import { enforceCuratedSignature } from "./signing"
 import { withLock } from "../lock"
 import type {
   InstalledPlugin,
@@ -149,23 +149,22 @@ export async function installPlugin(opts: {
     }
   }
 
-  if (manifest.channel === "codezal-curated" && manifest.verified) {
-    const verdict = await verifyManifestSignature(manifest)
-    if (verdict === "invalid") {
+  // Curated channel is the trust boundary — the signature IS the curation.
+  // Always verify, regardless of the manifest's self-declared `verified` flag
+  // (an attacker who can edit the marketplace can flip that flag). Anything
+  // other than a valid signature blocks the install.
+  if (manifest.channel === "codezal-curated") {
+    try {
+      await enforceCuratedSignature(manifest)
+      await appendAudit({ ts: Date.now(), event: "signature-verify", plugin: id })
+    } catch (e) {
       await appendAudit({
         ts: Date.now(),
         event: "signature-fail",
         plugin: id,
-        detail: "Ed25519 imza eşleşmedi — manifest değiştirilmiş olabilir",
+        detail: e instanceof Error ? e.message : String(e),
       })
-      throw new Error(
-        "İmza doğrulama başarısız — manifest imzayla eşleşmiyor. Marketplace tehlikeye girmiş olabilir, kurulum iptal edildi.",
-      )
-    }
-    if (verdict === "valid") {
-      await appendAudit({ ts: Date.now(), event: "signature-verify", plugin: id })
-    } else {
-      console.warn(`[plugin install] ${id} imza ${verdict} — rollout döneminde izin veriliyor`)
+      throw e
     }
   }
 

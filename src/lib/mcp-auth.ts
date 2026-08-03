@@ -1,10 +1,16 @@
-// MCP OAuth credential storage — AppData/mcp-auth.json, keyed by server name.
-// Plain-TS counterpart of the storage layer the MCP SDK OAuthClientProvider
-// reads/writes during PKCE + dynamic client registration + token refresh.
-// Persists: tokens, dynamically-registered client info, the in-flight PKCE
-// code verifier, and the CSRF state. `serverUrl` pins an entry to one URL so
-// stored credentials are never replayed against a different server.
+// MCP OAuth credential storage — OS keychain, keyed by server name.
+//
+// Tokens, dynamic-client secrets, the PKCE code verifier and the CSRF state are
+// long-lived credentials, so they must NOT sit in a plaintext JSON file the way
+// provider keys used to. Each server's whole McpAuthEntry is stored as one
+// keychain entry (`mcp.<name>`) via the same secret-store primitives the
+// provider layer uses. `serverUrl` pins an entry to one URL so stored
+// credentials are never replayed against a different server.
+//
+// Legacy plaintext entries (AppData/mcp-auth.json) are migrated into the
+// keychain on first access and the file is emptied.
 import { readJson, writeJson } from "./storage"
+import { keychainGet, keychainSet, keychainDelete } from "./providers/secret-store"
 
 export type McpTokens = {
   accessToken: string
@@ -29,16 +35,44 @@ export type McpAuthEntry = {
   serverUrl?: string
 }
 
-type AuthData = Record<string, McpAuthEntry>
+const LEGACY_FILE = "mcp-auth.json"
+const account = (name: string): string => `mcp.${name}`
 
-const FILE = "mcp-auth.json"
+async function kcRead(name: string): Promise<McpAuthEntry | undefined> {
+  const raw = await keychainGet(account(name))
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as McpAuthEntry
+    return parsed && typeof parsed === "object" ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
 
-async function readAll(): Promise<AuthData> {
-  return readJson<AuthData>(FILE, {})
+// Idempotent migration of pre-keychain plaintext entries. Runs on every access
+// (the legacy read was already per-call before keychain) but is a no-op once
+// the file holds no entries. Failures are logged and never block the hot path.
+async function ensureMigrated(): Promise<void> {
+  try {
+    const legacy = await readJson<Record<string, unknown>>(LEGACY_FILE, {})
+    const names = Object.keys(legacy)
+    if (names.length === 0) return
+    for (const name of names) {
+      const entry = legacy[name]
+      if (entry && typeof entry === "object") {
+        await keychainSet(account(name), JSON.stringify(entry))
+      }
+    }
+    await writeJson(LEGACY_FILE, {})
+    console.info(`[mcp-auth] ${names.length} legacy entry keychain'e taşındı`)
+  } catch (e) {
+    console.warn("[mcp-auth] legacy migration failed:", e)
+  }
 }
 
 export async function getAuth(name: string): Promise<McpAuthEntry | undefined> {
-  return (await readAll())[name]
+  await ensureMigrated()
+  return kcRead(name)
 }
 
 // Return the entry only if it was issued for `serverUrl` — prevents replaying
@@ -47,7 +81,8 @@ export async function getAuthForUrl(
   name: string,
   serverUrl: string,
 ): Promise<McpAuthEntry | undefined> {
-  const entry = (await readAll())[name]
+  await ensureMigrated()
+  const entry = await kcRead(name)
   if (!entry || !entry.serverUrl || entry.serverUrl !== serverUrl) return undefined
   return entry
 }
@@ -57,15 +92,14 @@ export async function setAuth(
   entry: McpAuthEntry,
   serverUrl?: string,
 ): Promise<void> {
-  const data = await readAll()
+  await ensureMigrated()
   if (serverUrl) entry.serverUrl = serverUrl
-  await writeJson(FILE, { ...data, [name]: entry })
+  await keychainSet(account(name), JSON.stringify(entry))
 }
 
 export async function removeAuth(name: string): Promise<void> {
-  const data = await readAll()
-  delete data[name]
-  await writeJson(FILE, data)
+  await ensureMigrated()
+  await keychainDelete(account(name))
 }
 
 // Merge a single field into the entry (creating it if absent), then persist.

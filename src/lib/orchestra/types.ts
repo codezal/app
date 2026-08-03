@@ -73,6 +73,13 @@ export type AgentCardPart = {
   task?: string
   workerLabel: string
   displayName?: string
+  // opencode-style task card metadata. `agentType` is the subagent/agent name
+  // shown as the card title, `agentColor` is the resolved accent tone, and
+  // `workerSessionId` is the child session the card navigates to when clicked.
+  agentType?: string
+  agentColor?: string
+  workerSessionId?: string
+  description?: string
   kind: WorkerKind
   configSnapshot: Pick<
     WorkerConfig,

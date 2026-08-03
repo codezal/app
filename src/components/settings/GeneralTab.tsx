@@ -321,6 +321,16 @@ export function GeneralTab() {
           />
         </Row>
         <Row
+          label={t("settings.drawer.reviewAfterTurnLabel")}
+          description={t("settings.drawer.reviewAfterTurnDesc")}
+        >
+          <Toggle
+            label={t("settings.drawer.reviewAfterTurnLabel")}
+            checked={settings.reviewAfterTurn ?? false}
+            onChange={(v) => void update({ reviewAfterTurn: v })}
+          />
+        </Row>
+        <Row
           label={t("settings.drawer.reviewBlockOnCriticalLabel")}
           description={t("settings.drawer.reviewBlockOnCriticalDesc")}
         >

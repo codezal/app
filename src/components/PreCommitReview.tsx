@@ -14,7 +14,7 @@ import type {
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n/useT"
 
-export type GateMode = "commit" | "push"
+export type GateMode = "commit" | "push" | "turn"
 export type GateVerdict = "proceed" | "abort"
 
 const SEVERITY_STYLE: Record<ReviewSeverity, string> = {
@@ -88,21 +88,31 @@ export function ReviewResultsDialog({
     complexity: t("codeReview.categoryComplexity"),
     style: t("codeReview.categoryStyle"),
   }
-  const title = mode === "commit" ? t("codeReview.titleCommit") : t("codeReview.titlePush")
+  const title =
+    mode === "commit"
+      ? t("codeReview.titleCommit")
+      : mode === "push"
+        ? t("codeReview.titlePush")
+        : t("codeReview.titleTurn")
   // A warning/critical finding the user is about to ship past — the proceed
   // button must make clear the commit will include unresolved findings.
   const hasActionable = result.findings.some(
     (f) => f.severity === "critical" || f.severity === "warning",
   )
-  const proceedLabel = blocking
-    ? mode === "commit"
-      ? t("codeReview.commitAnyway")
-      : t("codeReview.pushAnyway")
-    : hasActionable
-      ? mode === "commit"
-        ? t("codeReview.proceedWithFindingsCommit")
-        : t("codeReview.proceedWithFindingsPush")
-      : t("codeReview.continue")
+  // A turn review is informational — it gates no git operation — so its action
+  // button is a plain "Dismiss" regardless of findings.
+  const proceedLabel =
+    mode === "turn"
+      ? t("codeReview.dismiss")
+      : blocking
+        ? mode === "commit"
+          ? t("codeReview.commitAnyway")
+          : t("codeReview.pushAnyway")
+        : hasActionable
+          ? mode === "commit"
+            ? t("codeReview.proceedWithFindingsCommit")
+            : t("codeReview.proceedWithFindingsPush")
+          : t("codeReview.continue")
 
   return (
     <Dialog
@@ -144,7 +154,7 @@ export function ReviewResultsDialog({
             {t("codeReview.blockedHint")}
           </p>
         )}
-        {hasActionable && !blocking && (
+        {hasActionable && !blocking && mode !== "turn" && (
           <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
             {t("codeReview.proceedHint")}
           </p>

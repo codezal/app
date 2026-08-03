@@ -246,6 +246,7 @@ export function makeSchema(d: Settings) {
       securityScan: z.boolean().optional().catch(d.securityScan),
       reviewBeforeCommit: z.boolean().optional().catch(d.reviewBeforeCommit),
       reviewBeforePush: z.boolean().optional().catch(d.reviewBeforePush),
+      reviewAfterTurn: z.boolean().optional().catch(d.reviewAfterTurn),
       reviewBlockOnCritical: z.boolean().optional().catch(d.reviewBlockOnCritical),
       narrateProgress: z.boolean().optional().catch(d.narrateProgress),
       crashReporting: z.boolean().optional().catch(d.crashReporting),

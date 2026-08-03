@@ -186,3 +186,12 @@ export async function removeProviderSecrets(id: ProviderId): Promise<void> {
     headers: removeId(index.headers, id),
   })
 }
+
+// ----- generic keychain primitives (shared with mcp-auth) ------------------
+
+// Persist / read / delete an arbitrary secret blob in the OS keychain under the
+// codezal service namespace. Used by MCP OAuth credentials, which must not
+// live in plaintext on disk.
+export const keychainGet = kcGet
+export const keychainSet = kcSet
+export const keychainDelete = kcDelete

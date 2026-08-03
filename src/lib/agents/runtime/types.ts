@@ -73,6 +73,9 @@ export type AgentRunResult = {
   status: "done" | "error" | "aborted"
   output: string
   durationMs: number
+  // The child worker session that ran this task. Returned to the model so a
+  // later delegate_agents call can resume it via task_id (opencode parity).
+  workerSessionId?: string
   tokensIn?: number
   tokensOut?: number
   costUsd?: number

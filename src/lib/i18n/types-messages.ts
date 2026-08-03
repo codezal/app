@@ -264,9 +264,14 @@ export type Messages = {
     effortLabel: string
     defaultPlaceholder: string
     workerReadOnly?: string
+    workerNoSend?: string
+    returnToParent?: string
     pasteBinary?: string
     pasteTooLarge?: string
     pasteUnreadable?: string
+    imageUnsupported?: string
+    imageUnsupportedFormat?: string
+    imageDecodeFailed?: string
     externalEditorNotFound?: string
     externalEditorFailed?: string
     pdfTooLarge?: string
@@ -1949,6 +1954,7 @@ export type Messages = {
     openInPane?: string
     paneEmpty?: string
     taskLabel?: string
+    openSession?: string
   }
 
   errors: {

@@ -22,7 +22,10 @@ type ShortcutArgs = {
   menuRef: { current: MenuActions }
 }
 
-// ⌘⇧G fork · ⌘B Files paneli · ⌘⇧T terminal · ⌘M plan/build toggle · ⌘\ split.
+// ⌘⇧G fork · ⌘B Files paneli · ⌘⇧T terminal · ⌘⇧M plan/build toggle · ⌘\ split.
+// (⌘M is the OS "Minimize Window" accelerator on macOS via the Window menu's
+// .minimize() item — the webview never sees that keydown, so the toggle moved
+// to ⌘⇧M.)
 //
 export function useKeyboardShortcuts(args: ShortcutArgs) {
   const ref = useRef(args)
@@ -63,8 +66,8 @@ export function useKeyboardShortcuts(args: ShortcutArgs) {
       } else if (e.shiftKey && (e.key === "T" || e.key === "t")) {
         e.preventDefault()
         a.toggleTerminal()
-      } else if (e.key === "m" || e.key === "M") {
-        // Plan/Build mode toggle
+      } else if (e.shiftKey && (e.key === "M" || e.key === "m")) {
+        // Plan/Build mode toggle (⌘⇧M — ⌘M is macOS Minimize).
         e.preventDefault()
         const cur = useSessionsStore.getState().active
         if (!cur) return

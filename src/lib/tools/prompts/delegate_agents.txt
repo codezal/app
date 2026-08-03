@@ -1,1 +1,9 @@
-Delegate one or more independent subtasks to child agents in PARALLEL. Choose the role per task: `worker` (default — implementation, writes code in an isolated branch that is merged back on success) or `reviewer` (read-only code review). Each role's model comes from Settings → Agent Orchestration; unset roles inherit the session model. Dispatch independent tasks together, then synthesize every result yourself. Child agents cannot delegate further. After workers change code, consider calling review_changes (or enable auto-review in Settings) so a reviewer pass catches issues before you report done.
+Delegate one or more independent subtasks to child agents in PARALLEL. Launch multiple agents at once whenever the work is independent — dispatch them together in a single call, then synthesize every result yourself.
+
+Per task you can set:
+- `role`: "worker" (default — implementation, writes code) or "reviewer" (read-only code review).
+- `agent`: optional named agent (subagent type) from the agent catalog; its model, prompt and permissions are used and it labels the task card. Unset → plain role run.
+- `description`: a short 3-5 word label shown on the task card.
+- `task_id`: set only to resume a previous subagent session (pass the task's returned workerSessionId so the agent continues with its earlier context). Unset → fresh agent.
+
+Each role's model comes from Settings → Agent Orchestration; unset roles inherit the session model. Each child agent runs as its own session; a task card appears in the chat and the user can open it to watch the transcript. Child agents cannot delegate further. A child's result is returned to you (not shown to the user), so summarize the outcome in your reply. After workers change code, consider calling review_changes (or enable auto-review in Settings) so a reviewer pass catches issues before you report done.

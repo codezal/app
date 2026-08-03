@@ -13,7 +13,7 @@ import { z } from "zod"
 import { buildLanguageModel, type ProviderId } from "@/lib/providers"
 import { isCodingAgentGated } from "@/lib/providers/provider-quirks"
 import type { Settings } from "@/store/types"
-import { gitDiffAll, gitDiffAhead, gitDiffStaged } from "@/lib/git"
+import { gitDiffAll, gitDiffAhead, gitDiffStaged, gitDiffWorktree } from "@/lib/git"
 
 export type ReviewSeverity = "critical" | "warning" | "info"
 export type ReviewCategory = "bug" | "security" | "performance" | "complexity" | "style"
@@ -164,20 +164,26 @@ export function diffFiles(diff: string): string[] {
   return files
 }
 
-// Review the staged diff (mode "commit") or the commits about to be pushed
-// (mode "push"). Returns a clean, skipped result when there is nothing to review
-// or no model can be built — the gate treats both as "proceed".
+// Review the staged diff (mode "commit"), the commits about to be pushed
+// (mode "push"), or the full working tree incl. new untracked files (mode
+// "worktree", used by the post-turn review). Returns a clean, skipped result
+// when there is nothing to review or no model can be built — the gate treats
+// both as "proceed".
 export async function reviewDiff(opts: {
   providerId: ProviderId
   modelId: string
   settings: Settings
   workspace: string
-  mode: "commit" | "push"
+  // "worktree" reviews the full working-tree diff against HEAD (staged +
+  // unstaged) — used by the post-turn review, which is not tied to a git op.
+  mode: "commit" | "push" | "worktree"
 }): Promise<ReviewResult> {
   const diff =
     opts.mode === "push"
       ? await gitDiffAhead(opts.workspace)
-      : (await gitDiffStaged(opts.workspace)) || (await gitDiffAll(opts.workspace))
+      : opts.mode === "worktree"
+        ? await gitDiffWorktree(opts.workspace)
+        : (await gitDiffStaged(opts.workspace)) || (await gitDiffAll(opts.workspace))
   const files = diffFiles(diff)
   if (!diff.trim() || diff.startsWith("# git diff")) {
     return { findings: [], summary: "", skipped: true, files }

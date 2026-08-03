@@ -11,7 +11,8 @@
 // - The user has already approved this plugin's permission set via the install
 //   modal (high-risk `providers.register` triggers a red warning + checkbox).
 // - The plugin code is trusted to the level the user signalled at install time.
-// - Codezal-curated plugins are pre-audited; community plugins are not.
+// - Codezal-curated plugins are pre-audited AND signature-verified; community
+//   plugins are not.
 //
 // What this layer enforces
 // ------------------------
@@ -22,11 +23,22 @@
 // - Module URL hygiene: we resolve the JS entry to a `file://` URL via the
 //   Tauri `convertFileSrc` helper before `import()`-ing it, so plugin code
 //   cannot bypass scope by passing a relative path.
+// - Hardened global window (withHardenedGlobals): while the plugin module
+//   evaluates and activates, the raw Tauri IPC bridge (`__TAURI_INTERNALS__`)
+//   and the raw network stack (global fetch / XMLHttpRequest / WebSocket) are
+//   shadowed with throwing stubs. The only network a plugin can use is the
+//   permission-gated `api.fetch`, which is bound to the real fetch captured
+//   before hardening.
 //
-// What this layer does NOT do
-// ---------------------------
-// - It does not isolate the global scope. Plugin code can still touch
-//   `window`, network APIs, etc. A Web Worker / iframe isolation pass is
+// What this layer does NOT do (documented residual risk)
+// ------------------------------------------------------
+// - It does not isolate the global scope. Plugin adapter functions must live in
+//   the app realm (a streaming `LanguageModel` cannot cross a Worker/iframe
+//   boundary), so a plugin can still stash a reference to the real globals
+//   during evaluation or run deferred code after the hardening window closes.
+//   Real isolation would require a separate realm, which conflicts with the
+//   provider-adapter contract. The install-time trust decision (curated
+//   signature + explicit permission approval) remains the primary gate.
 // - It does not validate the shape of the registered `ProviderAdapter`
 //   beyond a minimal duck-typing check. Malformed adapters will crash at
 //   first use.
@@ -136,6 +148,11 @@ export function makePluginAPI(plugin: InstalledPlugin): PluginAPI {
   const perms = plugin.manifest.permissions
   const pid = plugin.id
   const allowHosts = plugin.manifest.network?.allowedHosts
+  // Capture the real fetch NOW, before withHardenedGlobals shadows the global
+  // during module evaluation — the gated api.fetch must keep working while the
+  // plugin activates.
+  const realFetch =
+    typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : undefined
 
   return {
     registerProvider: has("providers.register", perms)
@@ -261,10 +278,66 @@ export function makePluginAPI(plugin: InstalledPlugin): PluginAPI {
             })
             throw new Error(`[plugin ${pid}] network engellendi — ${err}`)
           }
-          return fetch(input, init)
+          if (!realFetch) {
+            throw new Error(`[plugin ${pid}] fetch mevcut değil`)
+          }
+          return realFetch(input, init)
         }
       : undefined,
   }
+}
+
+// Hardened global scope for plugin module evaluation.
+//
+// Plugins run in the same realm as the app (their adapter functions must live
+// here), so they could reach for the raw primitives the app uses: the Tauri IPC
+// bridge (`window.__TAURI_INTERNALS__`, i.e. arbitrary `invoke` of any Tauri
+// command) and the network stack (fetch / XMLHttpRequest / WebSocket). This
+// window shadows those globals for the duration of module evaluation +
+// activation, so a plugin can only network via the permission-gated api.fetch.
+//
+// See the "What this layer does NOT do" header note for the residual risk.
+export function withHardenedGlobals<T>(fn: () => Promise<T>): Promise<T> {
+  const g = globalThis as unknown as {
+    window?: Record<string, unknown>
+    fetch?: unknown
+    XMLHttpRequest?: unknown
+    WebSocket?: unknown
+  }
+  const hasWindow = typeof g.window === "object" && g.window !== null
+  // Node test env has no window — nothing to harden, keep fn behavior.
+  if (!hasWindow) return Promise.resolve().then(fn)
+  const win = g.window!
+  const origInternals = win.__TAURI_INTERNALS__
+  const origFetch = g.fetch
+  const origXHR = g.XMLHttpRequest
+  const origWS = g.WebSocket
+
+  const blocked = (): never => {
+    throw new Error(
+      "[plugin sandbox] raw Tauri IPC erişimi engellendi — PluginAPI yüzeyini kullanın",
+    )
+  }
+  win.__TAURI_INTERNALS__ = new Proxy(
+    {},
+    { get: blocked, set: blocked, has: () => true, getPrototypeOf: () => null },
+  ) as unknown as typeof win.__TAURI_INTERNALS__
+  g.fetch = (() => {
+    throw new Error(
+      "[plugin sandbox] global fetch engellendi — api.fetch (izin gated) kullanın",
+    )
+  }) as unknown as typeof fetch
+  g.XMLHttpRequest = blocked as unknown as typeof XMLHttpRequest
+  g.WebSocket = blocked as unknown as typeof WebSocket
+
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      win.__TAURI_INTERNALS__ = origInternals
+      g.fetch = origFetch
+      g.XMLHttpRequest = origXHR
+      g.WebSocket = origWS
+    })
 }
 
 // Module entry-point shape we expect plugins to export. The module's default
@@ -321,14 +394,18 @@ export async function loadJsEntries(plugin: InstalledPlugin): Promise<{
       const url = entryUrl(plugin.installPath, e.entry)
       // The /* @vite-ignore */ comment tells Vite not to try to bundle this
       // path — it is resolved at runtime from the installed plugin directory.
-      const mod = (await import(/* @vite-ignore */ url)) as PluginEntryModule
-      const hook = mod.default ?? mod.activate
-      if (typeof hook !== "function") {
-        warnings.push(`entry ${e.entry} missing default / activate export`)
-        continue
-      }
-      await hook(api)
-      loaded++
+      // Hardened globals apply while the module evaluates and its hook runs.
+      const mod = (await withHardenedGlobals(async () => {
+        const m = (await import(/* @vite-ignore */ url)) as PluginEntryModule
+        const hook = m.default ?? m.activate
+        if (typeof hook !== "function") {
+          warnings.push(`entry ${e.entry} missing default / activate export`)
+          return null
+        }
+        await hook(api)
+        return m
+      })) as PluginEntryModule | null
+      if (mod !== null) loaded++
     } catch (err) {
       console.error(`[plugin sandbox] ${plugin.id} entry ${e.entry} load failed:`, err)
       warnings.push(`entry ${e.entry}: ${(err as Error).message}`)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { canonicalManifest } from "@/lib/plugins/signing"
+import { canonicalManifest, enforceCuratedSignature } from "@/lib/plugins/signing"
 
 describe("canonicalManifest", () => {
   it("signature alanı hariç tutulur", () => {
@@ -65,5 +65,59 @@ describe("canonicalManifest", () => {
     const m1 = { b: 2, a: 1 }
     const m2 = { a: 1, b: 2 }
     expect(canonicalManifest(m1)).toBe(canonicalManifest(m2))
+  })
+})
+
+const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes))
+
+async function signManifest(base: Record<string, unknown>) {
+  const keys = await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+    "sign",
+    "verify",
+  ])
+  const pub = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey))
+  const pubB64 = b64(pub)
+  const data = new TextEncoder().encode(canonicalManifest(base))
+  const sig = new Uint8Array(await crypto.subtle.sign("Ed25519", keys.privateKey, data))
+  return { pubB64, manifest: { ...base, signature: b64(sig) } }
+}
+
+const curated = { name: "x", version: "1.0.0", channel: "codezal-curated", verified: true }
+
+describe("enforceCuratedSignature", () => {
+  it("valid signature passes", async () => {
+    const { pubB64, manifest } = await signManifest(curated)
+    await expect(enforceCuratedSignature(manifest as never, pubB64)).resolves.toBeUndefined()
+  })
+
+  it("missing signature on curated blocks (H4)", async () => {
+    await expect(
+      enforceCuratedSignature(curated as never, "unused"),
+    ).rejects.toThrow()
+  })
+
+  it("invalid (tampered) signature blocks (H4)", async () => {
+    const { pubB64, manifest } = await signManifest(curated)
+    const tampered = { ...manifest, description: "changed after signing" }
+    await expect(enforceCuratedSignature(tampered as never, pubB64)).rejects.toThrow()
+  })
+
+  it("unsupported (garbage) signature blocks — attacker cannot force allow (H4)", async () => {
+    await expect(
+      enforceCuratedSignature(
+        { ...curated, signature: "!!!" } as never,
+        "unused",
+      ),
+    ).rejects.toThrow()
+  })
+
+  it("verified:false does NOT skip verification on curated (H4)", async () => {
+    // The attacker-controlled `verified` flag must not opt out of the check.
+    await expect(
+      enforceCuratedSignature(
+        { ...curated, verified: false } as never,
+        "unused",
+      ),
+    ).rejects.toThrow()
   })
 })

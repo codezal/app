@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { buildBlocks, splitWorkLog, type Block } from "@/lib/work-log"
 import type { Part } from "@/store/types"
+import type { AgentCardPart } from "@/lib/orchestra/types"
 
 function text(t: string): Part {
   return { type: "text", text: t }
@@ -8,6 +9,23 @@ function text(t: string): Part {
 
 function call(toolName: string, id = `${toolName}-1`): Part {
   return { type: "tool-call", toolCallId: id, toolName, input: {} }
+}
+
+function card(workerId: string, agentType = "worker"): AgentCardPart {
+  return {
+    type: "agent-card",
+    workerId,
+    workerIdx: 0,
+    taskNum: 1,
+    task: "do a thing",
+    workerLabel: `${agentType} · task-1`,
+    displayName: agentType,
+    agentType,
+    kind: "sdk",
+    configSnapshot: { kind: "sdk", yolo: false },
+    status: "running",
+    outputLog: [],
+  }
 }
 
 describe("buildBlocks", () => {
@@ -41,6 +59,21 @@ describe("buildBlocks", () => {
     if (blocks[1].kind === "tools") {
       expect(blocks[1].calls).toHaveLength(1)
       expect(blocks[1].calls[0].toolName).toBe("open_path")
+    }
+  })
+
+  it("renders each agent-card as a solo agents block", () => {
+    const blocks = buildBlocks([
+      call("read_file", "a"),
+      card("w1", "worker"),
+      card("w2", "reviewer"),
+      text("done"),
+    ])
+    expect(blocks.map((b) => b.kind)).toEqual(["tools", "agents", "agents", "text"])
+    const agentBlocks = blocks.filter((b) => b.kind === "agents")
+    if (agentBlocks[0].kind === "agents" && agentBlocks[1].kind === "agents") {
+      expect(agentBlocks[0].card.workerId).toBe("w1")
+      expect(agentBlocks[1].card.agentType).toBe("reviewer")
     }
   })
 })
@@ -93,5 +126,19 @@ describe("splitWorkLog", () => {
       { type: "tool-call", toolCallId: "b", toolName: "open_path", input: {} },
     ] }
     expect(splitWorkLog([artifact, summary], false)).toBeNull()
+  })
+
+  it("keeps agent-task cards visible (never collapses them into the work log)", () => {
+    const agent: Block = { kind: "agents", key: "a1", card: card("w1") }
+    const split = splitWorkLog([note, tools, agent, summary], false)
+    expect(split).not.toBeNull()
+    expect(split!.worklog).toEqual([note, tools])
+    expect(split!.artifacts).toEqual([agent])
+    expect(split!.tail).toEqual([summary])
+  })
+
+  it("returns null when only agent cards would collapse", () => {
+    const agent: Block = { kind: "agents", key: "a1", card: card("w1") }
+    expect(splitWorkLog([agent, summary], false)).toBeNull()
   })
 })

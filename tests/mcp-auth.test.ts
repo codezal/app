@@ -1,15 +1,29 @@
 // MCP OAuth credential storage — round-trip + URL pinning + expiry logic.
-// Backs the Tauri fs layer (src/lib/storage) with an in-memory store so the
-// suite stays pure-logic (node env, no Tauri).
+// The keychain layer (src/lib/providers/secret-store) is stubbed in-memory so
+// the suite stays pure-logic (node env, no Tauri). The legacy JSON file mock
+// exercises the plaintext → keychain migration.
 import { describe, it, expect, beforeEach, vi } from "vitest"
 
-const { store } = vi.hoisted(() => ({ store: {} as Record<string, unknown> }))
+const { store, kc } = vi.hoisted(() => ({
+  store: {} as Record<string, unknown>,
+  kc: {} as Record<string, string>,
+}))
 
 vi.mock("@/lib/storage", () => ({
   readJson: async (path: string, fallback: unknown) =>
     path in store ? store[path] : fallback,
   writeJson: async (path: string, data: unknown) => {
     store[path] = data
+  },
+}))
+
+vi.mock("@/lib/providers/secret-store", () => ({
+  keychainGet: async (a: string) => kc[a] ?? null,
+  keychainSet: async (a: string, v: string) => {
+    kc[a] = v
+  },
+  keychainDelete: async (a: string) => {
+    delete kc[a]
   },
 }))
 
@@ -32,6 +46,7 @@ const URL_B = "https://b.example.com/mcp"
 
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k]
+  for (const k of Object.keys(kc)) delete kc[k]
 })
 
 describe("mcp-auth storage", () => {
@@ -40,6 +55,20 @@ describe("mcp-auth storage", () => {
     const entry = await getAuth("srv")
     expect(entry?.tokens?.accessToken).toBe("tok")
     expect(entry?.serverUrl).toBe(URL_A)
+  })
+
+  it("credentials live in the keychain, never in the plaintext file (H9)", async () => {
+    await setAuth("srv", { tokens: { accessToken: "TOPSECRET" } })
+    expect(kc["mcp.srv"]).toContain("TOPSECRET")
+    expect(store["mcp-auth.json"]).toBeUndefined()
+  })
+
+  it("legacy plaintext entries migrate to keychain and the file is emptied (H9)", async () => {
+    store["mcp-auth.json"] = { srv: { tokens: { accessToken: "legacy-tok" } } }
+    const entry = await getAuth("srv")
+    expect(entry?.tokens?.accessToken).toBe("legacy-tok")
+    expect(kc["mcp.srv"]).toContain("legacy-tok")
+    expect(store["mcp-auth.json"]).toEqual({})
   })
 
   it("getAuthForUrl pins to the issuing URL", async () => {

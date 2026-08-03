@@ -682,6 +682,65 @@ export async function gitDiffAll(workspace: string): Promise<string> {
   }
 }
 
+// Well-known hash of the empty tree. Diffing against it renders every tracked
+// file as newly added — the right base for a repo with no commits yet (no HEAD).
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+// Full working-tree diff for the post-turn review: staged + unstaged changes
+// against HEAD, PLUS untracked, non-ignored files — which a plain `git diff
+// HEAD` omits. A turn that *creates* files is the common case, so without this
+// the AI review would never see brand-new files even though the diff viewer
+// shows them. Untracked files are folded in via `git add -N` (intent-to-add)
+// and the index is restored in a `finally` block, leaving no lasting side
+// effect. Repos with no HEAD diff against the empty tree instead.
+export async function gitDiffWorktree(workspace: string): Promise<string> {
+  if (!workspace) return ""
+
+  let untracked: string[] = []
+  try {
+    // -z: NUL-separated (safe for any path); --exclude-standard: honor ignores.
+    const raw = await exec(workspace, ["ls-files", "--others", "--exclude-standard", "-z"])
+    untracked = raw.split("\0").filter(Boolean)
+  } catch {
+    // Leave untracked empty — review tracked changes only.
+  }
+
+  const base = (await gitHasHead(workspace)) ? "HEAD" : EMPTY_TREE
+
+  // Intent-to-add the untracked files so `git diff` renders them as new files.
+  // Chunked to stay well under the OS argument-length limit on both macOS and
+  // Windows when a turn creates many files.
+  let added: string[] = []
+  for (let i = 0; i < untracked.length; i += 100) {
+    const chunk = untracked.slice(i, i + 100)
+    try {
+      await mutate(workspace, ["add", "-N", "--", ...chunk])
+      added = added.concat(chunk)
+    } catch {
+      // Ignore a failed chunk and review whatever we could mark.
+    }
+  }
+
+  try {
+    const out = await exec(workspace, ["diff", base, "--no-color"])
+    return capDiff(out)
+  } catch {
+    return ""
+  } finally {
+    // Drop the intent-to-add entries to restore the index exactly. Resetting
+    // against `base` removes these paths (they are not in HEAD / empty tree).
+    for (let i = 0; i < added.length; i += 100) {
+      const chunk = added.slice(i, i + 100)
+      try {
+        await mutate(workspace, ["reset", "-q", base, "--", ...chunk])
+      } catch {
+        // Best effort: a leftover intent-to-add entry only affects `git status`
+        // display — never fail the review on cleanup.
+      }
+    }
+  }
+}
+
 // Diff of the local commits that would be pushed — i.e. everything ahead of the
 // upstream tracking branch (`@{u}...HEAD`). Used by the pre-push code review.
 // Returns "" when there is no upstream (nothing to diff against) or on error.

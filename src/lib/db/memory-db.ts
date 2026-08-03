@@ -10,6 +10,7 @@ import {
   type MemoryLayer,
   type MemoryScope,
 } from "@/lib/memory-store/types"
+import { withLock } from "@/lib/lock"
 
 export type MemoryEntrySource =
   | "manual"
@@ -157,27 +158,36 @@ export async function insertMemoryEntry(db: Db, input: InsertMemoryEntryInput): 
   const text = input.text.trim()
   if (!text) return null
   if (input.scope === "project" && !projectPath(input.scope, input.workspace)) return null
-  const now = input.createdAt ?? Date.now()
-  const entry: MemoryEntry = {
-    id: input.id ?? createId("memory"),
-    text,
-    layer: input.layer ?? "episode",
-    scope: input.scope,
-    category: input.category?.trim() || undefined,
-    createdAt: now,
-    lastUsedAt: input.lastUsedAt ?? now,
-    useCount: input.useCount ?? 0,
-    baseSalience: Math.max(0, Math.min(1, input.baseSalience ?? 0.65)),
-  }
-  const source = input.source ?? "manual"
-  await insertRow(db, entry, source, input.workspace)
 
-  const rows = await listMemoryRows(db, { scope: input.scope, workspace: input.workspace })
-  const sourceForId = new Map(rows.map((r) => [r.id, r.source] as const))
-  const existing = rows.map(rowToEntry)
-  const { entries } = consolidate(existing, now, DEFAULT_MEMORY_CONFIG)
-  await replaceActiveEntries(db, input.scope, input.workspace, entries, sourceForId, source)
-  return entry.id
+  // Serialize the insert+read+consolidate+replace sequence per scope. The
+  // consolidation replaces ALL active rows from a read snapshot; two concurrent
+  // writers (multi-session auto-learn / remember tool) would otherwise each
+  // DELETE the other's freshly-inserted rows from a stale read — permanent lost
+  // updates. withLock gives a per-process chain (plus Web Locks when available).
+  const lockKey = `memory-insert:${input.scope}:${projectPath(input.scope, input.workspace) ?? "global"}`
+  return withLock(lockKey, async () => {
+    const now = input.createdAt ?? Date.now()
+    const entry: MemoryEntry = {
+      id: input.id ?? createId("memory"),
+      text,
+      layer: input.layer ?? "episode",
+      scope: input.scope,
+      category: input.category?.trim() || undefined,
+      createdAt: now,
+      lastUsedAt: input.lastUsedAt ?? now,
+      useCount: input.useCount ?? 0,
+      baseSalience: Math.max(0, Math.min(1, input.baseSalience ?? 0.65)),
+    }
+    const source = input.source ?? "manual"
+    await insertRow(db, entry, source, input.workspace)
+
+    const rows = await listMemoryRows(db, { scope: input.scope, workspace: input.workspace })
+    const sourceForId = new Map(rows.map((r) => [r.id, r.source] as const))
+    const existing = rows.map(rowToEntry)
+    const { entries } = consolidate(existing, now, DEFAULT_MEMORY_CONFIG)
+    await replaceActiveEntries(db, input.scope, input.workspace, entries, sourceForId, source)
+    return entry.id
+  })
 }
 
 export async function archiveMemoryEntriesByText(db: Db, opts: {

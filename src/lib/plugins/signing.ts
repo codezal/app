@@ -19,13 +19,13 @@
 // Rollout posture (current)
 // --------------------------
 // - signature present + verifies  → "valid"   (allow)
-// - signature present + mismatch   → "invalid" (BLOCK — tampering)
-// - signature present + crypto N/A → "unsupported" (WARN, allow — avoid
-//   bricking installs on webviews lacking Ed25519; tighten later)
-// - signature absent on curated    → "missing" (WARN, allow during rollout)
+// - anything else on curated      → BLOCK via enforceCuratedSignature. Both
+//   "missing" and "unsupported" are attacker-reachable (drop/corrupt the
+//   signature field), so on the curated channel they are not a WARN — they are
+//   a tamper signal. The `verified` flag in the manifest is informational and
+//   never gates enforcement (the attacker controls that flag too).
 //
-// When signing coverage is complete across the curated channel, the caller can
-// flip "missing"/"unsupported" from warn to block.
+// Community plugins bypass this gate entirely ("use at your own risk").
 
 import type { MarketplacePluginManifest } from "./types"
 
@@ -105,4 +105,27 @@ export async function verifyManifestSignature(
     console.warn("[signing] Ed25519 verify unavailable:", (e as Error).message)
     return "unsupported"
   }
+}
+
+// Enforcement for the curated channel. A curated manifest with anything other
+// than a valid signature is treated as tampered — "missing"/"unsupported" are
+// NOT acceptable on curated, because both are attacker-reachable states (an
+// attacker editing the marketplace can drop the `signature` field, or corrupt
+// the base64 so parsing fails and collapses to "unsupported"). Only a valid
+// signature installs. Community plugins keep their own "use at your own risk"
+// model and are not routed through this gate.
+export async function enforceCuratedSignature(
+  manifest: MarketplacePluginManifest,
+  pubKeyB64: string = CODEZAL_SIGNING_PUBKEY,
+): Promise<void> {
+  const verdict = await verifyManifestSignature(manifest, pubKeyB64)
+  if (verdict === "valid") return
+  if (verdict === "invalid") {
+    throw new Error(
+      "İmza doğrulama başarısız — manifest imzayla eşleşmiyor. Marketplace tehlikeye girmiş olabilir, kurulum iptal edildi.",
+    )
+  }
+  throw new Error(
+    `Curated plugin imzası doğrulanamadı (${verdict}) — kurulum engellendi. Marketplace imzalı manifest yayınlamalı.`,
+  )
 }

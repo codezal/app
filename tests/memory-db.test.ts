@@ -94,4 +94,35 @@ describe("memory_entry schema", () => {
       "B fact",
     ])
   })
+
+  it("concurrent inserts to the same scope lose nothing (H11)", async () => {
+    // Distinct texts (low jaccard) so consolidate does not merge them — this
+    // isolates the concurrency race from intentional similarity-dedup.
+    const facts = [
+      "The deployment pipeline uses GitHub Actions",
+      "Database schema lives in src/lib/db/schema.ts",
+      "Tests run in node environment without a DOM",
+      "The sidebar groups sessions by workspace folder",
+      "Streaming is single-flight per session id",
+      "Settings persist to localStorage with schemaVersion",
+      "MCP servers may register stdio or http transports",
+      "Plugin manifests must declare their permissions",
+    ]
+    await Promise.all(
+      facts.map((text, i) =>
+        insertMemoryEntry(db, {
+          scope: "project",
+          workspace: "/ws",
+          text,
+          source: "auto_learn",
+          createdAt: 100 + i,
+        }),
+      ),
+    )
+    const after = await listMemoryEntries(db, { scope: "project", workspace: "/ws" })
+    const texts = after.map((e) => e.text)
+    for (const f of facts) {
+      expect(texts).toContain(f)
+    }
+  })
 })

@@ -1,3 +1,7 @@
+// Must be first: shims window.process / window.global before any dependency
+// that expects them (see env-shim.ts). Inline <script> won't do — prod CSP
+// blocks 'unsafe-inline'.
+import './lib/env-shim'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'

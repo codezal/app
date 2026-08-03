@@ -7,8 +7,14 @@ export {
   workerConfigForRole,
   rolesCatalogForPrompt,
 } from "./roles"
-export { dispatchSupervisorAgents, runReviewer, collectWorkingDiff, REVIEW_SYSTEM_PROMPT } from "./dispatch"
-export type { DelegateAgentsInput } from "./dispatch"
+export {
+  dispatchSupervisorAgents,
+  dispatchWorkerSessionsWithCards,
+  runReviewer,
+  collectWorkingDiff,
+  REVIEW_SYSTEM_PROMPT,
+} from "./dispatch"
+export type { DelegateAgentsInput, TaskCardMeta } from "./dispatch"
 export type {
   AgentEngineRef,
   AgentRoleId,

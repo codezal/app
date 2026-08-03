@@ -17,9 +17,13 @@ export function WebSearchTab() {
   const apiKey = cfg?.apiKey ?? ""
   const needsKey = provider !== "duckduckgo"
   const customJson = JSON.stringify(cfg?.customProviders ?? [], null, 2)
+  const baseCfg = cfg ?? { provider: "duckduckgo" as const }
 
   function patch(p: Partial<{ provider: "tavily" | "brave" | "exa" | "duckduckgo"; apiKey: string }>) {
-    void update({ webSearch: { provider, apiKey, ...p } })
+    // Merge with the full stored cfg — rebuilding from the render-snapshot
+    // provider/apiKey would permanently discard customProviders (and any other
+    // webSearch fields) on every provider change.
+    void update({ webSearch: { ...baseCfg, ...p } })
   }
 
   const providerLinks: Record<string, { label: string; url: string }> = {
@@ -125,14 +129,14 @@ export function WebSearchTab() {
             const v = e.target.value.trim()
             if (!v || v === "[]") {
               setCustomError(null)
-              if (cfg?.customProviders) void update({ webSearch: { provider, apiKey, customProviders: undefined } })
+              if (cfg?.customProviders) void update({ webSearch: { ...baseCfg, customProviders: undefined } })
               return
             }
             try {
               const parsed = JSON.parse(v)
               if (!Array.isArray(parsed)) throw new Error("must be a JSON array")
               setCustomError(null)
-              void update({ webSearch: { provider, apiKey, customProviders: parsed } })
+              void update({ webSearch: { ...baseCfg, customProviders: parsed } })
             } catch (err) {
               setCustomError(err instanceof Error ? err.message : "invalid JSON")
             }

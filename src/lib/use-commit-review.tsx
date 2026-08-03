@@ -74,7 +74,9 @@ export function useCommitReview(workspace: string | undefined): {
           modelId: model,
           settings,
           workspace,
-          mode,
+          // The commit gate only ever runs "commit"/"push" — narrow away the
+          // "turn" member that GateMode now carries for the post-turn dialog.
+          mode: mode === "push" ? "push" : "commit",
         })
       } catch {
         // A failed review must never block the user's git operation.

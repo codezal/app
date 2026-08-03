@@ -34,12 +34,14 @@ import { useSettingsStore } from "@/store/settings"
 import { useComposerDraftStore } from "@/store/composer-drafts"
 import { useVim } from "@/lib/vim/useVim"
 import { isMacOS, fmtKbd } from "@/lib/platform"
-import type { ApprovalMode, MessageFile, MessagePdf, SessionGoal, Settings } from "@/store/types"
+import type { ApprovalMode, MessageImage, MessageFile, MessagePdf, SessionGoal, Settings } from "@/store/types"
 import { Dialog } from "./Dialog"
+import { fileToMessageImage, type ImageAttachResult } from "@/lib/image"
 import { fileToMessagePdf } from "@/lib/pdf"
-import { isBinary, isPdf } from "@/lib/file-type"
+import { isBinary, isImage, isPdf, mimeForImage } from "@/lib/file-type"
 import { registerComposerDrop, registerComposerInsert, setFocusedComposer } from "@/lib/composer-drop"
 import { stat } from "@tauri-apps/plugin-fs"
+import { StoredImage } from "./StoredImage"
 import { PromptHistorySearch } from "./PromptHistorySearch"
 import { pushPrompt } from "@/lib/prompt-history"
 import {
@@ -55,7 +57,7 @@ import {
   type ReasoningEffort,
 } from "@/lib/providers"
 import { isModelEnabled } from "@/lib/providers/model-status"
-import { modelDetail, modelAcceptsPdf, resolveContextCap, type ProvidersCatalog } from "@/lib/providers-catalog"
+import { modelDetail, modelAcceptsImages, modelAcceptsPdf, resolveContextCap, type ProvidersCatalog } from "@/lib/providers-catalog"
 import { lastStepTotalTokens } from "@/lib/context-gauge"
 import { toast } from "@/store/toast"
 import { errorMessage } from "@/lib/errors"
@@ -66,7 +68,7 @@ import { gitCurrentBranch, gitListBranches } from "@/lib/git"
 import { listAllSkills } from "@/lib/skills"
 import { detectEditors, openInEditor } from "@/lib/editors"
 import { watchFile } from "@/lib/file-watcher"
-import { readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"
+import { readFileSafe, readTextFileSafe, writeTextFileSafe } from "@/lib/fs-safe"
 import { appDataDir, join as joinPath } from "@tauri-apps/api/path"
 import { registerDropTarget } from "@/lib/internal-drag"
 import {
@@ -126,6 +128,18 @@ function highlightSegments(text: string, valid: Set<string>): { text: string; cm
   return segs
 }
 
+async function pathToMessageImage(path: string): Promise<ImageAttachResult> {
+  try {
+    const bytes = await readFileSafe(path)
+    const name = path.split(/[\\/]/).pop() || "image"
+    const file = new File([bytes], name, { type: mimeForImage(name) })
+    return await fileToMessageImage(file)
+  } catch (e) {
+    console.warn("[composer-drop] image read failed:", path, e)
+    return { ok: false, reason: "decode-failed" }
+  }
+}
+
 async function pathToMessageFile(path: string): Promise<MessageFile> {
   const name = path.split(/[\\/]/).pop() || path
   let isDir = false
@@ -142,6 +156,7 @@ type Props = {
   compacting?: boolean
   onSend: (
     text: string,
+    images?: MessageImage[],
     override?: SendOverride,
     meta?: string,
     files?: MessageFile[],
@@ -189,6 +204,7 @@ export function Composer({
     open: false,
     mode: "new",
   })
+  const [images, setImages] = useState<MessageImage[]>([])
   const [fileRefs, setFileRefs] = useState<MessageFile[]>([])
   const [pdfs, setPdfs] = useState<MessagePdf[]>([])
   const [commands, setCommands] = useState<SlashCommand[]>([])
@@ -238,7 +254,7 @@ export function Composer({
   const lastOutputTok = useSessionsStore((s) => sess(s)?.usage?.lastOutputTokens)
   const lastCacheReadTok = useSessionsStore((s) => sess(s)?.usage?.lastCacheReadTokens)
   const lastCacheWriteTok = useSessionsStore((s) => sess(s)?.usage?.lastCacheWriteTokens)
-  // Each session keeps its own half-typed draft (text + pasted pdfs/refs). The
+  // Each session keeps its own half-typed draft (text + pasted images/pdfs/
   // refs). The Composer is a single instance that survives session switches,
   // so without this the same input leaked into every chat. `composerId` is the
   // identity we key drafts by; when it changes we save the outgoing draft and
@@ -250,10 +266,11 @@ export function Composer({
   if (prevComposerId.current !== composerId) {
     const from = prevComposerId.current
     if (from != null) {
-      useComposerDraftStore.getState().set(from, { text, pdfs, fileRefs })
+      useComposerDraftStore.getState().set(from, { text, images, pdfs, fileRefs })
     }
     const draft = useComposerDraftStore.getState().get(composerId)
     setText(draft?.text ?? "")
+    setImages(draft?.images ?? [])
     setPdfs(draft?.pdfs ?? [])
     setFileRefs(draft?.fileRefs ?? [])
     undoStack.current = [""]
@@ -265,8 +282,8 @@ export function Composer({
   // later switch back to this session restores it.
   useEffect(() => {
     if (composerId == null) return
-    useComposerDraftStore.getState().set(composerId, { text, pdfs, fileRefs })
-  }, [text, pdfs, fileRefs, composerId])
+    useComposerDraftStore.getState().set(composerId, { text, images, pdfs, fileRefs })
+  }, [text, images, pdfs, fileRefs, composerId])
   const costUsd = useSessionsStore((s) => sess(s)?.usage?.costUsd)
   const settings = useSettingsStore((s) => s.settings)
   const updateSettings = useSettingsStore((s) => s.update)
@@ -352,6 +369,7 @@ export function Composer({
     if (!note || !onRemember) return
     onRemember(note, scope)
     setText("")
+    setImages([])
   }
 
   // MCP prompts of connected servers → slash commands. Recomputed each time the
@@ -467,14 +485,14 @@ export function Composer({
     }
     if (cmd.subtask) {
       const body = `Bunu bir alt-görev olarak \`spawn_agent\` ile çalıştır ve sonucu özetle:\n\n${rendered}`
-      onSend(compact, undefined, body)
+      onSend(compact, undefined, undefined, body)
       return
     }
     const ov = parseModelOverride(cmd.model)
     const override = cmd.disallowedTools?.length
       ? { ...ov, disallowedTools: cmd.disallowedTools }
       : ov
-    onSend(compact, override, rendered)
+    onSend(compact, undefined, override, rendered)
   }
 
   function insertSlashText(name: string) {
@@ -519,7 +537,7 @@ export function Composer({
         .filter(Boolean)
         .join("\n\n")
         .trim()
-      if (rendered) onSend(`/${promptName}`, undefined, rendered)
+      if (rendered) onSend(`/${promptName}`, undefined, undefined, rendered)
     } catch (e) {
       console.warn(`[mcp] getPrompt failed: ${server}/${promptName}`, e)
     }
@@ -643,6 +661,40 @@ export function Composer({
     return () => window.removeEventListener("resize", autosize)
   }, [])
 
+  function collectImageResults(results: ImageAttachResult[], names: string[]): MessageImage[] {
+    const ok: MessageImage[] = []
+    results.forEach((r, i) => {
+      if (r.ok && r.image) {
+        ok.push(r.image)
+        return
+      }
+      if (!r.reason || r.reason === "not-image") return
+      toast.error(
+        r.reason === "unsupported-format"
+          ? t("composer.imageUnsupportedFormat", { name: names[i] })
+          : t("composer.imageDecodeFailed", { name: names[i] }),
+      )
+    })
+    return ok
+  }
+
+  async function addFiles(files: FileList | File[] | null) {
+    if (!files) return
+    const arr = Array.from(files)
+    if (arr.length === 0) return
+    const imgFiles = arr.filter((f) => f.type.startsWith("image/") || isImage(f.name))
+    const pdfFiles = arr.filter((f) => f.type === "application/pdf" || isPdf(f.name))
+    if (imgFiles.length) {
+      const results = await Promise.all(imgFiles.map(fileToMessageImage))
+      const ok = collectImageResults(
+        results,
+        imgFiles.map((f) => f.name),
+      )
+      if (ok.length) setImages((prev) => [...prev, ...ok])
+    }
+    if (pdfFiles.length) await addPdfFiles(pdfFiles)
+  }
+
   async function addPdfFiles(files: File[]) {
     for (const f of files) {
       const res = await fileToMessagePdf(f)
@@ -659,6 +711,9 @@ export function Composer({
             : t("composer.pdfDecodeFailed", { name: f.name })
       toast.error(msg)
     }
+  }
+  function removeImage(id: string) {
+    setImages((prev) => prev.filter((im) => im.id !== id))
   }
   function removePdf(id: string) {
     setPdfs((prev) => prev.filter((p) => p.id !== id))
@@ -694,21 +749,38 @@ export function Composer({
   }
 
   async function handleDroppedPaths(paths: string[]) {
-    let refs = await Promise.all(paths.map(pathToMessageFile))
-    if (!workspacePath || workspaceReadOnly) {
-      const dir = refs.find((r) => r.isDir)
-      if (dir) {
-        applyMeta({ workspacePath: dir.path, workspaceReadOnly: true })
-        toast.success(t("composer.readonlyWorkspaceOpened", { name: dir.name }))
-        refs = refs.filter((r) => r !== dir)
-      }
+    const imgPaths: string[] = []
+    const otherPaths: string[] = []
+    for (const p of paths) {
+      const name = p.split(/[\\/]/).pop() ?? p
+      if (isImage(name)) imgPaths.push(p)
+      else otherPaths.push(p)
     }
-    if (refs.length) {
-      setFileRefs((prev) => {
-        const seen = new Set(prev.map((f) => f.path))
-        const fresh = refs.filter((f) => !seen.has(f.path))
-        return fresh.length ? [...prev, ...fresh] : prev
-      })
+    if (imgPaths.length) {
+      const results = await Promise.all(imgPaths.map(pathToMessageImage))
+      const ok = collectImageResults(
+        results,
+        imgPaths.map((p) => p.split(/[\\/]/).pop() ?? p),
+      )
+      if (ok.length) setImages((prev) => [...prev, ...ok])
+    }
+    if (otherPaths.length) {
+      let refs = await Promise.all(otherPaths.map(pathToMessageFile))
+      if (!workspacePath || workspaceReadOnly) {
+        const dir = refs.find((r) => r.isDir)
+        if (dir) {
+          applyMeta({ workspacePath: dir.path, workspaceReadOnly: true })
+          toast.success(t("composer.readonlyWorkspaceOpened", { name: dir.name }))
+          refs = refs.filter((r) => r !== dir)
+        }
+      }
+      if (refs.length) {
+        setFileRefs((prev) => {
+          const seen = new Set(prev.map((f) => f.path))
+          const fresh = refs.filter((f) => !seen.has(f.path))
+          return fresh.length ? [...prev, ...fresh] : prev
+        })
+      }
     }
     ref.current?.focus()
   }
@@ -743,10 +815,11 @@ export function Composer({
 
   function trySend() {
     const body = text.trim()
+    const imgs = images
     const refs = fileRefs
     const pdfList = pdfs
     if (disabled || compacting) return
-    if (!body && refs.length === 0 && pdfList.length === 0) return
+    if (!body && imgs.length === 0 && refs.length === 0 && pdfList.length === 0) return
     if (body) pushPrompt(body)
     if (onRemember && body.startsWith("#") && body.slice(1).trim()) {
       commitRemember("project")
@@ -787,8 +860,24 @@ export function Composer({
       }
     }
     setText("")
+    setImages([])
     setFileRefs([])
     setPdfs([])
+    // Drop images for text-only models BEFORE send. Toast-only was not enough:
+    // DashScope Qwen chat models still received image_url parts and 400'd with
+    // "Download multimodal file timed out" on every retry.
+    let sendImgs = imgs
+    if (
+      sendImgs.length > 0 &&
+      !modelAcceptsImages(
+        settings.providerCatalog?.data as ProvidersCatalog | undefined,
+        provider,
+        model ?? "",
+      )
+    ) {
+      toast.info(t("composer.imageUnsupported"))
+      sendImgs = []
+    }
     if (
       pdfList.length > 0 &&
       !modelAcceptsPdf(
@@ -801,6 +890,7 @@ export function Composer({
     }
     onSend(
       body,
+      sendImgs.length ? sendImgs : undefined,
       undefined,
       undefined,
       refs.length ? refs : undefined,
@@ -1007,9 +1097,16 @@ export function Composer({
           if (e.dataTransfer?.files?.length) {
             e.preventDefault()
             const arr = Array.from(e.dataTransfer.files)
+            const imgFiles = arr.filter((f) => f.type.startsWith("image/") || isImage(f.name))
             const pdfFiles = arr.filter((f) => f.type === "application/pdf" || isPdf(f.name))
-            const others = arr.filter((f) => f.type !== "application/pdf" && !isPdf(f.name))
-            if (pdfFiles.length) void addPdfFiles(pdfFiles)
+            const others = arr.filter(
+              (f) =>
+                f.type !== "application/pdf" &&
+                !isPdf(f.name) &&
+                !f.type.startsWith("image/") &&
+                !isImage(f.name),
+            )
+            if (imgFiles.length || pdfFiles.length) void addFiles([...imgFiles, ...pdfFiles])
             if (others.length) void addPastedTextFiles(others)
           }
         }}
@@ -1026,14 +1123,39 @@ export function Composer({
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf"
+          accept="image/*,application/pdf"
           multiple
           className="hidden"
           onChange={(e) => {
-            void addPdfFiles(Array.from(e.target.files ?? []))
+            void addFiles(e.target.files)
             e.target.value = ""
           }}
         />
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pt-3">
+            {images.map((im) => (
+              <div
+                key={im.id}
+                className="group/img relative overflow-hidden rounded-lg border border-codezal-hair"
+              >
+                <StoredImage
+                  image={im}
+                  className="h-[72px] w-auto max-w-[120px] cursor-default object-cover"
+                  alt={im.name}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImage(im.id)}
+                  title={t("common.remove")}
+                  aria-label={t("common.remove")}
+                  className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded bg-black/50 text-white opacity-0 transition group-hover/img:opacity-100 hover:bg-black/70"
+                >
+                  <X className="h-3 w-3" aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {fileRefs.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pt-3">
             {fileRefs.map((f) => (
@@ -1139,10 +1261,17 @@ export function Composer({
                 .map((it) => it.getAsFile())
                 .filter((f): f is File => f !== null)
               if (all.length === 0) return
+              const imgFiles = all.filter((f) => f.type.startsWith("image/") || isImage(f.name))
               const pdfFiles = all.filter((f) => f.type === "application/pdf" || isPdf(f.name))
-              const others = all.filter((f) => f.type !== "application/pdf" && !isPdf(f.name))
+              const others = all.filter(
+                (f) =>
+                  f.type !== "application/pdf" &&
+                  !isPdf(f.name) &&
+                  !f.type.startsWith("image/") &&
+                  !isImage(f.name),
+              )
               e.preventDefault()
-              if (pdfFiles.length) void addPdfFiles(pdfFiles)
+              if (imgFiles.length || pdfFiles.length) void addFiles([...imgFiles, ...pdfFiles])
               if (others.length) void addPastedTextFiles(others)
             }}
             onKeyDown={(e) => {

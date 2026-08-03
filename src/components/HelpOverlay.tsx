@@ -21,7 +21,7 @@ function buildShortcuts(): { keys: string; label: string }[] {
     { keys: "⌘⇧F", label: tStatic("helpOverlay.sSearch") },
     { keys: "⌘B", label: tStatic("helpOverlay.sFilePanel") },
     { keys: "⌘⇧T", label: tStatic("helpOverlay.sTerminalPanel") },
-    { keys: "⌘M", label: tStatic("helpOverlay.sPlanBuild") },
+    { keys: "⌘⇧M", label: tStatic("helpOverlay.sPlanBuild") },
     { keys: "⌘⏎", label: tStatic("helpOverlay.sSendMessage") },
     { keys: "↑ ↓", label: tStatic("helpOverlay.sSlashNav") },
     { keys: "ESC", label: tStatic("helpOverlay.sCloseModal") },

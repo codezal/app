@@ -5,12 +5,16 @@
 // rendering stays in MessageList.
 
 import type { Part } from "@/store/types"
+import type { AgentCardPart } from "@/lib/orchestra/types"
 
 export type ToolCallPart = Extract<Part, { type: "tool-call" }>
 
 export type Block =
   | { kind: "text"; key: string; text: string }
   | { kind: "tools"; key: string; calls: ToolCallPart[] }
+  // One agent-task card (parallel subagent run). Rendered solo so each
+  // subagent gets its own visible row, like opencode's task cards.
+  | { kind: "agents"; key: string; card: AgentCardPart }
 
 // Tool rows that add noise without value (auto-triggered plumbing).
 function isHiddenToolRow(toolName: string): boolean {
@@ -25,14 +29,33 @@ export function isSoloArtifact(block: Block): boolean {
   return block.kind === "tools" && block.calls[0]?.toolName === "open_path"
 }
 
+// Agent-task cards always stay visible (never collapsed into the work log) so
+// parallel subagent runs remain discoverable, mirroring opencode's timeline.
+export function isAgentBlock(block: Block): boolean {
+  return block.kind === "agents"
+}
+
+// Blocks that must remain visible even when the surrounding turn collapses
+// into a work-log row.
+export function isKeepVisible(block: Block): boolean {
+  return isSoloArtifact(block) || isAgentBlock(block)
+}
+
 export function buildBlocks(parts: Part[]): Block[] {
   const blocks: Block[] = []
+  // When agent-task cards are present they already represent the parallel runs,
+  // so the raw spawn_agent/delegate_agents tool rows are redundant — hide them.
+  const hasCards = parts.some((p) => p.type === "agent-card")
   parts.forEach((p, i) => {
     if (p.type === "text") {
       if (!p.text.trim()) return
       blocks.push({ kind: "text", key: `t${i}`, text: p.text })
+    } else if (p.type === "agent-card") {
+      // One card per subagent, rendered solo so each stays its own row.
+      blocks.push({ kind: "agents", key: `a${i}`, card: p })
     } else if (p.type === "tool-call") {
       if (isHiddenToolRow(p.toolName)) return
+      if (hasCards && (p.toolName === "spawn_agent" || p.toolName === "delegate_agents")) return
       const solo = p.toolName === "open_path"
       const last = blocks[blocks.length - 1]
       if (!solo && last && last.kind === "tools" && last.calls[0]?.toolName !== "open_path") {
@@ -73,8 +96,8 @@ export function splitWorkLog(blocks: Block[], streaming: boolean): WorkLogSplit 
   if (last.kind !== "text") return null
   const head = blocks.slice(0, -1)
   if (!head.some((b) => b.kind === "tools")) return null
-  const artifacts = head.filter(isSoloArtifact)
-  const worklog = head.filter((b) => !isSoloArtifact(b))
+  const artifacts = head.filter(isKeepVisible)
+  const worklog = head.filter((b) => !isKeepVisible(b))
   if (worklog.length === 0) return null
   return { worklog, artifacts, tail: [last] }
 }

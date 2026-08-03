@@ -128,25 +128,98 @@ export class PrivacyScrubber {
     return out
   }
 
+  private scrubUnknown(v: unknown): unknown {
+    if (typeof v === "string") return this.scrubText(v)
+    if (Array.isArray(v)) return v.map((x) => this.scrubUnknown(x))
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {}
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        out[k] = this.scrubUnknown(val)
+      }
+      return out
+    }
+    return v
+  }
+
+  private collectStrings(v: unknown, out: string[]): void {
+    if (typeof v === "string") {
+      out.push(v)
+      return
+    }
+    if (Array.isArray(v)) {
+      for (const x of v) this.collectStrings(x, out)
+      return
+    }
+    if (v && typeof v === "object") {
+      for (const val of Object.values(v as Record<string, unknown>)) this.collectStrings(val, out)
+    }
+  }
+
+  // Tool-call input and tool-result output are the channels user data travels
+  // through (edit_file content, bash args, command output). They must be
+  // scrubbed on assistant/tool messages even when scrubAssistant is off —
+  // "assistant prose off" must not leak tool payloads to the cloud.
+  private scrubPart(part: Record<string, unknown>, allowText: boolean): Record<string, unknown> {
+    const type = part.type
+    if ((type === "text" || type === "reasoning") && typeof part.text === "string") {
+      if (!allowText) return part
+      return { ...part, text: this.scrubText(part.text) }
+    }
+    if (type === "tool-call") {
+      return { ...part, input: this.scrubUnknown(part.input) }
+    }
+    if (type === "tool-result") {
+      const next: Record<string, unknown> = { ...part }
+      if (typeof part.output === "string") next.output = this.scrubText(part.output)
+      else next.output = this.scrubUnknown(part.output)
+      if (Array.isArray(part.content)) {
+        next.content = part.content.map((sub: unknown) =>
+          this.scrubPart(sub as Record<string, unknown>, true),
+        )
+      }
+      return next
+    }
+    return part
+  }
+
+  private collectPartStrings(part: Record<string, unknown>, out: string[]): void {
+    const type = part.type
+    if ((type === "text" || type === "reasoning") && typeof part.text === "string") {
+      out.push(part.text)
+    } else if (type === "tool-call") {
+      this.collectStrings(part.input, out)
+    } else if (type === "tool-result") {
+      this.collectStrings(part.output, out)
+      if (Array.isArray(part.content)) {
+        for (const sub of part.content) this.collectPartStrings(sub as Record<string, unknown>, out)
+      }
+    }
+  }
+
   scrubMessages(messages: ModelMessage[]): ModelMessage[] {
     const scrubAssistant = this.settings.scrubAssistant ?? false
     return messages.map((msg) => {
       const role = msg.role
-      const eligible = role === "system" || role === "user" || (scrubAssistant && role === "assistant")
-      if (!eligible) return msg
+      const baseEligible = role === "system" || role === "user" || role === "tool"
+      const fullEligible = baseEligible || (scrubAssistant && role === "assistant")
+      if (role === "assistant" && !fullEligible) {
+        // Assistant prose stays, but tool-call parts still get scrubbed.
+        if (Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((p) => this.scrubPart(p as Record<string, unknown>, false)),
+          } as ModelMessage
+        }
+        return msg
+      }
+      if (!baseEligible && !fullEligible) return msg
       if (typeof msg.content === "string") {
         return { ...msg, content: this.scrubText(msg.content) } as ModelMessage
       }
       if (Array.isArray(msg.content)) {
         return {
           ...msg,
-          content: msg.content.map((p) => {
-            const part = p as Record<string, unknown> & { type?: string; text?: unknown }
-            if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
-              return { ...part, text: this.scrubText(part.text) }
-            }
-            return part
-          }),
+          content: msg.content.map((p) => this.scrubPart(p as Record<string, unknown>, fullEligible)),
         } as ModelMessage
       }
       return msg
@@ -163,15 +236,20 @@ export class PrivacyScrubber {
     const scrubAssistant = this.settings.scrubAssistant ?? false
     for (const msg of messages) {
       const role = msg.role
-      const eligible = role === "system" || role === "user" || (scrubAssistant && role === "assistant")
-      if (!eligible) continue
+      const baseEligible = role === "system" || role === "user" || role === "tool"
+      const fullEligible = baseEligible || (scrubAssistant && role === "assistant")
+      if (!baseEligible && !fullEligible) continue
       const texts: string[] = []
-      if (typeof msg.content === "string") texts.push(msg.content)
-      else if (Array.isArray(msg.content)) {
+      if (typeof msg.content === "string") {
+        if (!fullEligible) continue
+        texts.push(msg.content)
+      } else if (Array.isArray(msg.content)) {
         for (const p of msg.content) {
-          const part = p as { type?: string; text?: unknown }
+          const part = p as Record<string, unknown>
           if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
-            texts.push(part.text)
+            if (fullEligible) texts.push(part.text)
+          } else if (part.type === "tool-call" || part.type === "tool-result") {
+            this.collectPartStrings(part, texts)
           }
         }
       }

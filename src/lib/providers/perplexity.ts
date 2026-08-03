@@ -2,6 +2,7 @@
 import { loadProviderFactory } from "./lazy-sdk"
 import type { LanguageModel } from "ai"
 import type { ProviderAdapter } from "./types"
+import { tauriFetch } from "./tauri-fetch"
 
 export const perplexityAdapter: ProviderAdapter = {
   id: "perplexity",
@@ -19,6 +20,7 @@ export const perplexityAdapter: ProviderAdapter = {
       apiKey: auth.value,
       baseURL: config?.baseURL,
       headers: config?.headers,
+      fetch: tauriFetch,
     })(modelId) as LanguageModel
   },
 }

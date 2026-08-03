@@ -1,19 +1,20 @@
 // Per-session composer draft store.
 //
-// The Composer input (typed text + pasted pdfs / file refs) used to live in
-// component-local state. Because there is a single Composer instance that
-// survives session switches, that state was shared across every session:
-// a half-typed message leaked into all other chats and was wiped when you
-// switched away. We now keep one draft per composer identity (session id)
-// here, in memory only — the Composer swaps its local state from this map
-// whenever the active session changes, so each chat preserves its own
-// unfinished draft independently. Not persisted to disk: a draft only needs
-// to live as long as the app session.
+// The Composer input (typed text + pasted images / pdfs / file refs) used to
+// live in component-local state. Because there is a single Composer instance
+// that survives session switches, that state was shared across every session:
+// a half-typed message (and any pasted image) leaked into all other chats and
+// was wiped when you switched away. We now keep one draft per composer
+// identity (session id) here, in memory only — the Composer swaps its local
+// state from this map whenever the active session changes, so each chat
+// preserves its own unfinished draft independently. Not persisted to disk: a
+// draft only needs to live as long as the app session.
 import { create } from "zustand"
-import type { MessageFile, MessagePdf } from "@/store/types"
+import type { MessageFile, MessageImage, MessagePdf } from "@/store/types"
 
 export interface ComposerDraft {
   text: string
+  images: MessageImage[]
   pdfs: MessagePdf[]
   fileRefs: MessageFile[]
 }

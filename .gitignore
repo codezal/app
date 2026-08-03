@@ -45,6 +45,7 @@ coverage/
 # === Coding IDE ===
 .vscode/
 .claude/
+.reasonix/
 .codegraph/
 .codezal/
 .codex/
