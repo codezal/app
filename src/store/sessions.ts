@@ -184,7 +184,8 @@ type SessionsState = {
   dropDetached: (id: string) => void
 
   // Worker sessions (parallel agents): created by delegate_agents / spawn_agent,
-  // rendered as children of the parent in the sidebar, removed on completion.
+  // shown as tabs next to the parent chat (never in the sidebar), removed when
+  // their run completes (see src/lib/worker-session.ts).
   createWorkerSession: (opts: {
     ownerSessionId: string
     title: string

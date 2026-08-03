@@ -108,6 +108,13 @@ export function TabBar({
   const t = useT()
   const tlIcon = "text-codezal-mute"
   const active = useSessionsStore((s) => s.active)
+  // Session index + lineage drive the parallel-agent tabs: workers never live
+  // in the sidebar, they render here next to the parent chat and disappear
+  // when their run completes.
+  const sessionIndex = useSessionsStore((s) => s.index)
+  const activeId = useSessionsStore((s) => s.activeId)
+  const streamingIds = useSessionsStore((s) => s.streamingIds)
+  const open = useSessionsStore((s) => s.open)
   const setActiveFile = useSessionsStore((s) => s.setActiveFile)
   const openFile = useSessionsStore((s) => s.openFile)
   const closeFile = useSessionsStore((s) => s.closeFile)
@@ -140,9 +147,40 @@ export function TabBar({
   const openFiles = active?.openFiles ?? []
   const activeFile = active?.activeFile ?? null
   const previewFile = active?.previewFile ?? null
-  const isChat = !activeFile
+  const activeIsWorker = !!active?.ownerSessionId
+  const isChat = !activeIsWorker && !activeFile
   const editorSplit = openFiles.length > 0 || workspaceTabsOpen
-  const chatLabel = t("tabBar.agent")
+
+  // Parallel-agent tabs: walk the ownerSessionId chain up to the root session
+  // so the strip is stable whether the user is viewing the parent chat or one
+  // of its workers. Root title drives the first (chat) tab; worker children
+  // (recursively, oldest first) follow it.
+  const metaById = (id: string) => sessionIndex.find((m) => m.id === id)
+  let rootId = activeId
+  if (rootId) {
+    const seen = new Set<string>()
+    while (rootId && !seen.has(rootId)) {
+      seen.add(rootId)
+      const m = metaById(rootId)
+      if (!m?.ownerSessionId) break
+      rootId = m.ownerSessionId
+    }
+  }
+  const workerTabs: { id: string; title: string }[] = []
+  if (rootId) {
+    const collect = (parentId: string) => {
+      const kids = sessionIndex
+        .filter((m) => m.ownerSessionId === parentId)
+        .sort((a, b) => a.updatedAt - b.updatedAt)
+      for (const k of kids) {
+        workerTabs.push({ id: k.id, title: k.title })
+        collect(k.id)
+      }
+    }
+    collect(rootId)
+  }
+  const rootMeta = rootId ? metaById(rootId) : undefined
+  const chatLabel = rootMeta?.title || t("tabBar.agent")
 
   const createTerminalTab = (tool?: TerminalCliDefinition) => {
     if (!active) return
@@ -167,7 +205,7 @@ export function TabBar({
 
   useLayoutEffect(() => {
     recompute()
-  }, [recompute, openFiles.length, activeFile, active?.title])
+  }, [recompute, openFiles.length, activeFile, active?.title, workerTabs.length, activeId])
 
   useEffect(() => {
     const el = stripRef.current
@@ -185,7 +223,7 @@ export function TabBar({
     stripRef.current
       ?.querySelector<HTMLElement>('[data-tab-active="true"]')
       ?.scrollIntoView({ inline: "nearest", block: "nearest" })
-  }, [activeFile, openFiles.length])
+  }, [activeFile, openFiles.length, activeId, workerTabs.length])
 
   const slide = (dir: -1 | 1) => {
     stripRef.current?.scrollBy({ left: dir * 180, behavior: "smooth" })
@@ -324,11 +362,15 @@ export function TabBar({
         </div>
       )}
       <div className="relative z-10 flex h-full min-w-0 flex-1 items-center gap-1">
-        {/* Chat stays a first-class tab; files never squeeze it into a side panel. */}
+        {/* Chat stays a first-class tab; files never squeeze it into a side panel.
+            While a worker is active, this tab jumps back to the root chat. */}
         {active && (
           <button
             type="button"
-            onClick={() => activateFile(null)}
+            onClick={() => {
+              if (activeIsWorker && rootId) void open(rootId)
+              else activateFile(null)
+            }}
             aria-current={isChat ? "page" : undefined}
             data-tab-active={isChat ? "true" : "false"}
             className={cn(
@@ -348,6 +390,39 @@ export function TabBar({
             <span className="truncate font-medium">{chatLabel}</span>
           </button>
         )}
+
+        {/* Parallel-agent (worker) tabs: one tab per live subagent, between the
+            chat tab and the file strip. They appear while the agent runs and
+            vanish when its session is removed on completion. */}
+        {workerTabs.map((w) => {
+          const isActive = activeId === w.id && !activeFile
+          return (
+            <button
+              key={w.id}
+              type="button"
+              onClick={() => void open(w.id)}
+              aria-current={isActive ? "page" : undefined}
+              data-tab-active={isActive ? "true" : "false"}
+              className={cn(
+                editorTabBase,
+                "max-w-[220px]",
+                isActive ? editorTabActive : editorTabInactive,
+              )}
+              title={w.title}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                  streamingIds[w.id]
+                    ? "animate-pulse bg-codezal-accent"
+                    : "bg-codezal-mute",
+                )}
+                aria-hidden
+              />
+              <span className="truncate">{w.title}</span>
+            </button>
+          )
+        })}
 
 
         {/* Left overflow control, shown only when hidden tabs exist. */}

@@ -98,7 +98,19 @@ export function AgentTaskCard({ card }: { card: AgentCardPart }) {
   const open = () => {
     const sid = card.workerSessionId
     if (!sid) return
-    void useSessionsStore.getState().open(sid)
+    const st = useSessionsStore.getState()
+    // Worker sessions are transient: they are removed when the run completes.
+    // When the session still exists, open its transcript in the main chat.
+    // Otherwise fall back to the right-hand agent pane, which renders the
+    // card's own summary/final text — the record of the finished run.
+    const alive = !!st.sessions[sid] || st.index.some((m) => m.id === sid)
+    if (alive) {
+      void st.open(sid)
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("codezal:open-agent-pane", { detail: { workerId: card.workerId } }),
+      )
+    }
   }
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!clickable) return

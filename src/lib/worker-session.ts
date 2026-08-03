@@ -1,7 +1,8 @@
-// Session-based parallel agents — each worker runs as a full session (visible
-// in the sidebar under its parent) instead of an ephemeral agent card. Results
-// are collected when the worker's stream completes. Sessions are persistent so
-// the agent-task card in the parent timeline can link to them (opencode parity).
+// Session-based parallel agents — each worker runs as a full session shown as
+// a tab next to the parent chat (never in the sidebar). Results are collected
+// when the worker's stream completes, then the worker session is removed: the
+// agent-task card in the parent timeline keeps the summary/final text as the
+// record of the run (opencode parity).
 //
 // App.tsx registers the runStream function at startup via setWorkerStreamFn.
 // delegate_agents / spawn_agent call dispatchWorkerSessions which:
@@ -9,7 +10,7 @@
 //   2. pushes the task as a user message + pending assistant bubble
 //   3. awaits runStream on each worker (parallel, respects AbortSignal)
 //   4. extracts the final text from the worker's assistant message
-//   5. keeps the worker session persistent (navigable via the agent-task card)
+//   5. removes the worker session (transient; resumed sessions are kept)
 //   6. returns structured results to the calling tool
 
 import type { ModelMessage } from "ai"
@@ -86,15 +87,19 @@ export async function dispatchWorkerSessions(opts: {
   const runOne = async (d: WorkerSessionDispatch, index: number): Promise<WorkerSessionResult> => {
     const startedAt = Date.now()
     let workerSid = ""
+    // Freshly-created workers are transient and removed on completion; resumed
+    // sessions (opencode `task_id`) are the caller's and stay untouched.
+    let resumed = false
     try {
       // 1. Reuse a prior worker session when resuming (opencode `task_id`),
-      // otherwise create a fresh one (visible in sidebar under parent).
+      // otherwise create a fresh one (shown as a tab next to the parent chat).
       const resumable =
         d.resumeSessionId &&
         d.resumeSessionId !== parentSessionId &&
         useSessionsStore.getState().sessions[d.resumeSessionId]
       if (resumable) {
         workerSid = d.resumeSessionId!
+        resumed = true
       } else {
         workerSid = await store.createWorkerSession({
           ownerSessionId: parentSessionId,
@@ -171,10 +176,13 @@ export async function dispatchWorkerSessions(opts: {
         durationMs: Date.now() - startedAt,
       }
     } finally {
-      // 5. Keep the worker session persistent (opencode parity). The agent-task
-      // card in the parent timeline links to it via workerSessionId so the user
-      // can open the full transcript at any time. Removal is explicit
-      // (removeWorkerSession), never automatic.
+      // 5. Workers are transient: remove the session (DB row + store) once the
+      // run settles so the sidebar/tabs stay clean. The parent's agent-task
+      // card keeps the summary/final text as the record of the run. If the
+      // user was viewing the worker, removeWorkerSession reopens the parent.
+      if (workerSid && !resumed) {
+        await useSessionsStore.getState().removeWorkerSession(workerSid)
+      }
     }
   }
 

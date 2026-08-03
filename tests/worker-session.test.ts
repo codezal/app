@@ -13,6 +13,11 @@ const storeMock = vi.hoisted(() => {
         return id
       },
     ),
+    // Freshly-created workers are transient: dispatch removes them once the
+    // stream settles. Mirror that so the concurrency tests stay green.
+    removeWorkerSession: vi.fn(async (id: string) => {
+      delete sessions[id]
+    }),
     pushMessageFor: vi.fn((sid: string, msg: { id: string; role: string }) => {
       if (!sessions[sid]) sessions[sid] = { id: sid, modelMessages: [], messages: [] }
       ;(sessions[sid].messages as Array<Record<string, unknown>>).push(msg as never)

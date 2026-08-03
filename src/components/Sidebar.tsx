@@ -395,15 +395,9 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
   const pinnedItems = visible.filter((m) => m.pinned)
   const archivedItems = filtered.filter((m) => m.archived)
 
-  // Worker sessions (parallel agents) render as indented children under their
-  // parent session. Build a lookup: ownerSessionId → child metas.
-  const workerChildren = new Map<string, SessionMeta[]>()
-  for (const m of filtered) {
-    if (!m.ownerSessionId) continue
-    const arr = workerChildren.get(m.ownerSessionId)
-    if (arr) arr.push(m)
-    else workerChildren.set(m.ownerSessionId, [m])
-  }
+  // Worker sessions (parallel agents) are transient: they never appear in the
+  // sidebar — they render as tabs next to the parent chat (see TabBar) and are
+  // removed when their run completes. `visible` already excludes them above.
 
   // Group sessions by workspace; "" key = loose chats (pinned to the bottom).
   const grouped = groupByWorkspace(visible.filter((m) => !m.pinned))
@@ -548,25 +542,6 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
         {items.map((m) => (
           <li key={m.id} className="flex flex-col">
             {renderSession(m, "normal", { key: wsKey, ids: items.map((it) => it.id) })}
-            {(workerChildren.get(m.id) ?? []).map((child) => (
-              <div key={child.id} className="ml-4 border-l border-codezal-panel-2 pl-1">
-                <button
-                  type="button"
-                  onClick={() => onOpen(child)}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[12px] transition-colors",
-                    activeId === child.id
-                      ? "bg-codezal-panel-2 text-codezal-text"
-                      : "text-codezal-mute hover:bg-codezal-panel-2/50 hover:text-codezal-text",
-                  )}
-                >
-                  {streamingIds[child.id] && (
-                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-codezal-accent" />
-                  )}
-                  <span className="truncate">{child.title}</span>
-                </button>
-              </div>
-            ))}
           </li>
         ))}
       </ul>
@@ -710,25 +685,6 @@ export function Sidebar({ onOpenSettings, onOpenSession, onOpenSearch, onNewProj
                 {pinnedItems.map((m) => (
                   <div key={m.id} className="flex flex-col">
                     {renderSession(m, "normal", { key: "__pinned__", ids: pinnedItems.map((it) => it.id) })}
-                    {(workerChildren.get(m.id) ?? []).map((child) => (
-                      <div key={child.id} className="ml-4 border-l border-codezal-panel-2 pl-1">
-                        <button
-                          type="button"
-                          onClick={() => onOpen(child)}
-                          className={cn(
-                            "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[12px] transition-colors",
-                            activeId === child.id
-                              ? "bg-codezal-panel-2 text-codezal-text"
-                              : "text-codezal-mute hover:bg-codezal-panel-2/50 hover:text-codezal-text",
-                          )}
-                        >
-                          {streamingIds[child.id] && (
-                            <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-codezal-accent" />
-                          )}
-                          <span className="truncate">{child.title}</span>
-                        </button>
-                      </div>
-                    ))}
                   </div>
                 ))}
               </SidebarSection>

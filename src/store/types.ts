@@ -177,8 +177,9 @@ export type Session = {
   archived?: boolean
   routineId?: string
   // Worker sessions: the parent session that spawned this agent. Set at
-  // creation, never changes. Sidebar renders these as children of the parent;
-  // removed from the sidebar when the worker completes.
+  // creation, never changes. They never render in the sidebar — they appear as
+  // tabs next to the parent chat (see TabBar) and are removed when the run
+  // completes.
   ownerSessionId?: string
   sideChats?: SideChatThread[]
   // Timestamp (ms) of the user's most recent message — drives sidebar ordering
