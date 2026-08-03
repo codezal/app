@@ -57,6 +57,24 @@ function assertValidGitSha(sha: string): void {
   }
 }
 
+// A manifest-supplied RELATIVE path must stay relative and flat — a `..`
+// segment (or an absolute/drive path) lets an attacker manifest reach outside
+// the cloned repo / marketplace dir (e.g. `~/../.ssh`) and copy it into the
+// plugins directory (M15).
+function assertSafeRelPath(p: string, label: string): void {
+  const segs = p.split(/[\\/]+/)
+  if (!p || segs.some((s) => s === "..") || p.startsWith("/") || /^[A-Za-z]:/.test(p) || p.startsWith("\\")) {
+    throw new Error(`${label} güvenli değil (path traversal): "${p}"`)
+  }
+}
+
+// Absolute sources (`local`) must not contain `..` segments either.
+function assertNoTraversal(p: string, label: string): void {
+  if (p.split(/[\\/]+/).some((s) => s === "..")) {
+    throw new Error(`${label} '..' içeremez (path traversal): "${p}"`)
+  }
+}
+
 async function fetchPluginSource(
   source: PluginSource,
   marketplaceLocalPath: string | undefined,
@@ -64,6 +82,7 @@ async function fetchPluginSource(
 ): Promise<void> {
   if (source.type === "git-subdir" || source.type === "git-repo") {
     assertValidGitSha(source.sha)
+    if (source.type === "git-subdir") assertSafeRelPath(source.path, "git-subdir source.path")
     const tmpDir = destDir + ".tmp"
     await removeDir(tmpDir)
     const repoUrl = source.repo.startsWith("http") || source.repo.startsWith("git@")
@@ -99,6 +118,7 @@ async function fetchPluginSource(
     if (!marketplaceLocalPath) {
       throw new Error("Inline source için marketplace localPath gerekli")
     }
+    assertSafeRelPath(source.path, "inline source.path")
     const srcPath = marketplaceLocalPath + "/" + source.path
     if (!(await exists(srcPath))) {
       throw new Error(`Inline source path yok: ${srcPath}`)
@@ -107,6 +127,7 @@ async function fetchPluginSource(
     return
   }
   if (source.type === "local") {
+    assertNoTraversal(source.absolutePath, "local source.absolutePath")
     if (!(await exists(source.absolutePath))) {
       throw new Error(`Local source path yok: ${source.absolutePath}`)
     }

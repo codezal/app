@@ -232,7 +232,8 @@ export function makePluginAPI(plugin: InstalledPlugin): PluginAPI {
               )
               return
             }
-          } else if (allowHosts) {
+          } else {
+            // Fail-closed (network.ts): absent allowlist denies every host (M12).
             const err = checkUrlAllowed(m.url, allowHosts)
             if (err) {
               console.warn(

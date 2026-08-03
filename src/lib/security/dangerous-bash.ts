@@ -79,12 +79,31 @@ function hasDangerousRm(cmd: string): boolean {
     const hasR = /(?:^|\s)-[a-zA-Z]*r[a-zA-Z]*(?:\s|$)/i.test(rest) || /--recursive\b/.test(rest)
     const hasF = /(?:^|\s)-[a-zA-Z]*f[a-zA-Z]*(?:\s|$)/.test(rest) || /--force\b/.test(rest)
     if (!hasR || !hasF) continue
+    // M16: command-substitution indirection — `rm -rf $(echo /)` / backticks
+    // evaluate to a root at runtime. Scan the substitution bodies BEFORE
+    // whitespace tokenization splits them apart.
+    for (const inner of substitutionWords(rest)) {
+      if (DANGEROUS_ROOTS.has(normalizeTarget(inner))) return true
+    }
     for (const tok of rest.split(/\s+/)) {
       if (!tok || tok.startsWith("-")) continue
       if (DANGEROUS_ROOTS.has(normalizeTarget(tok))) return true
     }
   }
   return false
+}
+
+// Words embedded in command substitutions — `$(echo /)` → ["echo","/"],
+// `` `echo ~` `` → ["echo","~"]. One level deep (enough to catch the bypass);
+// nested substitutions are not recursively expanded.
+function substitutionWords(s: string): string[] {
+  const out: string[] = []
+  let m: RegExpExecArray | null
+  const dollar = /\$\(([^)]*)\)/g
+  while ((m = dollar.exec(s))) out.push(...(m[1] ?? "").split(/\s+/).filter(Boolean))
+  const back = /`([^`]*)`/g
+  while ((m = back.exec(s))) out.push(...(m[1] ?? "").split(/\s+/).filter(Boolean))
+  return out
 }
 
 // Windows catastrophic recursive delete — PowerShell `Remove-Item -Recurse` (and
@@ -134,6 +153,32 @@ function redirectionTargets(cmd: string): string[] {
   return out
 }
 
+// Downloads-then-exec detection (M14). The old single regex required a shell to
+// sit DIRECTLY after the first pipe, so `curl x | base64 -d | sh` and the
+// write-then-run pattern (`curl -o /tmp/a.sh …; sh /tmp/a.sh`) slipped through.
+// Split on shell separators and flag when ANY later segment invokes a shell or
+// interpreter after a download command has appeared.
+const DOWNLOAD_CMD = /^(?:curl|wget|fetch)\b/
+const SHELL_HEAD = /^(?:sudo\s+|doas\s+)?(?:sh|bash|zsh|ksh|dash|ash|python3?|perl|ruby|node|php)\b/
+
+function hasRemoteExec(cmd: string): boolean {
+  let seenDownload = false
+  for (const rawSeg of cmd.split(/[;&|\n]+/)) {
+    // Skip leading VAR=val assignments to reach the command word.
+    const toks = rawSeg.trim().split(/\s+/)
+    let ci = 0
+    while (ci < toks.length && /^\w+=/.test(toks[ci]!)) ci++
+    const seg = toks.slice(ci).join(" ")
+    if (!seg) continue
+    if (DOWNLOAD_CMD.test(seg)) {
+      seenDownload = true
+      continue
+    }
+    if (seenDownload && SHELL_HEAD.test(seg)) return true
+  }
+  return false
+}
+
 // Categorical command rules — dangerous regardless of target path. Each match
 // produces one critical finding. Order independent; deduped by id.
 type BashRule = { id: string; message: string; re: RegExp }
@@ -165,11 +210,6 @@ const BASH_RULES: BashRule[] = [
     re: /\bchmod\b[^|;&\n]*-[a-zA-Z]*R[a-zA-Z]*[^|;&\n]*\s(?:\/|~|\$\{?HOME\}?)(?:\s|\/|$)/,
   },
   {
-    id: "remote-exec",
-    message: "Downloads and pipes a script straight into a shell (remote code execution)",
-    re: /\b(?:curl|wget|fetch)\b[^|]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|ksh|python3?|perl|ruby|node)\b/,
-  },
-  {
     id: "data-exfil-pipe",
     message: "Pipes data into a network tool (possible data exfiltration)",
     re: /\|\s*(?:curl|wget|nc|ncat|netcat)\b/,
@@ -178,6 +218,20 @@ const BASH_RULES: BashRule[] = [
     id: "data-exfil-upload",
     message: "Uploads file contents over the network (possible data exfiltration)",
     re: /\b(?:curl|wget)\b[^|;&\n]*(?:--upload-file|\s-T\s|--data-binary\s+@|\s-d\s+@|--data\s+@)/,
+  },
+  {
+    // M17: multipart/form-data file upload (`curl -F file=@/path`) exfiltrates a
+    // file's contents; `-F name=@…` is the canonical form.
+    id: "data-exfil-form",
+    message: "Uploads a file via multipart form (possible data exfiltration)",
+    re: /\b(?:curl|wget)\b[^|;&\n]*\s-(?:F|F\S*)\s+\S*=@/,
+  },
+  {
+    // M17: bash `/dev/tcp` / `/dev/udp` pseudo-devices open raw network sockets —
+    // used for shell reverse-connections and data exfiltration.
+    id: "dev-tcp-net",
+    message: "Opens a raw network socket via /dev/tcp or /dev/udp (reverse shell / exfil)",
+    re: /\/dev\/(?:tcp|udp)\//,
   },
 ]
 
@@ -209,6 +263,9 @@ export function dangerousBashFindings(tool: string, input: unknown): SecurityFin
   }
   if (hasDangerousWinDelete(cmd)) {
     add("dangerous-win-delete", "Windows recursive delete of a drive root or home directory", cmd)
+  }
+  if (hasRemoteExec(cmd)) {
+    add("remote-exec", "Downloads and runs a script via a shell (remote code execution)", cmd)
   }
   for (const r of BASH_RULES) {
     const m = cmd.match(r.re)

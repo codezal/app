@@ -176,7 +176,10 @@ export async function loadPlugin(plugin: InstalledPlugin): Promise<LoadResult> {
             warnings.push(`mcp "${m.name}" reddedildi: ${err}`)
             continue
           }
-        } else if (allowHosts) {
+        } else {
+          // Fail-closed (network.ts): an absent allowlist denies every host.
+          // Skipping the check when allowedHosts was missing let http/sse MCP
+          // servers register with no URL validation at all (M12).
           const err = checkUrlAllowed(m.url, allowHosts)
           if (err) {
             warnings.push(`mcp "${m.name}" reddedildi: ${err}`)

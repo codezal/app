@@ -79,6 +79,8 @@ const tr: Messages = {
     localCtxClamped: "{model}: bellek yetersiz — bağlam {requested} → {effective} token'a düşürüldü ({gb} GB model). Daha küçük quant (Q4) veya daha küçük bir model deneyin.",
     localCtxTooSmall: "Bu yerel model belleğe sığmadığı için bağlam {effective} token'a düştü ve agent araçları sığmıyor. Daha küçük bir model (ör. Qwen3-8B) seç ya da bu model için agent modunu kapat.",
     spendCapReached: "Oturum harcama sınırına ulaşıldı (${cap}). Ayarlar → Genel bölümünden yükseltin veya yeni bir oturum başlatın.",
+    turnDroppedBusy: "Tur atlandı: bu oturum için zaten bir akış çalışıyor. Bittiğinde tekrar deneyin.",
+    compactBusy: "Sıkıştırma atlandı: bir akış çalışıyor. Bitmesini bekleyip /compact'i tekrar çalıştırın.",
     completionNudgeNote: "⚠️ Model hiçbir dosyayı değiştirmeden tamamlandı raporu verdi — değişiklikleri gerçekten uygulaması için geri gönderildi.",
     turnBusyAttachments: "Önceki tur hâlâ sürüyor — ek içeren mesajlar kuyruğa alınamıyor. Tur bitince tekrar gönderin.",
   },

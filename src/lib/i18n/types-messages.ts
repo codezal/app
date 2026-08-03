@@ -67,6 +67,11 @@ export type Messages = {
     revertFailed: string
     // Optional — session spend-cap toast. Non-EN locales fall back to en.
     spendCapReached?: string
+    // Optional — single-flight safety net: a turn dropped because a stream was
+    // already in flight. Non-EN locales fall back to en.
+    turnDroppedBusy?: string
+    // Optional — /compact rejected because a stream is in flight (M4).
+    compactBusy?: string
     completionNudgeNote?: string
     // Optional — revert result toast + undo affordance. Non-EN locales fall back
     // to EN via the runtime BASE_MESSAGES lookup.

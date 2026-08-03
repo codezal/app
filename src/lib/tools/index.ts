@@ -261,7 +261,11 @@ function recordDoomAndWarn(tool: string, input: unknown, ownerSessionId: string)
   )
 }
 
-const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch", "notebook_edit", "monitor", "remember", "save_method", "send_to_session", "review_changes"])
+const PLAN_BLOCKED = new Set(["write_file", "edit_file", "bash", "apply_patch", "notebook_edit", "monitor", "remember", "save_method", "send_to_session", "review_changes",
+  // Mutating browser tools (M8): plan mode is read-only, but these actively drive
+  // the page (navigate/click/type/…). Read-only browser tools (screenshot,
+  // snapshot, read_console, read_network, wait) stay allowed.
+  "browser_navigate", "browser_click", "browser_fill", "browser_select", "browser_press", "browser_type", "browser_scroll", "browser_hover", "browser_eval"])
 
 const READ_ONLY_EXTRA = new Set([
   "repo_overview",
@@ -543,6 +547,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         url: z.string().describe("Absolute URL to open, e.g. http://localhost:5173"),
       }),
       execute: async ({ url }) => {
+        await gate("browser_navigate", { url }, ownerSessionId)
         if (!/^https?:\/\//i.test(url)) {
           return "Error: only http:// or https:// URLs can be opened (file://, chrome://, data:// are blocked)."
         }
@@ -604,6 +609,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         target: z.string().describe("Ref number from browser_snapshot, or a CSS selector"),
       }),
       execute: async ({ target }) => {
+        await gate("browser_click", { target }, ownerSessionId)
         await browserClick(ownerSessionId, target)
         await new Promise((r) => setTimeout(r, 350))
         return summaryText(await browserSnapshot(ownerSessionId))
@@ -616,6 +622,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         text: z.string().describe("Value to type into the field"),
       }),
       execute: async ({ target, text }) => {
+        await gate("browser_fill", { target, text }, ownerSessionId)
         await browserFill(ownerSessionId, target, text)
         return summaryText(await browserSnapshot(ownerSessionId))
       },
@@ -627,6 +634,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         value: z.string().describe("Option value (or visible text)"),
       }),
       execute: async ({ target, value }) => {
+        await gate("browser_select", { target, value }, ownerSessionId)
         await browserSelect(ownerSessionId, target, value)
         return summaryText(await browserSnapshot(ownerSessionId))
       },
@@ -637,6 +645,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         key: z.string().describe('Key name, e.g. "Enter", "Tab", "Escape", "ArrowDown"'),
       }),
       execute: async ({ key }) => {
+        await gate("browser_press", { key }, ownerSessionId)
         await browserPress(ownerSessionId, key)
         await new Promise((r) => setTimeout(r, 350))
         return summaryText(await browserSnapshot(ownerSessionId))
@@ -646,6 +655,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
       description: BROWSER_TYPE_DESC,
       inputSchema: z.object({ text: z.string().describe("Text to type into the focused element") }),
       execute: async ({ text }) => {
+        await gate("browser_type", { text }, ownerSessionId)
         await browserType(ownerSessionId, text)
         return summaryText(await browserSnapshot(ownerSessionId))
       },
@@ -657,6 +667,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         dy: z.number().optional().describe("Window scroll delta in px (default 600, negative = up)"),
       }),
       execute: async ({ target, dy }) => {
+        await gate("browser_scroll", { target, dy }, ownerSessionId)
         await browserScroll(ownerSessionId, target, dy)
         return summaryText(await browserSnapshot(ownerSessionId))
       },
@@ -667,6 +678,7 @@ function browserToolSet(ownerSessionId: string): ToolSet {
         target: z.string().describe("Ref number from browser_snapshot, or a CSS selector"),
       }),
       execute: async ({ target }) => {
+        await gate("browser_hover", { target }, ownerSessionId)
         await browserHover(ownerSessionId, target)
         return summaryText(await browserSnapshot(ownerSessionId))
       },

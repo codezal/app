@@ -395,7 +395,6 @@ export default function App() {
   const splitStreaming = useSessionsStore((s) => (splitId ? !!s.streamingIds[splitId] : false))
   const splitCompacting = useSessionsStore((s) => (splitId ? !!s.compactingIds[splitId] : false))
   const splitTitle = useSessionsStore((s) => (splitId ? s.sessions[splitId]?.title : undefined))
-  const setStreamingFor = useSessionsStore((s) => s.setStreamingFor)
   const queuedActive = useSessionsStore((s) => (s.activeId ? s.queued[s.activeId] : undefined))
   const queuedSplit = useSessionsStore((s) => (splitId ? s.queued[splitId] : undefined))
   const enqueueMessage = useSessionsStore((s) => s.enqueueMessage)
@@ -1241,6 +1240,23 @@ export default function App() {
     await dispatchTurn(splitId, text, images, override, meta, files, pdfs)
   }
 
+  // M7: if a preparing turn throws or early-returns before a stream starts,
+  // none of the drain-effect deps change, so a queued message would sit stuck.
+  // Retry the drain for this session right after the turn leaves "preparing".
+  function tryDrainQueueFor(sid: string): void {
+    const st = useSessionsStore.getState()
+    if (st.streamingIds[sid] || st.compactingIds[sid]) return
+    if (preparingTurns.has(sid)) return
+    if ((st.queued[sid]?.length ?? 0) === 0) return
+    if (sid === st.activeId) {
+      const next = st.dequeueMessage(sid)
+      if (next) void onSend(next)
+    } else if (sid === splitId) {
+      const next = st.dequeueMessage(sid)
+      if (next) void onSendSplit(next)
+    }
+  }
+
   // settings warm → UserPromptSubmit hook → auto-compaction → user/asst push →
   // history kur → runStream.
   async function dispatchTurn(
@@ -1292,6 +1308,7 @@ export default function App() {
       await dispatchTurnInner(sid, text, images, override, meta, files, pdfs)
     } finally {
       preparingTurns.delete(sid)
+      tryDrainQueueFor(sid)
     }
   }
 
@@ -1975,6 +1992,13 @@ export default function App() {
       case "compact": {
         const aid = useSessionsStore.getState().activeId
         if (!aid) return
+        // M4: compacting while a stream is in flight races the stream's final
+        // modelMessages write — it would land after the compaction and wipe the
+        // compacted history. Reject until the stream settles.
+        if (useSessionsStore.getState().streamingIds[aid]) {
+          toast.info(tStatic("app.compactBusy"))
+          return
+        }
         const before = useSessionsStore.getState().sessions[aid]?.modelMessages ?? []
         if (before.length < 4) {
           pushMessage({
@@ -2198,7 +2222,9 @@ export default function App() {
     if (!sid) return
     abortStream(sid)
     void useJobsStore.getState().killBySession(sid)
-    setStreamingFor(sid, false)
+    // M3: do NOT clear streamingIds here — the dying stream's own finally does
+    // that. Clearing early lets a queued/new run start, and the dying stream's
+    // late finally then wipes the NEW run's streaming flag (single-flight lost).
     const msgs = useSessionsStore.getState().sessions[sid]?.messages
     const last = msgs?.[msgs.length - 1]
     if (last && last.role === "assistant" && last.pending) {

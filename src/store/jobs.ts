@@ -226,7 +226,29 @@ export const useJobsStore = create<JobsState>((set, get) => ({
       }
     })
 
-    const child = await cmd.spawn()
+    let child: Awaited<ReturnType<typeof cmd.spawn>>
+    try {
+      child = await cmd.spawn()
+    } catch (e) {
+      // M5: spawn failure left the job stuck as "running" forever (no close/error
+      // event ever fires). Finalize it as an error and wake any waiters.
+      append(`[error] spawn failed: ${String(e)}`)
+      set((s) => {
+        const j = s.jobs[id]
+        if (!j || j.status !== "running") return s
+        return {
+          jobs: { ...s.jobs, [id]: { ...j, status: "error", finishedAt: Date.now() } },
+        }
+      })
+      cancelledIds.delete(id)
+      persistRemove(id)
+      const final = get().jobs[id]
+      if (final && final.status !== "running") {
+        resolveWaiters(id, final)
+        notifyJobFinished(final)
+      }
+      throw e
+    }
     childHandles.set(id, child)
     set((s) => {
       const j = s.jobs[id]

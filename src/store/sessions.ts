@@ -620,13 +620,26 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
     }
     if (toEvict.length === 0) return
 
-    for (const id of toEvict) {
+    // M1: a mutation that lands while one of the flushes above is awaiting
+    // re-arms the persist timer (scheduleFlush). Evicting such a session orphans
+    // the write — flush() early-returns once the session leaves the pool, so the
+    // last stream/tool patches would never reach the DB. Drop those from this
+    // pass (the next eviction retries) and re-check active/streaming too, since
+    // the awaits above gave them time to change.
+    const safeToEvict = toEvict.filter((id) => {
+      if (persistTimers.has(id)) return false
+      const s = get()
+      return id !== s.activeId && !s.streamingIds[id]
+    })
+    if (safeToEvict.length === 0) return
+
+    for (const id of safeToEvict) {
       dropShadow(id)
       seen.delete(id)
     }
     set((s) => {
       const sessions = { ...s.sessions }
-      for (const id of toEvict) delete sessions[id]
+      for (const id of safeToEvict) delete sessions[id]
       return { sessions }
     })
   }

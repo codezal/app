@@ -150,7 +150,14 @@ export async function runHooks(args: {
     const r = await execHook(h, payload, args.workspace)
     if (args.event === "PreToolUse") {
       const decision = parseDecision(r.stdout)
-      if (h.blocking && (decision?.decision === "block" || (r.code !== 0 && decision?.decision !== "allow"))) {
+      // "deny" is an explicit rejection and must block even with exit 0 —
+      // treating it as a silent allow let tools run against the hook's veto (M13).
+      if (
+        h.blocking &&
+        (decision?.decision === "block" ||
+          decision?.decision === "deny" ||
+          (r.code !== 0 && decision?.decision !== "allow"))
+      ) {
         const reason =
           decision?.reason ??
           (r.stderr.trim() || `Hook '${h.id}' exit ${r.code}`)

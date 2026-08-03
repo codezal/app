@@ -80,28 +80,52 @@ export function resolveInWorkspace(
 // containment. Call it before reading a file when the path was constructed
 // from untrusted (model-supplied) input.
 //
-// Best-effort: if canonicalization fails (path doesn't exist yet, permission
-// error) the check is skipped — the subsequent read will fail on its own.
+// WRITE paths (M10): the target may not exist yet, so canonicalizing the whole
+// path fails and the old code silently skipped the check — a symlinked PARENT
+// directory inside the workspace then let writes escape. Canonicalize the
+// deepest EXISTING ancestor instead: if that ancestor resolves outside the
+// workspace, every (not-yet-created) child would too.
+async function realpathDeepestAncestor(
+  absPath: string,
+): Promise<{ real: string; rest: string[] } | null> {
+  const norm = absPath.replace(/\\/g, "/")
+  const segs = norm.split("/").filter(Boolean)
+  const lead = norm.startsWith("/") ? "/" : ""
+  for (let i = segs.length; i >= 1; i--) {
+    const candidate = lead + segs.slice(0, i).join("/")
+    try {
+      const real = await invoke<string>("fs_realpath", { path: candidate })
+      return { real, rest: segs.slice(i) }
+    } catch {
+      // Ancestor does not exist (or is unreadable) — walk up.
+    }
+  }
+  return null
+}
+
+// Best-effort: if even the workspace root cannot be canonicalized the check is
+// skipped — the subsequent read/write will fail on its own.
 export async function assertRealPathWithinWorkspace(
   workspace: string,
   absPath: string,
 ): Promise<void> {
   try {
-    const [realWs, realPath] = await Promise.all([
-      invoke<string>("fs_realpath", { path: workspace }),
-      invoke<string>("fs_realpath", { path: absPath }),
-    ])
+    const realWs = await invoke<string>("fs_realpath", { path: workspace })
     const ws = realWs.replace(/\\/g, "/").replace(/\/+$/, "")
-    const target = realPath.replace(/\\/g, "/")
     const wsCmp = isWindows() ? ws.toLowerCase() : ws
-    const tgtCmp = isWindows() ? target.toLowerCase() : target
-    if (tgtCmp !== wsCmp && !tgtCmp.startsWith(wsCmp + "/")) {
+
+    const resolved = await realpathDeepestAncestor(absPath)
+    if (!resolved) return
+    const ancestor = resolved.real.replace(/\\/g, "/").replace(/\/+$/, "")
+    const ancestorCmp = isWindows() ? ancestor.toLowerCase() : ancestor
+    if (ancestorCmp !== wsCmp && !ancestorCmp.startsWith(wsCmp + "/")) {
+      const tail = resolved.rest.length ? "/" + resolved.rest.join("/") : ""
       throw new WorkspaceError(
-        `Symlink workspace dışına çıkıyor: ${absPath} → ${realPath}`,
+        `Symlink workspace dışına çıkıyor: ${absPath} → ${resolved.real}${tail}`,
       )
     }
   } catch (e) {
     if (e instanceof WorkspaceError) throw e
-    // Canonicalization failed (path missing, permission) — let the read fail.
+    // Canonicalization failed (path missing, permission) — let the op fail.
   }
 }

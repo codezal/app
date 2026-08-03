@@ -74,6 +74,8 @@ const en: Messages = {
     revertConfirm: "File changes made by this message will be reverted and the message will be deleted. Continue?",
     revertFailed: "Revert failed: {message}",
     spendCapReached: "Session spend cap reached (${cap}). Raise it in Settings → General or start a new session.",
+    turnDroppedBusy: "Turn dropped: a stream is already running for this session. Try again when it finishes.",
+    compactBusy: "Compaction skipped: a stream is in flight. Wait for it to finish, then run /compact again.",
     completionNudgeNote: "⚠️ The model reported completion without modifying any files — sent back to actually apply the changes.",
     revertDone: "Reverted · {restored} restored, {deleted} removed",
     revertUndo: "Undo",

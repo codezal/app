@@ -207,6 +207,12 @@ export function makeRunStream(deps: RunStreamDeps) {
     // the gate, so make it loud instead of silently dropping the turn.
     if (useSessionsStore.getState().streamingIds[sid]) {
       console.warn(`[runStream] dropped turn for ${sid} — a stream is already in flight (gate bypassed)`)
+      // M6: settle the dropped turn's bubble — otherwise it stays "pending"
+      // forever (spinner with no stream behind it).
+      const note = tStatic("app.turnDroppedBusy")
+      useSessionsStore
+        .getState()
+        .patchMessageFor(sid, asstMsgId, { pending: false, content: note, parts: [{ type: "text", text: note }], endedAt: Date.now() })
       return
     }
     const spendCap = settings.sessionSpendCapUsd ?? 0
@@ -1040,8 +1046,15 @@ export function makeRunStream(deps: RunStreamDeps) {
         useSessionsStore.getState().setEffectiveContextTokensFor(sid, effectiveTokens)
       }
 
-      await useSessionsStore.getState().persistSession(sid)
+      // M2: mark success BEFORE the persist — a persistence failure must not
+      // flip a successful stream into a run error (the store already holds the
+      // turn; losing streamSucceeded here also dropped finalMessages evidence).
       streamSucceeded = true
+      try {
+        await useSessionsStore.getState().persistSession(sid)
+      } catch (persistErr) {
+        console.warn(`[runStream] persistSession failed for ${sid}:`, persistErr)
+      }
     } catch (e) {
       // The error path skips the awaits on result.response / result.usage /
       // etc. below, so those lazy promises reject with the same stream error

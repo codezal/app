@@ -172,6 +172,18 @@ describe("runHooks", () => {
     expect(r.blockReason).toContain("rule violated")
   })
 
+  it("M13: PreToolUse + stdout decision:deny + exit 0 → blocked (sessiz grant yok)", async () => {
+    mockExec('{"decision":"deny","reason":"policy"}', 0)
+    const r = await runHooks({
+      hooks: [hook({ blocking: true })],
+      event: "PreToolUse",
+      payload: { tool: "bash", input: {} },
+      workspace: "/ws",
+    })
+    expect(r.blocked).toBe(true)
+    expect(r.blockReason).toContain("policy")
+  })
+
   it("PreToolUse + stdout decision:allow + exit≠0 → allowed (explicit allow wins)", async () => {
     mockExec('{"decision":"allow"}', 1)
     const r = await runHooks({
