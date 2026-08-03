@@ -26,17 +26,42 @@ export const googleVertexAdapter: ProviderAdapter = {
     return factory({
       project,
       location,
-      // Service account JSON tek string olarak apiKey'de tutulur; SDK googleAuthOptions
-      googleAuthOptions: { credentials: tryParseJson(auth.value) },
+      // M23: branch on what the credential actually IS instead of dumping every
+      // variant into `credentials`. GOOGLE_APPLICATION_CREDENTIALS is a FILE
+      // PATH (→ keyFile), a pasted service-account JSON is an object
+      // (→ credentials), and GOOGLE_VERTEX_API_KEY is a plain key (→ apiKey).
+      ...resolveVertexAuth(auth.value),
       headers: config?.headers,
     })(modelId) as LanguageModel
   },
+}
+
+type VertexAuthOptions = {
+  googleAuthOptions?: { credentials?: unknown; keyFile?: string }
+  apiKey?: string
+}
+
+function resolveVertexAuth(value: string): VertexAuthOptions {
+  const v = value.trim()
+  // Pasted service-account JSON → credentials object.
+  if (v.startsWith("{")) {
+    const parsed = tryParseJson(v)
+    if (parsed && typeof parsed === "object") {
+      return { googleAuthOptions: { credentials: parsed } }
+    }
+  }
+  // A credentials file path (GOOGLE_APPLICATION_CREDENTIALS) → keyFile.
+  if (/^(?:[~/\\]|[A-Za-z]:[\\/])/.test(v) || v.endsWith(".json")) {
+    return { googleAuthOptions: { keyFile: v } }
+  }
+  // Anything else is treated as a plain API key (GOOGLE_VERTEX_API_KEY).
+  return { apiKey: v }
 }
 
 function tryParseJson(s: string): unknown {
   try {
     return JSON.parse(s)
   } catch {
-    return s
+    return null
   }
 }

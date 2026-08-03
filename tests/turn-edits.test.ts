@@ -130,4 +130,20 @@ describe("turnEditsToUnifiedDiff", () => {
   it("boş edit → boş metin", () => {
     expect(turnEditsToUnifiedDiff({ files: [], totalAdded: 0, totalRemoved: 0 })).toBe("")
   })
+
+  it("M43: aynı dosyaya iki ayrı edit → iki ayrı @@ hunk header'ı", () => {
+    // Birinci edit dosyanın başında, ikincisi sonunda — tek header'a birleşirse
+    // ikinci hunk'un satır numaraları gerçek dosyayla hizasız kalır.
+    const edits = aggregateTurnEdits([
+      call("1", "edit_file", { path: "f.ts", old_string: "aa\n", new_string: "AA\n" }),
+      call("2", "edit_file", { path: "f.ts", old_string: "zz\n", new_string: "ZZ\n" }),
+    ])
+    const diff = turnEditsToUnifiedDiff(edits)
+    const headers = diff.match(/@@ -\d+ \+\d+ @@/g) ?? []
+    expect(headers).toHaveLength(2)
+    expect(diff).toContain("-aa")
+    expect(diff).toContain("+AA")
+    expect(diff).toContain("-zz")
+    expect(diff).toContain("+ZZ")
+  })
 })

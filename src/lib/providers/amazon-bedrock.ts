@@ -1,6 +1,7 @@
 // Amazon Bedrock — AWS hostlu LLM marketplace.
 // region tutar.
 import { loadProviderFactory } from "./lazy-sdk"
+import { readEnvVar } from "./env-reader"
 import type { LanguageModel } from "ai"
 import type { ProviderAdapter } from "./types"
 
@@ -23,11 +24,30 @@ export const amazonBedrockAdapter: ProviderAdapter = {
   recommendedModels: ["anthropic.claude-sonnet-4-6-v1:0", "amazon.nova-pro-v1:0"],
   async buildLanguageModel({ modelId, auth, config }): Promise<LanguageModel> {
     if (auth.kind !== "apiKey") throw new Error("Amazon Bedrock: AWS credentials required")
-    const [accessKeyId, secretAccessKey] = auth.value.split(":", 2)
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error("Bedrock: apiKey must be 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY'")
+    // The stored/env value may be "AK:SK" (apiKey form) or JUST the access key
+    // (env form — resolveAuth returns only the first matching envVar, i.e.
+    // AWS_ACCESS_KEY_ID, so the secret never rides along in auth.value) (M22).
+    let accessKeyId: string | undefined
+    let secretAccessKey: string | undefined
+    if (auth.value.includes(":")) {
+      const idx = auth.value.indexOf(":")
+      accessKeyId = auth.value.slice(0, idx)
+      secretAccessKey = auth.value.slice(idx + 1)
+    } else {
+      accessKeyId = auth.value
     }
-    const region = (config?.options?.region as string | undefined) ?? "us-east-1"
+    // Fill any missing piece from the environment.
+    if (!accessKeyId) accessKeyId = (await readEnvVar("AWS_ACCESS_KEY_ID")) ?? undefined
+    if (!secretAccessKey) secretAccessKey = (await readEnvVar("AWS_SECRET_ACCESS_KEY")) ?? undefined
+    const region =
+      (config?.options?.region as string | undefined) ??
+      (await readEnvVar("AWS_REGION")) ??
+      "us-east-1"
+    if (!accessKeyId || !secretAccessKey) {
+      throw new Error(
+        "Bedrock: AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY required (apiKey 'AK:SK' or env vars)",
+      )
+    }
     const factory = await loadProviderFactory("@ai-sdk/amazon-bedrock")
     return factory({
       accessKeyId,

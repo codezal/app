@@ -326,6 +326,22 @@ describe("applyPatch — Add File", () => {
     ].join("\n")
     await expect(applyPatch(WS, patch)).rejects.toThrow(/already exists/)
   })
+
+  it("M11: '+' olmayan boş olmayan satırlar dosyaya verbatim yazılır", async () => {
+    mockExists.mockResolvedValue(false)
+    const patch = [
+      "*** Begin Patch",
+      "*** Add File: src/raw.ts",
+      "+export const x = 1",
+      "const y = 2",
+      "+export default x",
+      "*** End Patch",
+    ].join("\n")
+    const r = await applyPatch(WS, patch)
+    expect(r.filesAdded).toContain("src/raw.ts")
+    const written = mockWrite.mock.calls[0]?.[1] as string
+    expect(written).toBe("export const x = 1\nconst y = 2\nexport default x")
+  })
 })
 
 // ─── applyPatch — Delete File ─────────────────────────────────────────────────

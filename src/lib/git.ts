@@ -34,17 +34,25 @@ export type GitStatus = {
   isRepo: boolean
 }
 
-async function exec(workspace: string, args: string[]): Promise<string> {
-  const r = await runProgram("git", [...GIT_FLAGS, ...args], { cwd: workspace })
+async function exec(
+  workspace: string,
+  args: string[],
+  opts: { env?: Record<string, string> } = {},
+): Promise<string> {
+  const r = await runProgram("git", [...GIT_FLAGS, ...args], { cwd: workspace, env: opts.env })
   if (r.code !== 0 && !r.stdout) {
     throw new Error(r.stderr.trim() || `git exit ${r.code}`)
   }
   return r.stdout
 }
 
-async function mutate(workspace: string, args: string[]): Promise<string> {
+async function mutate(
+  workspace: string,
+  args: string[],
+  opts: { env?: Record<string, string> } = {},
+): Promise<string> {
   if (!workspace) throw new Error("workspace yok")
-  const r = await runProgram("git", [...GIT_FLAGS, ...args], { cwd: workspace })
+  const r = await runProgram("git", [...GIT_FLAGS, ...args], { cwd: workspace, env: opts.env })
   if (r.code !== 0) {
     throw new Error(r.stderr.trim() || r.stdout.trim() || `git ${args[0]} exit ${r.code}`)
   }
@@ -106,7 +114,12 @@ export async function gitStatus(workspace: string): Promise<GitStatus> {
       if (line.startsWith("2 ")) {
         const tailIdx = line.indexOf("\t")
         if (tailIdx !== -1) {
-          const newPath = line.slice(line.lastIndexOf(" ", tailIdx - 1) + 1, tailIdx)
+          // v2 rename: "2 XY sub mH mI mW hH hI Rxx new\told". The pre-tab path
+          // starts after the 9th token (the Rxx similarity score) — one token
+          // FURTHER than a normal entry's path. lastIndexOf(" ") truncated it
+          // whenever the path contained spaces (M38) — slice token-boundary →
+          // tab instead.
+          const newPath = line.slice(nthSpaceIndex(line, 9) + 1, tailIdx)
           const oldPath = line.slice(tailIdx + 1)
           entries.push({
             index: indexChar,
@@ -707,35 +720,43 @@ export async function gitDiffWorktree(workspace: string): Promise<string> {
 
   const base = (await gitHasHead(workspace)) ? "HEAD" : EMPTY_TREE
 
-  // Intent-to-add the untracked files so `git diff` renders them as new files.
-  // Chunked to stay well under the OS argument-length limit on both macOS and
-  // Windows when a turn creates many files.
-  let added: string[] = []
-  for (let i = 0; i < untracked.length; i += 100) {
-    const chunk = untracked.slice(i, i + 100)
-    try {
-      await mutate(workspace, ["add", "-N", "--", ...chunk])
-      added = added.concat(chunk)
-    } catch {
-      // Ignore a failed chunk and review whatever we could mark.
-    }
-  }
-
+  // M39: route ALL index writes through a throwaway index file (GIT_INDEX_FILE)
+  // instead of mutating the real one. `add -N` + `reset` on the shared index
+  // raced concurrent git operations (and a mid-flight crash left intent-to-add
+  // entries behind). A temp index is invisible to every other process, so
+  // nothing can observe or clobber it — and it needs no cleanup on the index
+  // itself, just deleting the temp file.
+  let tmpIndex: string | undefined
   try {
-    const out = await exec(workspace, ["diff", base, "--no-color"])
+    const { tempDir } = await import("@tauri-apps/api/path")
+    tmpIndex =
+      (await tempDir().catch(() => "")) +
+      `codezal-git-diff-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const env = { GIT_INDEX_FILE: tmpIndex }
+
+    // Intent-to-add the untracked files so `git diff` renders them as new files.
+    // Chunked to stay well under the OS argument-length limit on both macOS and
+    // Windows when a turn creates many files.
+    for (let i = 0; i < untracked.length; i += 100) {
+      const chunk = untracked.slice(i, i + 100)
+      try {
+        await mutate(workspace, ["add", "-N", "--", ...chunk], { env })
+      } catch {
+        // Ignore a failed chunk and review whatever we could mark.
+      }
+    }
+
+    const out = await exec(workspace, ["diff", base, "--no-color"], { env })
     return capDiff(out)
   } catch {
     return ""
   } finally {
-    // Drop the intent-to-add entries to restore the index exactly. Resetting
-    // against `base` removes these paths (they are not in HEAD / empty tree).
-    for (let i = 0; i < added.length; i += 100) {
-      const chunk = added.slice(i, i + 100)
+    if (tmpIndex) {
       try {
-        await mutate(workspace, ["reset", "-q", base, "--", ...chunk])
+        const { remove } = await import("@tauri-apps/plugin-fs")
+        await remove(tmpIndex)
       } catch {
-        // Best effort: a leftover intent-to-add entry only affects `git status`
-        // display — never fail the review on cleanup.
+        // Best effort — a stray temp index file is harmless.
       }
     }
   }

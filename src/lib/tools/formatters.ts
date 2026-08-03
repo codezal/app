@@ -103,13 +103,13 @@ async function isEnabled(workspace: string, def: FormatterDef): Promise<boolean>
   if (cached !== undefined) return cached
   let ok = false
   try {
-    const { runBash } = await import("./shell")
-    const out = await runBash(
-      workspace,
-      `{ ${def.detect} ; } >/dev/null 2>&1 && echo __OK__ || true`,
-      { timeoutMs: 8000 },
-    )
-    ok = out.includes("__OK__")
+      const { runBash } = await import("./shell")
+      const out = await runBash(
+        workspace,
+        `{ ${def.detect} ; } >/dev/null 2>&1 && echo __OK__ || true`,
+        { timeoutMs: 8000, cwd: workspace },
+      )
+      ok = out.includes("__OK__")
   } catch {
     // Intentionally ignored.
   }
@@ -129,7 +129,9 @@ export async function runFormatters(workspace: string, rel: string): Promise<str
       const out = await runBash(
         workspace,
         `${withFile(def.command, file)} 2>&1 || true`,
-        { timeoutMs: 15000 },
+        // cwd: formatter commands use RELATIVE $FILE — a cached session cwd
+        // deep in the tree would resolve them against the wrong directory (M9).
+        { timeoutMs: 15000, cwd: workspace },
       )
       if (def.surfaceOutput) {
         const t = out.trim()

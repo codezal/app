@@ -88,6 +88,11 @@ function parsePatch(input: string): FileOp[] {
           buf.push(lines[i].slice(1))
         } else if (lines[i].trim() === "") {
           buf.push("")
+        } else {
+          // M11: a non-empty line WITHOUT a leading "+" used to be silently
+          // dropped, so the written file was a truncated, corrupt version of the
+          // requested content. Push it through verbatim.
+          buf.push(lines[i])
         }
         i++
       }

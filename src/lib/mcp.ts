@@ -30,7 +30,7 @@ import {
 import {
   clearCodeVerifier,
   clearOAuthState,
-  getAuth,
+  getAuthForUrl,
   getOAuthState,
   removeAuth,
 } from "./mcp-auth"
@@ -380,7 +380,11 @@ async function preRefreshExpiredOAuth(
   if (!tokens?.refresh_token) return // first-time / no refresh grant to use
   // expires_in is seconds-until-expiry, clamped to >=0 by the provider. undefined
   // means the token carries no expiry info — leave it to the reactive 401 path.
-  if (tokens.expires_in === undefined || tokens.expires_in > 60) return
+  // M31: refresh eagerly within the same 5-minute window the provider layer uses
+  // (EAGER_REFRESH_MS). The old hardcoded 60s left a token "fresh" until 61s to
+  // expiry, then used it stale. tokens() reports seconds-until-expiry, so the
+  // eager window here is 300s.
+  if (tokens.expires_in === undefined || tokens.expires_in > 300) return
   try {
     await auth(provider, { serverUrl, fetchFn: mcpFetch })
   } catch {
@@ -494,7 +498,11 @@ async function buildOne(s: McpServerConfig): Promise<{ tools?: ToolSet; status: 
   try {
     const c = await connectMcp(s)
     const isRemoteOAuth = s.transport !== "stdio" && s.oauth !== false
-    const authed = isRemoteOAuth ? !!(await getAuth(s.name))?.tokens : undefined
+    // M32: pin the authed check to THIS server's URL — an unpinned getAuth
+    // would report "authed" after the server was repointed at another host.
+    const authed = isRemoteOAuth
+      ? !!(await getAuthForUrl(s.name, s.url))?.tokens
+      : undefined
     return {
       tools: c.tools,
       status: {

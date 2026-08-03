@@ -26,6 +26,25 @@ function isTransientStatus(status: number): boolean {
   return status === 429 || status >= 500
 }
 
+// An HTTP error that carries its status so callers can tell a DEFINITIVE auth
+// failure (401/403 → the token is truly dead) from anything else. Thrown by the
+// token-exchange helpers after fetchWithRetry has exhausted its retries (M28).
+export class HttpError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = "HttpError"
+    this.status = status
+  }
+}
+
+// True when the status means the credential itself is rejected (revoked /
+// expired beyond renewal) rather than a transient server/network problem.
+export function isDefinitiveAuthFailure(status: number): boolean {
+  return status === 401 || status === 403
+}
+
 // fetch() with bounded retries on transient failures. Returns the final
 // Response (which may still be non-ok for a non-transient status); throws only
 // if every attempt threw at the network layer.

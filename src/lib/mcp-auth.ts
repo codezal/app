@@ -127,13 +127,13 @@ export const updateTokens = (name: string, tokens: McpTokens, serverUrl?: string
 export const updateClientInfo = (name: string, info: McpClientInfo, serverUrl?: string) =>
   updateField(name, "clientInfo", info, serverUrl)
 
-export const updateCodeVerifier = (name: string, codeVerifier: string) =>
-  updateField(name, "codeVerifier", codeVerifier)
+export const updateCodeVerifier = (name: string, codeVerifier: string, serverUrl?: string) =>
+  updateField(name, "codeVerifier", codeVerifier, serverUrl)
 
 export const clearCodeVerifier = (name: string) => clearField(name, "codeVerifier")
 
-export const updateOAuthState = (name: string, state: string) =>
-  updateField(name, "oauthState", state)
+export const updateOAuthState = (name: string, state: string, serverUrl?: string) =>
+  updateField(name, "oauthState", state, serverUrl)
 
 export async function getOAuthState(name: string): Promise<string | undefined> {
   return (await getAuth(name))?.oauthState

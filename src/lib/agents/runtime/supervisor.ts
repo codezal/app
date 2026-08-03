@@ -62,7 +62,13 @@ export class RunSupervisor {
     const startedAt = Date.now()
     const controller = new AbortController()
     const abort = () => controller.abort()
-    input.signal?.addEventListener("abort", abort, { once: true })
+    // M46: an addEventListener on an ALREADY-aborted signal never fires — the
+    // child run would then be uncancellable. Check the flag synchronously.
+    if (input.signal?.aborted) {
+      controller.abort()
+    } else {
+      input.signal?.addEventListener("abort", abort, { once: true })
+    }
     const timer = setTimeout(abort, this.settings.maxWallClockMs)
     const run: AgentRunSpec = {
       runId: createId("worker"),

@@ -16,6 +16,11 @@ export type RunBashOptions = {
   // how aggressive the filter was for this command.
   compactOutput?: CompactOutputSettings
   sessionId?: string
+  // Explicit working directory — bypasses the per-session lastCwd cache. Used
+  // by non-interactive callers (formatters) whose commands embed RELATIVE
+  // paths: a cached cwd deep inside the workspace would resolve those against
+  // the wrong directory (M9).
+  cwd?: string
 }
 
 const lastCwd = new Map<string, string>()
@@ -33,7 +38,11 @@ export async function runBash(
   // and would otherwise pin every command to the old workspace forever (the
   // post-run `set` never fires because the dir isn't within the new workspace).
   const cached = lastCwd.get(sid)
-  const cwd = cached && isWithinWorkspace(workspace, cached) ? cached : workspace
+  const cwd = opts.cwd
+    ? opts.cwd
+    : cached && isWithinWorkspace(workspace, cached)
+      ? cached
+      : workspace
   const wrapped =
     `cd ${shellQuote(cwd)} && { ${command}\n}; __cz=$?; ` +
     `printf '${PWD_SENTINEL}%s\\n' "$(pwd)"; exit $__cz`

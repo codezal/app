@@ -143,11 +143,14 @@ export class CodezalMcpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await updateCodeVerifier(this.mcpName, codeVerifier)
+    await updateCodeVerifier(this.mcpName, codeVerifier, this.serverUrl)
   }
 
   async codeVerifier(): Promise<string> {
-    const entry = await getAuth(this.mcpName)
+    // M34: pin to THIS server's URL — an unpinned getAuth would let a new flow
+    // validate against a stale verifier written for an earlier (or repointed)
+    // server URL.
+    const entry = await getAuthForUrl(this.mcpName, this.serverUrl)
     if (!entry?.codeVerifier) {
       throw new Error(`No PKCE code verifier saved for MCP server: ${this.mcpName}`)
     }
@@ -155,16 +158,16 @@ export class CodezalMcpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveState(state: string): Promise<void> {
-    await updateOAuthState(this.mcpName, state)
+    await updateOAuthState(this.mcpName, state, this.serverUrl)
   }
 
   async state(): Promise<string> {
-    const entry = await getAuth(this.mcpName)
+    const entry = await getAuthForUrl(this.mcpName, this.serverUrl)
     if (entry?.oauthState) return entry.oauthState
     // The SDK treats state() as a generator, not just a reader — produce and
     // persist a fresh CSRF token when none exists yet.
     const fresh = randomState()
-    await updateOAuthState(this.mcpName, fresh)
+    await updateOAuthState(this.mcpName, fresh, this.serverUrl)
     return fresh
   }
 

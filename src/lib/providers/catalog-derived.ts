@@ -113,10 +113,16 @@ function makeAdapter(
       const modelNpm = models?.[modelId]?.provider?.npm
       if (modelNpm === "@ai-sdk/anthropic") {
         const anthropic = await loadProviderFactory("@ai-sdk/anthropic")
+        // M25: route through tauriFetch + the same quirk wrappers as the
+        // openai-compatible path. Without an explicit fetch, @ai-sdk/anthropic
+        // uses the webview's global fetch → CORS hard-fail for Kimi/Zen gateway
+        // models served in anthropic format.
+        const baseFetch = withSchemaSanitize(withQuirkBody(tauriFetch, id, modelId), id, modelId)
         return anthropic({
           apiKey,
           baseURL: resolvedBase,
           headers,
+          fetch: withForcedUserAgent(baseFetch, id, headers?.["User-Agent"]),
         })(modelId) as LanguageModel
       }
 

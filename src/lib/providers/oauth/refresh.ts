@@ -11,6 +11,7 @@
 //      refreshes race and all but one 401. A per-provider in-flight map collapses
 //      concurrent refreshes into a single request whose result everyone awaits.
 import { getOAuthFlow } from "./index"
+import { HttpError, isDefinitiveAuthFailure } from "./http"
 import type { OAuthCredential, ProviderId } from "../types"
 
 // Renew this far ahead of the hard expiry so a request never goes out with a
@@ -64,15 +65,23 @@ async function doRefresh(
   let next: OAuthCredential | null
   try {
     next = await flow.refresh(cred)
-  } catch {
-    next = null
+  } catch (e) {
+    if (e instanceof HttpError && isDefinitiveAuthFailure(e.status)) {
+      // Definitive rejection (token revoked/expired): the credential is dead.
+      next = null
+    } else {
+      // M27: transient network / 5xx failure — do NOT log the user out. Keep
+      // the existing credential; the next request will retry the refresh.
+      console.warn(`[oauth] refresh failed for ${providerId} (transient), keeping credential:`, e)
+      return cred
+    }
   }
 
   // Persist the outcome through the settings store (keychain + in-memory mirror
   // + stripped disk write). Dynamic import keeps providers/ free of a static
-  // dependency on the store, avoiding an import cycle. On a failed refresh we
-  // clear the credential so the UI shows the provider as disconnected rather
-  // than wedged on a dead token.
+  // dependency on the store, avoiding an import cycle. On a definitive refresh
+  // failure we clear the credential so the UI shows the provider as disconnected
+  // rather than wedged on a dead token.
   try {
     const { useSettingsStore } = await import("@/store/settings")
     await useSettingsStore.getState().setCredential(providerId, next ?? null)

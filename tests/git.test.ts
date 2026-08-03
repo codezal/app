@@ -125,6 +125,16 @@ describe("gitStatus", () => {
     expect(r.entries[0].oldPath).toBe("old.ts")
   })
 
+  it("M38: boşluk içeren rename path'i tam parse edilir", async () => {
+    mockGit(
+      "# branch.head main\n" +
+      "2 R. N... 100644 100644 100644 abc def R100 my new file.ts\told file.ts\n",
+    )
+    const r = await gitStatus("/ws")
+    expect(r.entries[0].path).toBe("my new file.ts")
+    expect(r.entries[0].oldPath).toBe("old file.ts")
+  })
+
   it("birden fazla entry", async () => {
     mockGit(
       "# branch.head main\n" +

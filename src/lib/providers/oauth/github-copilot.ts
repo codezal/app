@@ -1,5 +1,5 @@
 // GitHub Copilot OAuth — Device Code Flow (RFC 8628).
-import { fetchWithRetry } from "./http"
+import { fetchWithRetry, HttpError } from "./http"
 import { tauriFetch } from "../tauri-fetch"
 import type { OAuthFlow, OAuthStartResult } from "./types"
 import type { OAuthCredential } from "../types"
@@ -80,16 +80,16 @@ export const copilotOAuth: OAuthFlow = {
 
   async refresh(cred): Promise<OAuthCredential | null> {
     if (!cred.refreshToken) return null
-    try {
-      const copilot = await fetchCopilotToken(cred.refreshToken)
-      return {
-        accessToken: copilot.token,
-        refreshToken: cred.refreshToken,
-        expiresAt: copilot.expiresAt,
-        meta: { ...(cred.meta ?? {}), endpoint: copilot.endpoint },
-      }
-    } catch {
-      return null
+    // M28: do NOT swallow every error. fetchCopilotToken throws a typed
+    // HttpError for definitive auth rejections (401/403) and for transient
+    // failures (5xx/network) — the refresh orchestrator (oauth/refresh.ts)
+    // discriminates between them so a network blip does not log the user out.
+    const copilot = await fetchCopilotToken(cred.refreshToken)
+    return {
+      accessToken: copilot.token,
+      refreshToken: cred.refreshToken,
+      expiresAt: copilot.expiresAt,
+      meta: { ...(cred.meta ?? {}), endpoint: copilot.endpoint },
     }
   },
 }
@@ -108,7 +108,7 @@ async function fetchCopilotToken(githubToken: string): Promise<{
       "Editor-Version": "Codezal/1.0",
     },
   })
-  if (!res.ok) throw new Error(`Copilot token exchange failed: HTTP ${res.status}`)
+  if (!res.ok) throw new HttpError(res.status, `Copilot token exchange failed: HTTP ${res.status}`)
   const json = (await res.json()) as {
     token: string
     expires_at?: number

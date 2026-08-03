@@ -17,6 +17,7 @@
 // every known provider id (keyring 3.x has no native "list entries" API).
 import { invoke } from "@tauri-apps/api/core"
 import type { OAuthCredential, ProviderId } from "./types"
+import { withLock } from "../lock"
 
 // Keychain service name — the namespace under which all entries are grouped.
 const SERVICE = "codezal"
@@ -132,14 +133,16 @@ export async function loadAllSecrets(): Promise<LoadedSecrets> {
 // Store (or, with null/empty, clear) a provider's API key. Keeps the index in
 // sync so a later load() finds it.
 export async function setApiKeySecret(id: string, key: string | null): Promise<void> {
-  const index = await readIndex()
-  if (key && key.trim()) {
-    await kcSet(apiKeyAccount(id), key.trim())
-    await writeIndex({ ...index, apiKeys: addId(index.apiKeys, id) })
-  } else {
-    await kcDelete(apiKeyAccount(id))
-    await writeIndex({ ...index, apiKeys: removeId(index.apiKeys, id) })
-  }
+  await withLock("secret-store:index", async () => {
+    const index = await readIndex()
+    if (key && key.trim()) {
+      await kcSet(apiKeyAccount(id), key.trim())
+      await writeIndex({ ...index, apiKeys: addId(index.apiKeys, id) })
+    } else {
+      await kcDelete(apiKeyAccount(id))
+      await writeIndex({ ...index, apiKeys: removeId(index.apiKeys, id) })
+    }
+  })
 }
 
 // Store (or, with null, clear) a provider's OAuth credential.
@@ -147,14 +150,19 @@ export async function setCredentialSecret(
   id: ProviderId,
   cred: OAuthCredential | null,
 ): Promise<void> {
-  const index = await readIndex()
-  if (cred) {
-    await kcSet(oauthAccount(id), JSON.stringify(cred))
-    await writeIndex({ ...index, oauth: addId(index.oauth, id) })
-  } else {
-    await kcDelete(oauthAccount(id))
-    await writeIndex({ ...index, oauth: removeId(index.oauth, id) })
-  }
+  // M30: the read-modify-write of the index is not atomic — two concurrent
+  // setCredentialSecret calls (e.g. parallel OAuth refreshes) would both read
+  // the pre-write index and last-write-wins, dropping one provider's id.
+  await withLock("secret-store:index", async () => {
+    const index = await readIndex()
+    if (cred) {
+      await kcSet(oauthAccount(id), JSON.stringify(cred))
+      await writeIndex({ ...index, oauth: addId(index.oauth, id) })
+    } else {
+      await kcDelete(oauthAccount(id))
+      await writeIndex({ ...index, oauth: removeId(index.oauth, id) })
+    }
+  })
 }
 
 // Store (or, with null/empty, clear) a custom provider's HTTP headers. Kept in

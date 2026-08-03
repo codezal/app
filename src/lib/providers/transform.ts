@@ -566,12 +566,19 @@ function sanitizeGemini(node: unknown): unknown {
   for (const [key, value] of Object.entries(node)) {
     if (key === "enum" && Array.isArray(value)) {
       result[key] = value.map((v) => String(v))
-      if (result.type === "integer" || result.type === "number") result.type = "string"
     } else if (isObj(value) || Array.isArray(value)) {
       result[key] = sanitizeGemini(value)
     } else {
       result[key] = value
     }
+  }
+
+  // M24: post-pass enum/type coercion. Doing it inside the loop depended on
+  // object key order — when "enum" preceded "type" in the entries, result.type
+  // was still undefined and the integer/number type survived alongside the
+  // stringified enum values → Gemini 400.
+  if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) {
+    result.type = "string"
   }
 
   const hasCombiner = Array.isArray(result.anyOf) || Array.isArray(result.oneOf) || Array.isArray(result.allOf)

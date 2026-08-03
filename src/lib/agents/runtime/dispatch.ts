@@ -165,10 +165,23 @@ export async function dispatchSupervisorAgents(input: DelegateAgentsInput): Prom
     const def = agentDefs[index]
     const engine = engineFor(input.session, input.settings, dispatch.role)
     const role = input.dispatches[index]?.role ?? "worker"
-    // Named-agent model pin wins over the role engine; fall back to role/session.
-    const provider =
-      def?.provider ?? (engine.kind === "sdk" ? engine.providerId : input.session.provider)
-    const model = def?.model ?? (engine.kind === "sdk" ? engine.modelId : input.session.model)
+    // M44: resolve provider/model as ATOMIC PAIRS. The old code mixed
+    // def.provider with engine.modelId field-by-field, so a named agent that
+    // pinned only a provider produced an invalid cross-provider/model combo
+    // (engine's model + agent's provider) that got rejected. When the agent
+    // pins EITHER side, pair it with the session's counterpart; only when it
+    // pins nothing does the whole role-engine pair apply.
+    const pinnedProvider = def?.provider
+    const pinnedModel = def?.model
+    let provider: string
+    let model: string
+    if (pinnedProvider || pinnedModel) {
+      provider = pinnedProvider ?? input.session.provider
+      model = pinnedModel ?? input.session.model
+    } else {
+      provider = engine.kind === "sdk" ? engine.providerId : input.session.provider
+      model = engine.kind === "sdk" ? engine.modelId : input.session.model
+    }
     const agentName = def?.name ?? role
     const description = descriptionOf(index, agentName)
     cards.push({ agentType: agentName, description })
