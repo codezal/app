@@ -235,6 +235,10 @@ impl Inner {
         if let Some(t) = tabs.get(session_id) {
             return Ok(t.clone());
         }
+        // M93: create + insert while holding BOTH locks — the old
+        // check-then-insert raced two callers into spawning duplicate tabs (the
+        // loser leaked until the 1h idle eviction). Lock order is always
+        // tabs → browser (no other path takes them in the reverse order).
         let new_tab = {
             let guard = self.browser.lock().map_err(|e| e.to_string())?;
             let browser = guard.as_ref().ok_or_else(|| "browser yok".to_string())?;
@@ -246,6 +250,7 @@ impl Inner {
                 Ok(tab)
             }
             Err(e) => {
+                drop(tabs);
                 if let Ok(mut b) = self.browser.lock() {
                     *b = None;
                 }
@@ -295,8 +300,20 @@ impl Inner {
             tab.wait_until_navigated().map_err(|e| e.to_string())?;
             let _ = tab.evaluate(CONSOLE_HOOK_JS, false);
             let _ = tab.evaluate(NETWORK_HOOK_JS, false);
+            let final_url = tab.get_url();
+            // M90: the pre-navigation guard only sees the INITIAL URL — the
+            // server could 30x-redirect to a blocked host (169.254.x metadata,
+            // link-local). Re-check after navigation lands; if it resolved to a
+            // blocked host, navigate to about:blank and reject.
+            if is_blocked_host(&final_url) {
+                let _ = tab.navigate_to("about:blank");
+                return Err(
+                    "Hedef blocked host'a yönlendirdi (cloud metadata / link-local — SSRF koruması)."
+                        .to_string(),
+                );
+            }
             Ok(NavResult {
-                final_url: tab.get_url(),
+                final_url,
                 title: tab.get_title().unwrap_or_default(),
             })
         })();

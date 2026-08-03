@@ -75,17 +75,22 @@ describe("request — YOLO bypass + kritik escalation", () => {
     expect(useApprovalsStore.getState().queue.length).toBe(0)
   })
 
-  it("YOLO worker + dangerous bash (rm -rf /) → auto-allow DEĞİL, modal'a escalate", () => {
+  it("YOLO worker + dangerous bash (rm -rf /) → auto-allow DEĞİL, modal'a escalate", async () => {
     useApprovalsStore.getState().addBypassWorker("worker_yolo")
     let resolved: unknown = "PENDING"
-    void useApprovalsStore
+    const p = useApprovalsStore
       .getState()
       .request("bash", bash("rm -rf /"), { workerId: "worker_yolo" })
-      .then((v) => {
-        resolved = v
-      })
+    // M95: the request escalates to the modal and only resolves on a user
+    // decision, so it never settles here — drain the microtask, assert the
+    // pending state, and consume the promise to avoid an unhandled rejection.
+    await Promise.resolve()
+    void p.then((v) => {
+      resolved = v
+    })
     expect(useApprovalsStore.getState().queue.length).toBe(1)
     expect(resolved).toBe("PENDING")
+    p.catch(() => {})
   })
 
   it("background agent approval keeps run, agent, and session ownership", () => {

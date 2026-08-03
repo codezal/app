@@ -26,6 +26,19 @@ fn read_env_var(name: String) -> Option<String> {
 #[derive(Default)]
 struct KeepAwakeState(std::sync::Mutex<Option<std::process::Child>>);
 
+// M91: kill the keep-awake child (caffeinate / powershell) when the app exits —
+// otherwise it keeps running as an orphan, preventing idle sleep for the user.
+impl Drop for KeepAwakeState {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 const PS_KEEPAWAKE: &str = "Add-Type -Name P -Namespace W -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint e);'; while($true){ [W.P]::SetThreadExecutionState(0x80000003); Start-Sleep -Seconds 50 }";
 

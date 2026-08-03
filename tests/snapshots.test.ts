@@ -17,6 +17,15 @@ const gitOk = spawnSync("git", ["--version"]).status === 0
 const bashOk = spawnSync("bash", ["-lc", "true"]).status === 0
 const canRun = gitOk && bashOk
 
+// M96: when git/bash are unavailable (e.g. a minimal Windows CI), the whole
+// suite used to be silently skipped via describe.skipIf — masking regressions
+// of the shadow-git revert path. Fail loudly instead so the gap is visible.
+if (!canRun) {
+  throw new Error(
+    "snapshots integration suite requires `git` and `bash` on PATH — refusing to silently skip",
+  )
+}
+
 const store = vi.hoisted(() => ({ appData: "" }))
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
@@ -85,7 +94,7 @@ function makeWorkspace(): string {
   return wt
 }
 
-describe.skipIf(!canRun)("snapshots (shadow-git entegrasyon)", () => {
+describe("snapshots (shadow-git entegrasyon)", () => {
   it("checkpoint + edit + yeni dosya → revert eskiye döndürür ve yeniyi siler", async () => {
     const sid = nextSid()
     const wt = makeWorkspace()

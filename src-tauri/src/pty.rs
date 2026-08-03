@@ -252,10 +252,14 @@ pub fn kill_process_tree(root: u32) {
             .stderr(std::process::Stdio::null())
             .status();
         std::thread::sleep(std::time::Duration::from_millis(200));
-        // Hayatta kalanlara SIGKILL
+        // M92: a child that FORKED after the snapshot is not in `pids` — rescan
+        // before SIGKILL so freshly-spawned descendants die too (the first pass
+        // collected the tree, so any NEW pid is a descendant of a member).
+        let rescanned = collect_descendants(root);
+        let kill_strs: Vec<String> = rescanned.iter().map(|p| p.to_string()).collect();
         let _ = std::process::Command::new("kill")
             .arg("-KILL")
-            .args(&strs)
+            .args(&kill_strs)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();

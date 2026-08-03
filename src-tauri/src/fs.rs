@@ -66,6 +66,19 @@ fn ensure_allowed(path: &str, roots: &[PathBuf]) -> Result<(), String> {
     let under_allowed = |canon: &Path| -> bool {
         if let Some(ref home) = home_canon {
             if canon.starts_with(home) {
+                // M89: the home-wide allowlist must NOT expose dot-directories
+                // (~/.ssh, ~/.config, …) — they hold secrets. The app's own
+                // ~/.codezal is the one exception (plugin/DB/memory writes).
+                if let Ok(rel) = canon.strip_prefix(home) {
+                    let first = rel.components().next();
+                    if let Some(std::path::Component::Normal(seg)) = first {
+                        if seg.to_string_lossy().starts_with('.')
+                            && seg != ".codezal"
+                        {
+                            return false;
+                        }
+                    }
+                }
                 return true;
             }
         }
@@ -221,6 +234,10 @@ pub fn fs_copy_dir(
     state: tauri::State<WorkspaceRoots>,
 ) -> Result<(), String> {
     let roots = load_roots(&state)?;
+    // M87: the source was never validated — a manifest-supplied src (e.g.
+    // `~/.ssh`) could be copied out via the plugin installer. Read-allow (not
+    // full allow) so the temp-dir escape hatch still works for staging dirs.
+    ensure_read_allowed(&src, &roots)?;
     ensure_allowed(&dest, &roots)?;
     copy_dir_contents(Path::new(&src), Path::new(&dest)).map_err(|e| format!("copy_dir: {}", e))
 }
@@ -246,6 +263,7 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> std::io::Result<()> {
 fn ensure_under_codezal(path: &str) -> Result<(), String> {
     let home_var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     let home = std::env::var(home_var).map_err(|_| format!("{} env yok", home_var))?;
+    let home_canon = Path::new(&home).canonicalize().unwrap_or_else(|_| PathBuf::from(&home));
     let root = match Path::new(&home).join(".codezal").canonicalize() {
         Ok(r) => r,
         Err(_) => {
@@ -255,6 +273,13 @@ fn ensure_under_codezal(path: &str) -> Result<(), String> {
             };
         }
     };
+    // M88: `$HOME/.codezal` itself could be a symlink pointing outside home
+    // (worst case: to `/`). The canonicalized root MUST stay inside the
+    // canonicalized home, or `fs_remove_dir`'s containment check would pass for
+    // literally any path on the machine.
+    if root != home_canon && !root.starts_with(&home_canon) {
+        return Err(format!("forbidden root: {}", root.to_string_lossy()));
+    }
 
     let mut probe: Option<PathBuf> = Some(PathBuf::from(path));
     while let Some(p) = probe {
