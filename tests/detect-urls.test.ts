@@ -57,6 +57,14 @@ describe("detectUrls", () => {
     expect(detectUrls("http://example.com:5173/")).toEqual([])
   })
 
+  it("does not treat localhost:PORT as a subdomain of an external host", () => {
+    // `http://localhost:5173.evil.com` is a real hostname (5173.evil.com) —
+    // not a loopback server on port 5173.
+    expect(detectUrls("http://localhost:5173.evil.com")).toEqual([])
+    expect(detectUrls("http://127.0.0.1:3000.attacker.io/x")).toEqual([])
+    expect(detectUrls("http://localhost.evil.com")).toEqual([])
+  })
+
   it("returns empty for text with no URLs", () => {
     expect(detectUrls("building... done in 312ms")).toEqual([])
   })

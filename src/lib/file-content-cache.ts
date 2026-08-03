@@ -11,9 +11,12 @@ let totalBytes = 0
 
 // dir-refresh event'leri kaybolur.
 export function normalizeFsPath(p: string): string {
-  const s = p.replace(/\\/g, "/").replace(/\/+$/, "")
+  let s = p.replace(/\\/g, "/").replace(/\/+$/, "")
   if (s === "" && p.startsWith("/")) return "/"
-  if (/^[A-Za-z]:$/.test(s)) return s + "/"
+  if (/^[A-Za-z]:$/.test(s)) s = s + "/"
+  // Windows (case-insensitive FS): lowercase drive+path so `C:\Foo` and
+  // `c:\foo` resolve to the same cache entry. POSIX stays case-sensitive.
+  if (/^[A-Za-z]:\//.test(s)) s = s.toLowerCase()
   return s
 }
 

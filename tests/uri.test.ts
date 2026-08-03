@@ -17,6 +17,18 @@ describe("uriToPath", () => {
   it("URI olmayan değeri olduğu gibi döner", () => {
     expect(uriToPath("/plain/path.ts")).toBe("/plain/path.ts")
   })
+
+  it("UNC share host'u korunur (M33)", () => {
+    expect(uriToPath("file://server/share/f.ts")).toBe("//server/share/f.ts")
+  })
+
+  it("localhost authority → local path", () => {
+    expect(uriToPath("file://localhost/Users/me/a.ts")).toBe("/Users/me/a.ts")
+  })
+
+  it("UNC encoded path çözülür", () => {
+    expect(uriToPath("file://server/share/a%20b.ts")).toBe("//server/share/a b.ts")
+  })
 })
 
 describe("uriMatchesPath", () => {
@@ -34,5 +46,10 @@ describe("uriMatchesPath", () => {
 
   it("kodlanmış URI ile düz path eşleşir", () => {
     expect(uriMatchesPath("file:///Users/me/a%20b.ts", "/Users/me/a b.ts")).toBe(true)
+  })
+
+  it("UNC URI ile UNC path eşleşir (case-insensitive host)", () => {
+    expect(uriMatchesPath("file://Server/Share/f.ts", "\\\\server\\share\\f.ts")).toBe(true)
+    expect(uriMatchesPath("file://server/share/f.ts", "//server/other/f.ts")).toBe(false)
   })
 })

@@ -38,6 +38,9 @@ export function parseAgentFile(
       obj[key] = val.replace(/^["']|["']$/g, "")
     }
   }
+  // `tools: []` / `bash_allow: []` mean "allow NOTHING" — an explicit empty
+  // lock. Only ABSENT keys stay undefined (no restriction). Falsy checks or
+  // length guards elsewhere must not re-interpret `[]` as "unset" (M45).
   const tools = Array.isArray(obj.tools) ? (obj.tools as string[]) : undefined
   const policy: SubagentPolicy = {
     tools,
@@ -179,7 +182,7 @@ export function checkSubagentPolicy(
       requiresApproval: false,
     }
   }
-  if (policy.tools && policy.tools.length > 0 && !policy.tools.includes(toolName)) {
+  if (policy.tools !== undefined && !policy.tools.includes(toolName)) {
     return {
       allowed: false,
       reason: `'${toolName}' is not allowlisted for this subagent`,
@@ -195,7 +198,10 @@ export function checkSubagentPolicy(
         requiresApproval: false,
       }
     }
-    if (policy.bashAllow && policy.bashAllow.length > 0) {
+    // `bash_allow: []` is an explicit "allow no bash commands" lock, not
+    // "unset". Guard on `!== undefined` so an empty allowlist still enters
+    // enforcement and blocks every command (M45).
+    if (policy.bashAllow !== undefined) {
       // Backticks, command substitution, and redirections are always blocked —
       // they can exfiltrate data or execute arbitrary code regardless of prefix.
       // Quote-aware: '...' spans are inert literals (no substitution, no

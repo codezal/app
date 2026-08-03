@@ -17,6 +17,7 @@ vi.mock("@/lib/autopilot-state", () => ({
 
 import { readWorkspaceRoutines, readUserRoutines, deleteRoutine } from "@/lib/routines"
 import { matches } from "@/lib/cron"
+import { loadFired } from "@/lib/autopilot-state"
 import {
   startScheduler,
   stopScheduler,
@@ -29,6 +30,7 @@ const mockRWR = vi.mocked(readWorkspaceRoutines)
 const mockRUR = vi.mocked(readUserRoutines)
 const mockMatches = vi.mocked(matches)
 const mockDelete = vi.mocked(deleteRoutine)
+const mockLoadFired = vi.mocked(loadFired)
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve()
@@ -42,6 +44,7 @@ beforeEach(async () => {
   mockRUR.mockResolvedValue([])
   mockMatches.mockReturnValue(false)
   mockDelete.mockResolvedValue(undefined)
+  mockLoadFired.mockResolvedValue({})
   stopScheduler()
 })
 
@@ -188,6 +191,20 @@ describe("tick — fire callback", () => {
 
     await vi.advanceTimersByTimeAsync(30_000)
     expect(onFire).toHaveBeenCalledTimes(1)
+  })
+
+  it("M99: aynı dakikada restart — persisted state.fired çift fire'ı önler", async () => {
+    // App kapandı, aynı dakika içinde yeniden açıldı. lastFiredAt (bellek-içi)
+    // boş, ama disk'teki fired haritası bu dakikanın zaten koştuğunu söylüyor.
+    const onFire = vi.fn()
+    const r = makeRoutine("persisted-min", "* * * * *")
+    const stamp = new Date("2024-01-01T09:00:00.000Z").getTime()
+    mockLoadFired.mockResolvedValue({ [r.path]: stamp })
+    mockRWR.mockResolvedValue([r])
+    mockMatches.mockReturnValue(true)
+
+    await startScheduler({ workspacePath: "/ws", onFire })
+    expect(onFire).not.toHaveBeenCalled()
   })
 
   it("farklı dakikada tekrar fire olur", async () => {

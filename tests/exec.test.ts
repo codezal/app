@@ -1,9 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-// exec.ts imports @tauri-apps/* at module level; stripLineEnding is a pure
-// helper, so test the logic via the same regex the module uses. If exec.ts
-// ever becomes importable in the node test env, switch to a direct import.
-const stripLineEnding = (line: string) => line.replace(/\r?\n$/, "")
+// exec.ts imports @tauri-apps/* at module level; mock those so the module is
+// importable in the node test env, then test the REAL exported helper (M94).
+// Testing an inline copy would never catch a regression in exec.ts itself.
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  Command: { create: vi.fn() },
+}))
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}))
+
+import { stripLineEnding } from "@/lib/exec"
 
 describe("stripLineEnding (plugin-shell line events keep trailing newline)", () => {
   it("strips a trailing LF", () => {

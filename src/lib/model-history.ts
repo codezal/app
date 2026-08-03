@@ -20,6 +20,7 @@
 import type { ModelMessage } from "ai"
 import type { Message, Part } from "@/store/types"
 import type { AgentCardPart } from "@/lib/orchestra/types"
+import { sliceCharsSafe } from "@/lib/text"
 
 type AssistantPart = Extract<ModelMessage, { role: "assistant" }>["content"]
 type AssistantContentPart = Exclude<AssistantPart, string>[number]
@@ -39,7 +40,9 @@ function capText(text: string, maxChars: number): string {
   // cannot be broken by the payload itself.
   t = t.replace(/<\/subagent-output>/gi, "<\\/subagent-output>")
   if (t.length <= maxChars) return t
-  return t.slice(0, maxChars) + `\n\n[… truncated, ${t.length} total chars]`
+  // Surrogate-safe slice: a naive slice can split an emoji/astral char into a
+  // lone high surrogate → HTTP 400 "no low surrogate" when sent to the API.
+  return sliceCharsSafe(t, maxChars) + `\n\n[… truncated, ${t.length} total chars]`
 }
 
 // Build a compact markdown block carrying a failed/aborted worker/reviewer

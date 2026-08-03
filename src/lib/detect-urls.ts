@@ -52,6 +52,12 @@ export function detectUrls(text: string): DetectedUrl[] {
   const out: DetectedUrl[] = []
   const seen = new Set<string>()
   for (const m of clean.matchAll(URL_RE)) {
+    // A "." or word char right after the host/port means the hostname keeps
+    // going ("localhost:5173.evil.com", "127.0.0.1:3000.x.io") — that is an
+    // external host, not a loopback server on that port. Skip it instead of
+    // mislabeling it as localhost.
+    const next = clean[(m.index ?? 0) + m[0].length]
+    if (next === "." || (next !== undefined && /\w/.test(next))) continue
     const url = normalize(m[0])
     if (!url || seen.has(url)) continue
     seen.add(url)

@@ -67,13 +67,31 @@ export type Stats = {
   heatmap: DayBucket[]
 }
 
-const DAY_MS = 86_400_000
-
 // Local midnight epoch for a timestamp — heatmap/streak bucket key.
 export function dayStart(ts: number): number {
   const d = new Date(ts)
   d.setHours(0, 0, 0, 0)
   return d.getTime()
+}
+
+// Midnight of the day `days` before `ts`, re-normalized through the calendar.
+// A fixed `ts - days * DAY_MS` drifts across DST transitions (23/25-hour days):
+// it can land off-midnight, skip a day, or hit the same day twice, corrupting
+// streaks and the heatmap (M42).
+export function daysBefore(ts: number, days: number): number {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - days)
+  return d.getTime()
+}
+
+// True when `b` is the calendar day immediately after `a` (DST-safe — compares
+// normalized midnights via date arithmetic instead of a fixed 24 h delta).
+export function isNextDay(a: number, b: number): boolean {
+  const d = new Date(a)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + 1)
+  return d.getTime() === b
 }
 
 // yyyy-mm-dd in LOCAL time (not UTC — avoids day drift for evening activity).
@@ -176,21 +194,24 @@ export function computeStats(rows: SessionUsageRow[], opts: ComputeOpts = {}): S
   // the legacy StatsView behaviour: if today has no activity the streak is 0.
   const today = dayStart(now)
   let currentStreak = 0
-  for (let d = today; activeDaySet.has(d); d -= DAY_MS) currentStreak++
+  for (let d = today, back = 0; activeDaySet.has(d); back++) {
+    currentStreak++
+    d = daysBefore(today, back + 1)
+  }
 
   // Longest streak — max run of consecutive days across all history.
   const sortedDays = [...activeDaySet].sort((a, b) => a - b)
   let longestStreak = sortedDays.length > 0 ? 1 : 0
   let run = sortedDays.length > 0 ? 1 : 0
   for (let i = 1; i < sortedDays.length; i++) {
-    run = sortedDays[i] - sortedDays[i - 1] === DAY_MS ? run + 1 : 1
+    run = isNextDay(sortedDays[i - 1], sortedDays[i]) ? run + 1 : 1
     if (run > longestStreak) longestStreak = run
   }
 
   // Heatmap window — every calendar day from (today - heatmapDays + 1) … today.
   const heatmap: DayBucket[] = []
-  const start = today - (heatmapDays - 1) * DAY_MS
-  for (let d = start; d <= today; d += DAY_MS) {
+  for (let back = heatmapDays - 1; back >= 0; back--) {
+    const d = daysBefore(today, back)
     const agg = dayAgg.get(d)
     heatmap.push({
       day: dayKey(d),

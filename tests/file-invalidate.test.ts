@@ -61,8 +61,20 @@ describe("invalidateFromFileEvent — içerik", () => {
 
   it("normalize uygulanır — backslash path açık dosyayla eşleşir", () => {
     const reload = vi.fn()
-    const ops = makeOps({ reload, isOpen: (p) => p === "C:/a/b.ts" })
+    // Gerçek kullanımda açık dosya da normalize edilir (FileViewer:
+    // `open = normalizeFsPath(path)`), bu yüzden iki taraf da aynı formda.
+    const ops = makeOps({ reload, isOpen: (p) => p === "c:/a/b.ts" })
     invalidateFromFileEvent(ev("modify", "C:\\a\\b.ts"), ops)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it("M71: Windows event path farklı case'li açık dosyayla eşleşir", () => {
+    const reload = vi.fn()
+    // Açık dosya büyük harfle açılmış olsa bile normalize edilince lowercase olur.
+    const open = normalizeFsPath("C:\\A\\B.ts")
+    const ops = makeOps({ reload, isOpen: (p) => p === open })
+    invalidateFromFileEvent(ev("modify", "c:\\a\\b.ts"), ops)
+    expect(open).toBe("c:/a/b.ts")
     expect(reload).toHaveBeenCalledTimes(1)
   })
 })

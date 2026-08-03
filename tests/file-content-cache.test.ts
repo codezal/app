@@ -12,10 +12,33 @@ beforeEach(() => clearFileContentCache())
 
 describe("normalizeFsPath", () => {
   it("ters slash → düz slash", () => {
-    expect(normalizeFsPath("C:\\a\\b.ts")).toBe("C:/a/b.ts")
+    expect(normalizeFsPath("C:\\a\\b.ts")).toBe("c:/a/b.ts")
+  })
+  it("Windows path case-insensitive normalize edilir (M71)", () => {
+    expect(normalizeFsPath("C:\\Foo\\Bar.ts")).toBe("c:/foo/bar.ts")
+    expect(normalizeFsPath("D:/Mixed/Case")).toBe("d:/mixed/case")
+  })
+  it("POSIX path case'i korunur (case-sensitive FS)", () => {
+    expect(normalizeFsPath("/Users/Foo/Bar.ts")).toBe("/Users/Foo/Bar.ts")
   })
   it("sondaki slash atılır", () => {
     expect(normalizeFsPath("/a/b/")).toBe("/a/b")
+  })
+})
+
+describe("file-content-cache Windows case-insensitivity (M71)", () => {
+  it("aynı dosya farklı case'lerle tek entry olarak tutulur", () => {
+    setFileContent("C:\\Foo\\Bar.ts", "data")
+    expect(getFileContent("c:/foo/bar.ts")).toBe("data")
+    expect(getFileContent("C:\\FOO\\BAR.TS")).toBe("data")
+    expect(fileContentCacheStats().entries).toBe(1)
+  })
+
+  it("invalidate de case-insensitive çalışır", () => {
+    setFileContent("C:\\Foo\\Bar.ts", "data")
+    invalidateFileContent("c:/foo/bar.ts")
+    expect(getFileContent("C:\\Foo\\Bar.ts")).toBeUndefined()
+    expect(fileContentCacheStats().entries).toBe(0)
   })
 })
 

@@ -57,6 +57,13 @@ describe("parseCron", () => {
     expect(c.minute.has(5)).toBe(false)
   })
 
+  it("step N/step — start value with step to field max (standard cron)", () => {
+    // `5/10` in minute field = 5,15,25,35,45,55 (like Vixie/POSIX cron),
+    // NOT just the single value 5.
+    const c = parseCron("5/10 * * * *")
+    expect([...c.minute].sort((a, b) => a - b)).toEqual([5, 15, 25, 35, 45, 55])
+  })
+
   it("karışım liste + aralık", () => {
     const c = parseCron("1,3,5-10 * * * *")
     expect(c.minute.has(1)).toBe(true)

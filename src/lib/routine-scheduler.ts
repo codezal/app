@@ -81,6 +81,10 @@ function tick(): void {
   for (const { routine, cron } of state.parsed) {
     if (!matches(now, cron)) continue
     if (state.lastFiredAt.get(routine.path) === stamp) continue
+    // Also consult the PERSISTED fired map: lastFiredAt is in-memory only, so
+    // after a restart within the same minute it is empty and the routine would
+    // fire a second time (M99). state.fired survives restarts via loadFired().
+    if ((state.fired[routine.path] ?? 0) >= stamp) continue
     state.lastFiredAt.set(routine.path, stamp)
     state.fired[routine.path] = stamp
     scheduleSaveFired()

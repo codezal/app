@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { relevanceScore, selectMethods, renderMethodsCatalog, upsertMethod } from "../src/lib/methods/core"
+import { relevanceScore, selectMethods, renderMethodsCatalog, upsertMethod, dedupeMethods } from "../src/lib/methods/core"
 import { DEFAULT_METHODS_CONFIG, type Method } from "../src/lib/methods/types"
 
 const NOW = 1_700_000_000_000
@@ -62,6 +62,19 @@ describe("upsertMethod", () => {
     expect(out[0].useCount).toBe(5) // korundu
   })
 
+  it("M97: re-save createdAt/lastUsedAt'i sıfırlamaz (yaş-decay korunur)", () => {
+    const old = NOW - 40 * DAY
+    const existing = [
+      method({ name: "deploy", description: "eski", createdAt: old, lastUsedAt: old }),
+    ]
+    const next = method({ name: "deploy", description: "yeni", createdAt: NOW, lastUsedAt: NOW })
+    const out = upsertMethod(existing, next)
+    expect(out).toHaveLength(1)
+    // Orijinal oluşum zamanı korunmalı — sıfırlanırsa method hep "yeni" görünür.
+    expect(out[0].createdAt).toBe(old)
+    expect(out[0].lastUsedAt).toBe(NOW)
+  })
+
   it("farklı ad → ekler", () => {
     const out = upsertMethod([method({ name: "a", description: "x" })], method({ name: "b", description: "y" }))
     expect(out).toHaveLength(2)
@@ -75,6 +88,29 @@ describe("upsertMethod", () => {
     const out = upsertMethod(methods, next, { ...DEFAULT_METHODS_CONFIG, maxMethods: 3 })
     expect(out).toHaveLength(3)
     expect(out.some((m) => m.name === "yeni")).toBe(true)
+  })
+})
+
+describe("dedupeMethods (M98)", () => {
+  it("aynı adlı project+global → project kazanır, tek kopya kalır", () => {
+    const proj = [method({ name: "deploy", description: "project version", id: "p1", scope: "project" })]
+    const glob = [method({ name: "deploy", description: "global version", id: "g1", scope: "global" })]
+    const out = dedupeMethods(proj, glob)
+    expect(out).toHaveLength(1)
+    expect(out[0].id).toBe("p1")
+  })
+
+  it("farklı adlar → hepsi kalır", () => {
+    const proj = [method({ name: "deploy", description: "d", id: "p1", scope: "project" })]
+    const glob = [method({ name: "test", description: "t", id: "g1", scope: "global" })]
+    const out = dedupeMethods(proj, glob)
+    expect(out).toHaveLength(2)
+  })
+
+  it("gölgeleme yoksa global korunur", () => {
+    const out = dedupeMethods([], [method({ name: "only-global", description: "g", id: "g1", scope: "global" })])
+    expect(out).toHaveLength(1)
+    expect(out[0].scope).toBe("global")
   })
 })
 

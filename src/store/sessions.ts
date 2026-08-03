@@ -42,6 +42,7 @@ import { lineDiff, type DiffLine } from "@/lib/diff"
 import { revertHunk } from "@/lib/hunk-revert"
 import { resolveInWorkspace } from "@/lib/tools/paths"
 import { abortStream } from "@/lib/run-registry"
+import { useAgentRunsStore } from "@/store/agent-runs"
 import { registerWorkspaceRoot, registerWorkspaceRoots } from "@/lib/workspace-roots"
 import { planSessionEviction, MAX_HYDRATED_SESSIONS } from "@/lib/session-evict"
 import type { ProviderId, ReasoningEffort } from "@/lib/providers"
@@ -1975,6 +1976,10 @@ export const useSessionsStore = create<SessionsState>((set, get): SessionsState 
       await deleteSessionRow(db, id)
       dropShadow(id)
       await clearSnapshotSession(id)
+      // Agent-run budget tracking is keyed by parent message; drop this
+      // session's runs so the store does not grow unbounded and per-turn
+      // child counts never see stale entries (M102).
+      useAgentRunsStore.getState().clearSession(id)
       // Bu thread'in saklanan scroll pozisyonunu unut (RAM-only, birikmesin).
       forgetScrollPosition(id)
       clearToolBeat(id)

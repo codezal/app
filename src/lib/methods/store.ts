@@ -9,7 +9,7 @@ import {
   METHODS_VERSION,
   DEFAULT_METHODS_CONFIG,
 } from "./types"
-import { selectMethods, renderMethodsCatalog, upsertMethod } from "./core"
+import { selectMethods, renderMethodsCatalog, upsertMethod, dedupeMethods } from "./core"
 
 function joinPath(...parts: string[]): string {
   return parts
@@ -122,7 +122,7 @@ export async function loadMethodsCatalog(opts: {
     projPath ? loadFile(projPath) : Promise.resolve([]),
     globPath ? loadFile(globPath) : Promise.resolve([]),
   ])
-  const all = [...proj, ...glob]
+  const all = dedupeMethods(proj, glob)
   if (all.length === 0) return ""
 
   const selected = selectMethods(all, { query: opts.query, now, topK: opts.topK ?? DEFAULT_METHODS_CONFIG.topK })

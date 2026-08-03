@@ -123,6 +123,16 @@ describe("checkSubagentPolicy", () => {
     expect(r.allowed).toBe(false)
   })
 
+  it("M45: tools: [] → hiçbir araca izin verilmez (empty = allow nothing)", () => {
+    expect(checkSubagentPolicy({ tools: [] }, "bash", {}).allowed).toBe(false)
+    expect(checkSubagentPolicy({ tools: [] }, "read_file", {}).allowed).toBe(false)
+  })
+
+  it("M45: bash_allow: [] (planMode yok) → tüm bash komutları reddedilir", () => {
+    const r = checkSubagentPolicy({ bashAllow: [] }, "bash", { command: "ls" })
+    expect(r.allowed).toBe(false)
+  })
+
   it("planMode + bashAllow → izinli komut çalışır", () => {
     const r = checkSubagentPolicy(
       { planMode: true, bashAllow: ["git diff", "git log"] },

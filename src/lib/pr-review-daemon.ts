@@ -19,6 +19,7 @@ import {
   getGithubToken,
   listPullRequests,
   getPrDiff,
+  getPrHeadSha,
   postIssueComment,
   createPullRequestReview,
   diffCommentableLines,
@@ -171,6 +172,14 @@ async function reviewAndPost(token: string, repo: OwnerRepo, pr: PullRequestSumm
   if (!diff.trim()) return
 
   const { parsed, raw } = await runReview(pr.title, diff)
+
+  // M41: the review generation above is slow — the PR head may have advanced
+  // in the meantime, making `diff` stale. Re-fetch the head SHA right before
+  // posting; if it moved, bail WITHOUT marking seen so the next tick re-reviews
+  // the new SHA (prevents posting a stale review / double-reviewing).
+  const freshSha = await getPrHeadSha(token, repo, pr.number).catch(() => "")
+  if (freshSha && freshSha !== pr.headSha) return
+
   if (!parsed) {
     if (raw) await postIssueComment(token, repo, pr.number, marker(raw))
     notifyReviewed(pr.number)

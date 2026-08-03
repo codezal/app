@@ -1,6 +1,6 @@
 // stats — computeStats aggregation + helpers (pure logic, pinned `now`).
 import { describe, it, expect } from "vitest"
-import { computeStats, dayStart, dayKey, rowTokens, type SessionUsageRow } from "@/lib/stats"
+import { computeStats, dayStart, dayKey, rowTokens, daysBefore, isNextDay, type SessionUsageRow } from "@/lib/stats"
 
 const DAY = 86_400_000
 // June 9 2026, noon local — mid-summer avoids DST day-boundary drift in tests.
@@ -44,6 +44,28 @@ describe("helpers", () => {
     const ds = dayStart(NOW)
     expect(new Date(ds).getHours()).toBe(0)
     expect(dayKey(NOW)).toBe("2026-06-09")
+  })
+
+  it("daysBefore returns the Nth previous local midnight (M42)", () => {
+    const today = dayStart(NOW)
+    for (const n of [1, 2, 7, 30]) {
+      const d = daysBefore(today, n)
+      const dt = new Date(d)
+      expect(dt.getHours()).toBe(0)
+      expect(dt.getMinutes()).toBe(0)
+      // Calendar distance, not a fixed 24 h multiple (DST days are 23/25 h).
+      const back = new Date(today)
+      back.setDate(back.getDate() - n)
+      back.setHours(0, 0, 0, 0)
+      expect(d).toBe(back.getTime())
+    }
+  })
+
+  it("isNextDay detects consecutive calendar days (M42)", () => {
+    const today = dayStart(NOW)
+    expect(isNextDay(daysBefore(today, 1), today)).toBe(true)
+    expect(isNextDay(daysBefore(today, 2), today)).toBe(false)
+    expect(isNextDay(today, daysBefore(today, 1))).toBe(false)
   })
 })
 
@@ -96,6 +118,30 @@ describe("computeStats — streaks", () => {
     const s2 = computeStats([row(1), row(2)], { now: NOW })
     expect(s2.currentStreak).toBe(0)
     expect(s2.longestStreak).toBe(2)
+  })
+
+  it("streak/heatmap use calendar days, not fixed 24 h steps (M42)", () => {
+    // Build rows on EXPLICIT consecutive calendar days (noon local) so the test
+    // does not itself rely on `now - n*DAY` arithmetic. The streak must count
+    // every day even though real day lengths vary (DST = 23/25 h).
+    const y = 2026
+    const m = 2 // March — contains DST transitions in many zones.
+    const day = (d: number, hh = 12) => new Date(y, m, d, hh, 0, 0).getTime()
+    const todayNoon = day(12)
+    const rows = [10, 11, 12].map((d, i) => row(0, { id: `dst_${i}`, updatedAt: day(d) }))
+    const s = computeStats(rows, { now: todayNoon, heatmapDays: 5 })
+    expect(s.currentStreak).toBe(3)
+    expect(s.longestStreak).toBe(3)
+    // Heatmap covers 5 consecutive calendar days ending on today.
+    expect(s.heatmap).toHaveLength(5)
+    expect(s.heatmap[4].day).toBe("2026-03-12")
+    expect(s.heatmap[3].day).toBe("2026-03-11")
+    expect(s.heatmap[0].day).toBe("2026-03-08")
+    // All heatmap cells are distinct, ordered, on local midnight.
+    for (let i = 0; i < s.heatmap.length; i++) {
+      expect(new Date(s.heatmap[i].ts).getHours()).toBe(0)
+      if (i > 0) expect(isNextDay(s.heatmap[i - 1].ts, s.heatmap[i].ts)).toBe(true)
+    }
   })
 })
 

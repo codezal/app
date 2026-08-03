@@ -639,6 +639,14 @@ export async function getPrDiff(token: string, repo: OwnerRepo, num: number): Pr
   )
 }
 
+// Current head SHA of a PR (single lightweight GET). Used by the auto-review
+// daemon to detect that a PR advanced while a review was being generated, so a
+// stale review is not posted against an outdated SHA (M41).
+export async function getPrHeadSha(token: string, repo: OwnerRepo, num: number): Promise<string> {
+  const raw = await ghJson<RawPull>(`/repos/${repo.owner}/${repo.repo}/pulls/${num}`, token)
+  return raw.head?.sha ?? ""
+}
+
 // Post a top-level (issue) comment on a PR. Write — needs the `repo` scope. Used
 // by the auto-review daemon to publish its findings back to the PR.
 export async function postIssueComment(

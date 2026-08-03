@@ -43,6 +43,17 @@ export function selectMethods(
   return scored.slice(0, k).map((x) => x.m)
 }
 
+// Merge project + global methods, dropping global entries shadowed by a
+// same-named project method. Without this both copies are injected into the
+// prompt as duplicate instructions, and each copy's useCount is incremented
+// per request (self-reinforcing feedback loop) (M98).
+export function dedupeMethods(proj: Method[], glob: Method[]): Method[] {
+  const byName = new Map<string, Method>()
+  for (const m of glob) byName.set(m.name, m)
+  for (const m of proj) byName.set(m.name, m) // project wins on name clash
+  return [...byName.values()]
+}
+
 export function renderMethodsCatalog(methods: Method[]): string {
   if (methods.length === 0) return ""
   const lines = ["# Learned Methods", "These task patterns were distilled from past successful work. If relevant, follow the steps.", ""]
@@ -60,7 +71,15 @@ export function renderMethodsCatalog(methods: Method[]): string {
 export function upsertMethod(methods: Method[], next: Method, cfg: MethodsConfig = DEFAULT_METHODS_CONFIG): Method[] {
   const out = methods.filter((m) => !(m.scope === next.scope && m.name === next.name))
   const prior = methods.find((m) => m.scope === next.scope && m.name === next.name)
-  if (prior) next.useCount = Math.max(next.useCount, prior.useCount)
+  if (prior) {
+    next.useCount = Math.max(next.useCount, prior.useCount)
+    // Preserve the original creation time and the most recent usage time.
+    // Resetting them on every re-save zeroes the age-decay score (scoreMethod
+    // decays on lastUsedAt), so a repeatedly re-saved method would look brand
+    // new forever and crowd out genuinely fresh ones (M97).
+    next.createdAt = prior.createdAt
+    next.lastUsedAt = Math.max(next.lastUsedAt, prior.lastUsedAt)
+  }
   out.push(next)
   if (out.length <= cfg.maxMethods) return out
   const now = next.createdAt

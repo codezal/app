@@ -43,7 +43,9 @@ function expand(piece: string, [lo, hi]: [number, number]): Set<number> {
       const n = parseInt(body, 10)
       if (!Number.isFinite(n)) throw new Error(`Invalid cron value: ${part}`)
       start = n
-      end = n
+      // `N/step` (standard cron): start at N, step to the field max — `5/10`
+      // in the minute field means 5,15,…,55, not just 5.
+      end = slash !== -1 ? hi : n
     }
     if (start < lo || end > hi || start > end) {
       throw new Error(`Cron value out of range (${lo}-${hi}): ${part}`)

@@ -13,11 +13,11 @@ export const groqAdapter: ProviderAdapter = {
   fallbackModels: [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "qwen-2.5-coder-32b",
+    "qwen2.5-coder-32b",
     "mixtral-8x7b-32768",
     "moonshotai/kimi-k2-instruct",
   ],
-  recommendedModels: ["llama-3.3-70b-versatile", "qwen-2.5-coder-32b"],
+  recommendedModels: ["llama-3.3-70b-versatile", "qwen2.5-coder-32b"],
   async buildLanguageModel({ modelId, auth, config }): Promise<LanguageModel> {
     if (auth.kind !== "apiKey") throw new Error("Groq: API key required")
     const factory = await loadProviderFactory("@ai-sdk/groq")

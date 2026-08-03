@@ -1,4 +1,5 @@
 import { copyFile, mkdir, readDir, remove, lstat, exists } from "@tauri-apps/plugin-fs"
+import { isWindows } from "./platform"
 
 export type ClipMode = "copy" | "cut"
 
@@ -66,13 +67,29 @@ async function removeRecursive(p: string): Promise<void> {
   await remove(p, { recursive: true })
 }
 
+// Detect whether `dst` is the source itself or nested inside it — pasting a
+// folder into its own subtree copies it into itself forever. On Windows the
+// FS is case-insensitive, so `C:\Foo` → `c:\foo\sub` is ALSO a self-paste and
+// must be compared case-insensitively (M73). Exported for unit testing.
+export function isSelfPaste(dst: string, src: string, caseInsensitive = isWindows()): boolean {
+  const norm = (p: string) => {
+    let s = p.replace(/\\/g, "/").replace(/\/+$/, "")
+    if (caseInsensitive) s = s.toLowerCase()
+    return s
+  }
+  const s = norm(src)
+  const d = norm(dst)
+  if (s === "") return false
+  return d === s || d.startsWith(s + "/")
+}
+
 export async function applyFileClipboardPaste(targetDir: string): Promise<string> {
   if (!current) throw new Error("pano boş")
   const name = await uniqueName(targetDir, current.name)
   const dst = joinPosix(targetDir, name)
 
   const src = current.path
-  if (dst === src || dst.startsWith(src.replace(/[/\\]$/, "") + "/")) {
+  if (isSelfPaste(dst, src)) {
     throw new Error("hedef kaynağın altında — yapıştırılamaz")
   }
 

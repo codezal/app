@@ -5,7 +5,9 @@
 import { genericFilter } from "./generic"
 
 const PER_FILE_KEEP = 5
-const FILE_MATCH_RE = /^([^:\n]+):(\d+):(.*)$/
+// Leading Windows drive (`C:\…`) contains a colon — without the alternation the
+// match stops at the drive letter and the line falls through un-compacted.
+const FILE_MATCH_RE = /^([A-Za-z]:[\\/][^:\n]*|[^:\n]+):(\d+):(.*)$/
 
 export function grepFilter(raw: string): string {
   const base = genericFilter(raw)

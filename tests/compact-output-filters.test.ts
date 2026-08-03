@@ -167,6 +167,20 @@ describe("buildFilter", () => {
     expect(r).not.toContain("[1/5]")
   })
 
+  it("başarı özeti (duration'lı Finished/Built/Compiled) korunur", () => {
+    // M70: "Finished `dev` in 2.3s" gibi final özet satırları progress sanılıp
+    // düşürülmemeli — model build'in başarılı olduğunu ve süresini görmeli.
+    expect(buildFilter("Finished `dev` profile in 2.3s")).toContain("Finished `dev` profile in 2.3s")
+    expect(buildFilter("Built in 1.2s")).toContain("Built in 1.2s")
+    expect(buildFilter("Compiled successfully in 340ms")).toContain("Compiled successfully in 340ms")
+  })
+
+  it("duration'sız progress hâlâ düşürülür", () => {
+    const r = buildFilter("Finished 5/10 modules\nerror: x")
+    expect(r).not.toContain("Finished 5/10")
+    expect(r).toContain("error: x")
+  })
+
   it("üst üste boş satırlar daraltılır", () => {
     const r = buildFilter("error: x\n\n\n\nwarning: y")
     expect(r).not.toContain("\n\n\n")
@@ -200,6 +214,15 @@ describe("grepFilter", () => {
   it("eşleşmeyen satırlar (passthrough) korunur", () => {
     const r = grepFilter("no-match-line\nsrc/x.ts:1:found")
     expect(r).toContain("no-match-line")
+  })
+
+  it("Windows drive-letter'lı path'ler de dosya bazlı daraltılır", () => {
+    // M69: `C:\src\app.ts:12:foo` — drive colon'u file match'i bozuyordu,
+    // bütün satırlar passthrough'a düşüyordu.
+    const input = Array.from({ length: 8 }, (_, i) => `C:\\src\\app.ts:${i + 1}:hit`).join("\n")
+    const r = grepFilter(input)
+    expect(r).toContain("C:\\src\\app.ts:1:hit")
+    expect(r).toContain("C:\\src\\app.ts: + 3 more matches")
   })
 })
 
