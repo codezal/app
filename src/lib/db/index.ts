@@ -15,10 +15,16 @@ const jsonSource: JsonSource = {
 let booted: Promise<void> | null = null
 export function bootstrapDb(): Promise<void> {
   if (!booted) {
-    booted = (async () => {
+    const p = (async () => {
       await applySchema(db)
       await migrateJsonToSqlite(db, jsonSource)
     })()
+    // M20: a failed boot must not be cached forever — reset so the next caller
+    // retries instead of re-receiving the same permanent rejection.
+    void p.catch(() => {
+      if (booted === p) booted = null
+    })
+    booted = p
   }
   return booted
 }

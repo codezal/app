@@ -99,8 +99,11 @@ const MIGRATORS: { to: number; run: (d: Record<string, unknown>, ctx: MigrateCtx
 ]
 
 // Apply legacy-shape migrations to raw settings data. Returns a new object
-// stamped at CURRENT_SCHEMA_VERSION. Non-object input becomes an empty,
-// freshly-versioned object (the schema then fills defaults).
+// stamped at CURRENT_SCHEMA_VERSION — unless the file already carries a NEWER
+// version (user downgraded to an older build): re-stamping it backwards would
+// make the migrators re-run on already-migrated data on the next launch (M19).
+// Non-object input becomes an empty, freshly-versioned object (the schema then
+// fills defaults).
 export function migrateSettings(raw: unknown): Record<string, unknown> {
   if (!isRecord(raw)) return { schemaVersion: CURRENT_SCHEMA_VERSION }
 
@@ -114,6 +117,6 @@ export function migrateSettings(raw: unknown): Record<string, unknown> {
   for (const m of MIGRATORS) {
     if (from < m.to) m.run(data, ctx)
   }
-  data.schemaVersion = CURRENT_SCHEMA_VERSION
+  if (from < CURRENT_SCHEMA_VERSION) data.schemaVersion = CURRENT_SCHEMA_VERSION
   return data
 }

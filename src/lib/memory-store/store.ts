@@ -53,6 +53,9 @@ function isValidEntry(e: unknown): e is MemoryEntry {
     typeof o.id === "string" &&
     typeof o.text === "string" &&
     (o.layer === "identity" || o.layer === "pinned" || o.layer === "episode") &&
+    // M21: reject an invalid scope — importing such an entry would make it
+    // unreachable forever (every query filters on scope === "project"|"global").
+    (o.scope === "project" || o.scope === "global") &&
     typeof o.createdAt === "number"
   )
 }

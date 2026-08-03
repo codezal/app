@@ -103,4 +103,12 @@ describe("migrateSettings — supervisor pool → roles (v4)", () => {
     })
     expect(out.supervisor.roles).toEqual({ worker: { provider: "openai", model: "gpt-5.4" } })
   })
+
+  it("M19: newer-build file keeps its higher schemaVersion (no backward re-stamp)", () => {
+    // A file written by a NEWER build (schemaVersion > CURRENT) must not be
+    // stamped back down — re-stamping would re-run migrators on already-
+    // migrated data the next time the newer build loads it.
+    const out = migrateSettings({ schemaVersion: CURRENT_SCHEMA_VERSION + 3, defaultModel: "x" })
+    expect(out.schemaVersion).toBe(CURRENT_SCHEMA_VERSION + 3)
+  })
 })

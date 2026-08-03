@@ -48,7 +48,15 @@ export async function migrateJsonToSqlite(db: Db, src: JsonSource): Promise<Migr
 
   const projects = idx.projects ?? []
   for (let i = 0; i < projects.length; i++) {
-    await upsertProject(db, projects[i], idx.projectMeta?.[projects[i]] ?? {}, i)
+    // M20: one bad project row must not reject the whole migration — the
+    // caller awaits this as the DB `booted` promise, so an uncaught throw here
+    // would leave the DB layer dead until restart. Skip + count instead.
+    try {
+      await upsertProject(db, projects[i], idx.projectMeta?.[projects[i]] ?? {}, i)
+    } catch (e) {
+      errors++
+      console.error(`[migrate-json] project ${projects[i]} atlandı:`, e)
+    }
   }
 
   await setMeta(db, "json_imported", "1")

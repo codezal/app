@@ -376,10 +376,43 @@ export type ProjectConfig = {
   memory?: { instructions?: string[] }
 }
 
+// M18: element-wise tolerance for the collection fields. `.catch(default)` on
+// an array/record field replaces the WHOLE collection with the default when a
+// single element is malformed — silently wiping every valid rule / server /
+// hook / key the user had. Pre-filter the raw input to keep only well-formed
+// elements so one bad entry cannot nuke the rest. Done BEFORE the schema parse
+// (instead of inside makeSchema) so the zod shape — and the
+// settings.schema.json generated from it — is unchanged.
+const COLLECTION_ITEM_SCHEMAS: Array<[string, z.ZodType]> = [
+  ["approvalRules", ApprovalRuleSchema],
+  ["permission", PermissionRuleSchema],
+  ["mcpServers", McpServerSchema],
+  ["hooks", HookSchema],
+]
+
+function sanitizeCollections(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw
+  const src = raw as Record<string, unknown>
+  const out: Record<string, unknown> = { ...src }
+  for (const [key, itemSchema] of COLLECTION_ITEM_SCHEMAS) {
+    const v = src[key]
+    if (!Array.isArray(v)) continue
+    out[key] = v.filter((el) => itemSchema.safeParse(el).success)
+  }
+  if (typeof src.apiKeys === "object" && src.apiKeys !== null && !Array.isArray(src.apiKeys)) {
+    const cleaned: Record<string, string> = {}
+    for (const [k, val] of Object.entries(src.apiKeys as Record<string, unknown>)) {
+      if (typeof val === "string") cleaned[k] = val
+    }
+    out.apiKeys = cleaned
+  }
+  return out
+}
+
 // Validate raw project-config data. Returns null on hard failure (caller then
 // falls back to global settings).
 export function parseProjectConfig(raw: unknown): ProjectConfig | null {
-  const result = ProjectConfigSchema.safeParse(raw ?? {})
+  const result = ProjectConfigSchema.safeParse(sanitizeCollections(raw ?? {}))
   if (!result.success) {
     console.warn("[config] project config parse failed, ignoring:", result.error.issues)
     return null
@@ -393,7 +426,7 @@ export function parseProjectConfig(raw: unknown): ProjectConfig | null {
 // passed through migrateSettings() (legacy-shape transforms).
 export function parseSettings(raw: unknown, defaults: Settings): Settings {
   const schema = makeSchema(defaults)
-  const result = schema.safeParse(raw ?? {})
+  const result = schema.safeParse(sanitizeCollections(raw ?? {}))
   if (!result.success) {
     console.warn("[config] settings schema parse failed, using defaults:", result.error.issues)
     return defaults
