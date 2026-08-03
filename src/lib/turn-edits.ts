@@ -9,6 +9,11 @@ export type TurnEditFile = {
   removed: number
   lines: DiffLine[]
   newContent?: string
+  // M43: each edit/overwrite/patch-view is one hunk (own file-position
+  // offsets). The flat `lines` stays for the UI; the unified diff uses these
+  // to emit a CORRECT `@@` header per hunk instead of one header for the
+  // whole concatenated file.
+  hunks?: DiffLine[][]
 }
 
 export type TurnEdits = {
@@ -48,9 +53,11 @@ export function aggregateTurnEdits(
       prev.added += added
       prev.removed += removed
       prev.lines = prev.lines.concat(lines)
+      // One more hunk — its DiffLines carry the file positions of THAT edit.
+      prev.hunks = [...(prev.hunks ?? []), lines]
       if (newContent != null) prev.newContent = newContent
     } else {
-      byPath.set(path, { path, added, removed, lines: [...lines], newContent })
+      byPath.set(path, { path, added, removed, lines: [...lines], newContent, hunks: [lines] })
     }
   }
 
@@ -109,13 +116,20 @@ export function turnEditsToUnifiedDiff(edits: TurnEdits): string {
   const out: string[] = []
   for (const f of edits.files) {
     out.push(`diff --git a/${f.path} b/${f.path}`)
-    if (f.lines.length > 0) {
-      const firstOld = f.lines.find((l) => l.oldNo != null)?.oldNo ?? 1
-      const firstNew = f.lines.find((l) => l.newNo != null)?.newNo ?? 1
-      out.push(`@@ -${firstOld} +${firstNew} @@`)
-      for (const l of f.lines) {
-        const prefix = l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "
-        out.push(prefix + l.text)
+    // M43: emit one `@@` header PER hunk — the old code merged every edit of
+    // the file into a single header anchored at the FIRST edit's position,
+    // so subsequent edits rendered against wrong line numbers. Each hunk's
+    // own first old/new line anchors it correctly.
+    const hunks = f.hunks && f.hunks.length > 0 ? f.hunks : f.lines.length > 0 ? [f.lines] : []
+    if (hunks.length > 0) {
+      for (const hunk of hunks) {
+        const firstOld = hunk.find((l) => l.oldNo != null)?.oldNo ?? 1
+        const firstNew = hunk.find((l) => l.newNo != null)?.newNo ?? 1
+        out.push(`@@ -${firstOld} +${firstNew} @@`)
+        for (const l of hunk) {
+          const prefix = l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "
+          out.push(prefix + l.text)
+        }
       }
     } else if (f.newContent != null) {
       const contentLines = f.newContent === "" ? [] : f.newContent.split("\n")

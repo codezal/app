@@ -46,6 +46,18 @@ export function useKeyboardShortcuts(args: ShortcutArgs) {
           void a.openNewSession(false)
         }
       } else if (e.key === "k") {
+        // M68: ⌘K while an inline editor (renaming a session/file, an input,
+        // a contenteditable) is focused must reach the editor, not open the
+        // palette — the palette shortcut would swallow the editor's own ⌘K.
+        const el = document.activeElement as HTMLElement | null
+        const tag = el?.tagName
+        const editable =
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          el?.isContentEditable ||
+          el?.getAttribute?.("contenteditable") === "true"
+        if (editable) return
         e.preventDefault()
         a.setShowPalette((v) => !v)
       } else if (e.key === ",") {

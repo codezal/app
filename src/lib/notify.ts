@@ -13,7 +13,12 @@ let nextNotificationId = 1
 // Focus tabanlı navigasyon: bildirim gönderildiğinde hedef sessionId burada hatırlanır.
 // Codezal penceresi odak kazandığında (bildirime tıklayınca uygulama aktifleşir) bu session
 // açılır. onAction bazı platformlarda/dev'de güvenilir tetiklenmediği için asıl mekanizma budur.
+// M101: herhangi bir window focus'unda tüketilmez — focus + kısa TTL; böylece bildirimi
+// yok sayıp alt-tab yapan kullanıcı eski session'a zıplamaz (sadece gerçekten hedefe
+// dönünce, onAction ile de eşleşirse).
 let pendingTargetSessionId: string | null = null
+let pendingTargetAt = 0
+const PENDING_TTL_MS = 5_000
 
 /** Bekleyen bildirim hedefini döndürür ve temizler (tek tüketim). */
 export function takePendingNotificationTarget(): string | null {
@@ -56,8 +61,14 @@ if (typeof window !== "undefined") {
     // Intentionally ignored.
   })
 
-  // Asıl mekanizma: pencere odak kazandığında bekleyen bildirim hedefine atla.
+  // Asıl mekanizma: pencere odak kazandığında bekleyen bildirim hedefine atla —
+  // SADECE bildirim kısa süre önce gönderildiyse (M101). Bildirimi görmezden
+  // gelip uzun süre sonra alt-tab yapmak eski session'a zıplatmamalı.
   window.addEventListener("focus", () => {
+    if (Date.now() - pendingTargetAt > PENDING_TTL_MS) {
+      pendingTargetSessionId = null
+      return
+    }
     const id = takePendingNotificationTarget()
     if (id) openSession(id)
   })
@@ -79,6 +90,7 @@ export async function sendDesktopNotification(
       const id = nextNotificationId++
       if (nextNotificationId > 0x7fffffff) nextNotificationId = 1
       pendingTargetSessionId = sessionId
+      pendingTargetAt = Date.now()
       sendNotification({ title, body, id, extra: { sessionId } })
     } else {
       sendNotification(body != null ? { title, body } : { title })

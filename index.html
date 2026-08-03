@@ -6,6 +6,25 @@
     <link rel="alternate icon" type="image/png" href="/codezal.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Codezal</title>
+    <!-- M82: pre-JS theme bootstrap — applies the resolved theme BEFORE React
+         mounts so dark/system users never see a light flash. Reads the mirror
+         applyAppearance writes to localStorage; falls back to the OS
+         preference (settings default to "system"). -->
+    <script>
+      (function () {
+        try {
+          var dark = false;
+          try {
+            var t = localStorage.getItem("codezal:theme");
+            if (t === "dark" || t === "light") dark = t === "dark";
+          } catch (e) { /* yoksay */ }
+          if (!dark) {
+            dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          }
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) { /* yoksay */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

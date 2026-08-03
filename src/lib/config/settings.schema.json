@@ -547,8 +547,9 @@
         },
         "maxDepth": {
           "default": 1,
-          "type": "number",
-          "const": 1
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
         },
         "maxWallClockMs": {
           "default": 1800000,

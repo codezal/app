@@ -132,6 +132,14 @@ export function applyAppearance(appearance: Appearance, userPresets: ThemePreset
   const all = [...BUILTIN_PRESETS, ...userPresets]
   const resolved = resolveMode(appearance.mode)
   root.classList.toggle("dark", resolved === "dark")
+  // M82: mirror the resolved mode to localStorage so the pre-JS bootstrap in
+  // index.html can apply it before React mounts (kills the light FOUC for
+  // dark/system users). Best-effort — failure only costs a flash.
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem("codezal:theme", resolved)
+  } catch {
+    // Intentionally ignored.
+  }
 
   const presetId = resolved === "dark" ? appearance.darkPreset : appearance.lightPreset
   const preset = all.find((p) => p.id === presetId) ?? getPreset(presetId, resolved)

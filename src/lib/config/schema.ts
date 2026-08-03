@@ -119,7 +119,9 @@ function supervisorSchema(d: Settings["supervisor"]) {
       autoReview: z.boolean().catch(d.autoReview),
       maxParallelRuns: boundedInt(d.maxParallelRuns, 1, 5),
       maxChildRunsPerTurn: boundedInt(d.maxChildRunsPerTurn, 1, 5),
-      maxDepth: z.literal(1).catch(1),
+      // M85: `maxDepth` was a literal 1 — an unchangeable, dead config. Allow a
+      // real 1-3 range so depth is a usable knob (resolve() enforces it).
+      maxDepth: boundedInt(d.maxDepth, 1, 3),
       maxWallClockMs: boundedInt(d.maxWallClockMs, 1_000, 30 * 60 * 1000),
       isolation: z.enum(["auto", "none", "worktree"]).catch(d.isolation),
       mergePolicy: z.enum(["safe-auto", "manual"]).catch(d.mergePolicy),

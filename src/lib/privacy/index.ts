@@ -107,7 +107,13 @@ export class PrivacyScrubber {
   private placeholderFor(d: Detection): string {
     const existing = this.forward.get(d.value)
     if (existing) return existing
-    const tag = d.type === "CUSTOM" ? (d.label || "CUSTOM").toUpperCase().replace(/[^A-Z0-9]/g, "_") : d.type
+    // M78: custom labels are namespaced so they can never collide with a
+    // builtin type's placeholder form (e.g. a custom label "API_KEY" would
+    // otherwise produce [API_KEY_1], and unscrub would restore it as an API
+    // key). Custom → "CUSTOM_<label>_n", builtin → "<TYPE>_n".
+    const tag = d.type === "CUSTOM"
+      ? "CUSTOM_" + (d.label || "CUSTOM").toUpperCase().replace(/[^A-Z0-9]/g, "_")
+      : d.type
     const n = (this.counters.get(tag) ?? 0) + 1
     this.counters.set(tag, n)
     const ph = `[${tag}_${n}]`

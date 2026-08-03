@@ -98,7 +98,10 @@ describe("PrivacyScrubber", () => {
       enabled: true,
       customPatterns: [{ label: "tckn", pattern: "\\b\\d{11}\\b" }],
     })
-    expect(s.scrubText("identity 12345678901")).toBe("identity [TCKN_1]")
+    // M78: custom placeholders are namespaced (CUSTOM_ prefix) so a label that
+    // collides with a builtin type (e.g. "API_KEY") can never be unscrubbed as
+    // the wrong type.
+    expect(s.scrubText("identity 12345678901")).toBe("identity [CUSTOM_TCKN_1]")
   })
 
   it("scrubs assistant tool-call input even when scrubAssistant is off (H3)", () => {
