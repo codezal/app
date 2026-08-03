@@ -46,8 +46,10 @@ export function modeLabel(m: PanelMode): string {
 
 // Modes the AI surfaces on its own while working (agent runs, todo bursts,
 // browser previews). They are transient: opened by the AI, closed when the run
-// ends — the toggle must never resurrect them afterwards.
-export const AI_TRANSIENT_MODES: ReadonlySet<PanelMode> = new Set(["todo", "preview"])
+// ends — the toggle must never resurrect them afterwards. "agents" (M67) shows
+// agent-task cards pushed by delegate_agents / spawn_agent, so it must close
+// when the run that produced them finishes, like todo/preview.
+export const AI_TRANSIENT_MODES: ReadonlySet<PanelMode> = new Set(["todo", "preview", "agents"])
 
 // The right-panel toggle re-opens the last open mode, but some modes must not
 // come back that way:

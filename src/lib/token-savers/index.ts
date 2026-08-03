@@ -12,7 +12,7 @@ export { briefModeSection } from "./brief-mode/inject"
 export { briefDirective } from "./brief-mode/levels"
 export { applyCompact } from "./compact-output/run"
 export { detect as detectCommandKind, type CommandKind } from "./compact-output/detect"
-export { compactToolDescriptionsInPlace } from "./compress-tools"
+export { compactToolDescriptions } from "./compress-tools"
 export { compressProse } from "./compress-tools/prose"
 export {
   applyHistoryHygiene,

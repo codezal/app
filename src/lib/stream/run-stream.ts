@@ -95,7 +95,7 @@ function appendSystemReminder(history: ModelMessage[], reminder: string): ModelM
 }
 import { useSddStore } from "@/store/sdd"
 import { sddRequirementPath } from "@/lib/sdd-store"
-import { compactToolDescriptionsInPlace, applyHistoryHygiene } from "@/lib/token-savers"
+import { compactToolDescriptions, applyHistoryHygiene } from "@/lib/token-savers"
 import { recordSavings } from "@/store/token-savings"
 import { costUsd } from "@/lib/pricing"
 import { compactMessages, pruneToolOutputs, RECENT_TOOL_PROTECT_TOKENS } from "@/lib/compact"
@@ -361,7 +361,8 @@ export function makeRunStream(deps: RunStreamDeps) {
         settings,
       })
       if (retryCount === 0 && apiRetryCount === 0) resetDoomLoop(sid)
-      const tools = await buildAllTools(
+      // `let` — compactToolDescriptions swaps in a compressed COPY (M84).
+      let tools = await buildAllTools(
         cur.workspacePath,
         eff.mcpServers ?? [],
         sid,
@@ -395,9 +396,12 @@ export function makeRunStream(deps: RunStreamDeps) {
       }
       if (settings.tokenSavers?.compressToolDescriptions) {
         const countFor = initialActiveTools ? new Set(initialActiveTools) : undefined
-        const saved = compactToolDescriptionsInPlace(tools, countFor)
-        if (saved > 0 && retryCount === 0 && apiRetryCount === 0) {
-          recordSavings("toolDesc", saved)
+        // M84: compact on a copy — the shared original stays pristine, so a
+        // later run (or the setting toggled off) always sees full descriptions.
+        const compacted = compactToolDescriptions(tools, countFor)
+        tools = compacted.tools
+        if (compacted.saved > 0 && retryCount === 0 && apiRetryCount === 0) {
+          recordSavings("toolDesc", compacted.saved)
         }
       }
       // Total tool count for wire-cost estimation (tool definitions are sent

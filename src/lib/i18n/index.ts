@@ -19,6 +19,12 @@ type I18nState = {
   setLocale: (next: Locale) => Promise<void>
 }
 
+// M79: two rapid setLocale calls resolve out of order (a slow load for the
+// first request can land AFTER a fast one for the second) → the wrong locale
+// wins. Serialize by sequence: only the LATEST request applies; superseded
+// ones are discarded when they finish late.
+let localeRequestSeq = 0
+
 export const useI18nStore = create<I18nState>((set) => ({
   locale: DEFAULT_LOCALE,
   messages: BASE_MESSAGES,
@@ -26,12 +32,15 @@ export const useI18nStore = create<I18nState>((set) => ({
 
   setLocale: async (next) => {
     if (!isLocale(next)) return
+    const seq = ++localeRequestSeq
     set({ loading: true })
     try {
       const msgs = await loadLocaleMessages(next)
+      if (seq !== localeRequestSeq) return // superseded by a newer request
       set({ locale: next, messages: msgs, loading: false })
       applyHtmlLocale(next)
     } catch (e) {
+      if (seq !== localeRequestSeq) return
       console.warn(`[i18n] setLocale '${next}' başarısız:`, e)
       set({ loading: false })
     }

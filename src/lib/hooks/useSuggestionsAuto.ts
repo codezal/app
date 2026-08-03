@@ -66,7 +66,9 @@ export function useSuggestionsAuto(
   activeStreaming: boolean,
   setPanelMode: Dispatch<SetStateAction<PanelMode | null>>,
 ) {
-  const enabled = useSettingsStore((s) => s.settings.suggestionsEnabled ?? true)
+  // M80: read the setting INSIDE the effect — a stale closure captured the
+  // value at render time, so toggling the setting never took effect until the
+  // component re-rendered for an unrelated reason.
   const prevStreamingRef = useRef(activeStreaming)
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export function useSuggestionsAuto(
     prevStreamingRef.current = activeStreaming
     // Only fire on the true→false edge (a foreground run just finished).
     if (!was || activeStreaming) return
+    const enabled = useSettingsStore.getState().settings.suggestionsEnabled ?? true
     if (!enabled) return
 
     const sid = useSessionsStore.getState().activeId

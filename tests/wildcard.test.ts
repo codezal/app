@@ -40,6 +40,14 @@ describe("wildcardMatch", () => {
   it("backslash path'i forward-slash'e normalize eder", () => {
     expect(wildcardMatch("src\\lib\\foo.ts", "src/lib/*")).toBe(true)
   })
+
+  it("M76: case-insensitive eşleşme her platformda aynıdır", () => {
+    // Windows ve macOS (default APFS) dosya sistemi case-insensitive — aynı
+    // pattern her iki platformda da aynı sonucu vermeli.
+    expect(wildcardMatch("src/App.tsx", "src/app.tsx")).toBe(true)
+    expect(wildcardMatch("src/APP.TSX", "src/app.tsx")).toBe(true)
+    expect(wildcardMatch("README.md", "readme.md")).toBe(true)
+  })
 })
 
 describe("hasGlob", () => {

@@ -132,6 +132,7 @@ pub fn run() {
             fs::fs_stat_size,
             fs::fs_copy_dir,
             fs::fs_realpath,
+            fs::fs_read_link,
             fs::fs_remove_dir,
             exec::path_exists,
             db::db_execute,

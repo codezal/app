@@ -89,10 +89,10 @@ export function startInternalDrag(
     const target = dragging ? targetAt(ev.clientX, ev.clientY, data.kind) : null
     cleanup()
     if (dragging) {
+      // M72: set the flag SYNCHRONOUSLY and clear it on the NEXT pointerdown.
+      // The old setTimeout(0) could fire before the trailing click's handlers
+      // ran in some event orders, letting a drag-through click through.
       recentDrag = true
-      setTimeout(() => {
-        recentDrag = false
-      }, 0)
       if (target) target.onDrop(data.payload)
       opts.onEnd?.()
     }
@@ -107,4 +107,11 @@ export function startInternalDrag(
   window.addEventListener("pointermove", onMove)
   window.addEventListener("pointerup", onUp)
   window.addEventListener("pointercancel", onCancel)
+  window.addEventListener(
+    "pointerdown",
+    () => {
+      recentDrag = false
+    },
+    { once: true },
+  )
 }

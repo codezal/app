@@ -283,6 +283,16 @@ pub fn fs_realpath(path: String) -> Result<String, String> {
         .map_err(|e| format!("{}: {}", path, e))
 }
 
+/// Read a symlink's raw target (std::fs::read_link — NO canonicalization).
+/// Used by the clipboard layer to RE-CREATE a symlink during cut/paste (M74).
+/// Errors when the path is not a symlink or is unreadable.
+#[tauri::command]
+pub fn fs_read_link(path: String) -> Result<String, String> {
+    std::fs::read_link(&path)
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| format!("{}: {}", path, e))
+}
+
 #[tauri::command]
 pub fn fs_remove_dir(path: String) -> Result<(), String> {
     ensure_under_codezal(&path)?;

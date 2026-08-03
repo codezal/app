@@ -47,9 +47,37 @@ async function uniqueName(dir: string, name: string): Promise<string> {
   throw new Error("hedef dizinde çok fazla çakışma — yeniden adlandır")
 }
 
+// Recreate a symlink at `dst` pointing to the same target as `src`. The fs
+// plugin exposes no symlink API, so the target is read via the Rust
+// `fs_read_link` command and recreated with `ln -s` (POSIX) or `cmd mklink`
+// (Windows) (M74).
+async function copySymlink(src: string, dst: string): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core")
+  let target: string
+  try {
+    target = await invoke<string>("fs_read_link", { path: src })
+  } catch {
+    return // cannot read the link — skip like the old silent behavior
+  }
+  const q = (s: string) => "'" + s.replace(/'/g, `'\\''`) + "'"
+  try {
+    const { runShell } = await import("@/lib/exec")
+    if (isWindows()) {
+      await runShell(`cmd /C mklink ${q(dst)} ${q(target)}`)
+    } else {
+      await runShell(`ln -s ${q(target)} ${q(dst)}`)
+    }
+  } catch {
+    // Best effort — a failed link is no worse than the old silent skip.
+  }
+}
+
 async function copyRecursive(src: string, dst: string): Promise<void> {
   const st = await lstat(src)
   if (st.isSymlink) {
+    // M74: recreate the link instead of silently dropping it — cut-paste of a
+    // symlink used to lose the entry (and its target) entirely.
+    await copySymlink(src, dst)
     return
   }
   if (st.isDirectory) {

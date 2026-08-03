@@ -368,10 +368,21 @@ export async function deleteSessionRow(db: Db, id: string): Promise<void> {
   })
 }
 
-export async function deleteSessionsOlderThan(db: Db, cutoffMs: number): Promise<number> {
+export async function deleteSessionsOlderThan(
+  db: Db,
+  cutoffMs: number,
+  keepIds: string[] = [],
+): Promise<number> {
+  // M75: pinned/archived are excluded in SQL; `keepIds` additionally protects
+  // the active session (and any others the caller deems untouchable) — the
+  // active row's updated_at can be old while the session is in live use, and
+  // wiping it mid-stream corrupts the in-memory store.
+  const keep = keepIds.filter(Boolean)
+  const placeholders = keep.map(() => "?").join(",")
   const rows = await db.select<{ id: string }>(
-    `SELECT id FROM session WHERE updated_at < ? AND pinned = 0 AND archived = 0`,
-    [cutoffMs],
+    `SELECT id FROM session WHERE updated_at < ? AND pinned = 0 AND archived = 0
+     ${keep.length ? `AND id NOT IN (${placeholders})` : ""}`,
+    keep.length ? [cutoffMs, ...keep] : [cutoffMs],
   )
   if (rows.length === 0) return 0
   await db.tx(async (t) => {

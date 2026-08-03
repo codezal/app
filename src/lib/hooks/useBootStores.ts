@@ -18,7 +18,13 @@ export function useBootStores() {
         const days = useSettingsStore.getState().settings.cleanupPeriodDays
         if (days && days > 0) {
           try {
-            const n = await deleteSessionsOlderThan(db, Date.now() - days * 86_400_000)
+            // M75: never let retention delete the active session (or any other
+            // that is loaded/streaming at boot).
+            const sess = useSessionsStore.getState()
+            const keep = new Set<string>(sess.index.filter((m) => m.pinned).map((m) => m.id))
+            if (sess.activeId) keep.add(sess.activeId)
+            Object.keys(sess.streamingIds).forEach((id) => keep.add(id))
+            const n = await deleteSessionsOlderThan(db, Date.now() - days * 86_400_000, [...keep])
             if (n > 0) console.info(`[cleanup] ${n} eski session silindi (>${days} gün)`)
           } catch (e) {
             console.error("[cleanup] session retention hatası:", e)
