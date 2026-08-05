@@ -5,6 +5,7 @@
 import type { MessageImage } from "@/store/types"
 import { createId } from "@/lib/id"
 import { saveImage } from "@/lib/image-store"
+import { applyExifTransform, readExifOrientation } from "@/lib/exif-orientation"
 
 // Anthropic recommends ~1568px on the long edge; stay just under it.
 const MAX_EDGE = 1536
@@ -54,6 +55,9 @@ export async function fileToMessageImage(file: File): Promise<ImageAttachResult>
       mime,
       name: file.name || undefined,
       ...(dims ? { width: dims.width, height: dims.height } : {}),
+      // Unsupported source format that we re-encoded (BMP/TIFF/etc → PNG/JPEG):
+      // record it so the model can be told the pixels were converted (Pi-style).
+      ...(file.type && file.type !== mime ? { convertedFrom: file.type } : {}),
     },
   }
 }
@@ -72,11 +76,31 @@ function imageDimensions(dataUrl: string): Promise<{ width: number; height: numb
 type Downscaled = { dataUrl: string; width?: number; height?: number }
 
 async function downscaleToDataUrl(blob: Blob): Promise<Downscaled | null> {
-  const bitmap = await loadBitmap(blob)
-  if (!bitmap) {
+  const loaded = await loadBitmap(blob)
+  if (!loaded) {
     if (!isProviderSafe(blob.type)) return null
     const raw = await readAsDataUrl(blob)
     return raw ? { dataUrl: raw } : null
+  }
+  let bitmap = loaded.bitmap
+
+  // Pixel-correct EXIF rotation when we decoded raw pixels (Pi-style: photos
+  // from phones arrive rotated; re-encoding to PNG/JPEG drops the EXIF tag, so
+  // the transform must be baked into the pixels before storage).
+  if (loaded.raw) {
+    try {
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      const orientation = readExifOrientation(bytes)
+      if (orientation !== 1) {
+        const fixed = await applyExifTransform(bitmap, orientation)
+        if (fixed) {
+          bitmap.close?.()
+          bitmap = fixed
+        }
+      }
+    } catch {
+      // EXIF correction is best-effort — never fail the attach over it.
+    }
   }
 
   const { width, height } = bitmap
@@ -155,9 +179,22 @@ function base64Bytes(dataUrl: string): number {
   return i === -1 ? dataUrl.length : dataUrl.length - i - ";base64,".length
 }
 
-function loadBitmap(blob: Blob): Promise<ImageBitmap | null> {
+// `raw: true` means we decoded with imageOrientation:"none" — the bitmap has NOT
+// had EXIF applied by the browser, so the caller must pixel-correct it. `raw:
+// false` is the plain-call fallback where the browser already applied EXIF
+// (default "from-image") and we must NOT double-rotate.
+async function loadBitmap(blob: Blob): Promise<{ bitmap: ImageBitmap; raw: boolean } | null> {
   if (typeof createImageBitmap !== "function") return Promise.resolve(null)
-  return createImageBitmap(blob).catch(() => null)
+  try {
+    const bmp = await createImageBitmap(blob, { imageOrientation: "none" } as ImageBitmapOptions)
+    return { bitmap: bmp, raw: true }
+  } catch {
+    try {
+      return { bitmap: await createImageBitmap(blob), raw: false }
+    } catch {
+      return null
+    }
+  }
 }
 
 function readAsDataUrl(blob: Blob): Promise<string | null> {

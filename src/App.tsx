@@ -2165,7 +2165,14 @@ export default function App() {
     if (images) {
       for (const im of images) {
         const image = im.dataUrl ?? (im.ref ? await loadImageDataUrl(im.ref, im.mime) : "")
-        if (image) parts.push({ type: "image", image, mediaType: im.mime || undefined })
+        if (!image) continue
+        // Pi-style conversion hint: when the original file (e.g. BMP) was
+        // re-encoded to a provider-safe format, tell the model the pixels were
+        // converted so it does not misread colors/metadata.
+        if (im.convertedFrom) {
+          parts.push({ type: "text", text: `[Image converted from ${im.convertedFrom} to ${im.mime}.]` })
+        }
+        parts.push({ type: "image", image, mediaType: im.mime || undefined })
       }
     }
     if (pdfs) {

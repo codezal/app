@@ -7,6 +7,7 @@
 // anything it thinks is a URL and 400s with "Download multimodal file timed out".
 
 import type { ModelMessage } from "ai"
+import { applyExifTransform, readExifOrientation } from "@/lib/exif-orientation"
 
 export function parseDataUrl(dataUrl: string): { bytes: Uint8Array; mime: string } | null {
   if (!dataUrl.startsWith("data:")) return null
@@ -95,6 +96,14 @@ export interface ResizedImage {
   dataUrl: string
   /** Effective media type of the re-encoded image (PNG → JPEG when compressed). */
   mediaType: string
+  /** Original pixel dimensions (pre-resize, pre-rotation). */
+  originalWidth?: number
+  originalHeight?: number
+  /** Final pixel dimensions on the wire. */
+  width?: number
+  height?: number
+  /** True when the payload was re-encoded (vs. passed through unchanged). */
+  wasResized?: boolean
 }
 
 export interface ImageResizeEngine {
@@ -137,6 +146,12 @@ function encodeToDataUrl(
  * CSP-safe decode: never `fetch(data:…)` — Tauri CSP `connect-src` blocks `data:`,
  * which would make every resize silently fall back to the original. Same pattern
  * as `image-store.dataUrlToBytes` / attach-time `createImageBitmap(blob)`.
+ *
+ * EXIF orientation: `createImageBitmap(blob, { imageOrientation: "none" })`
+ * decodes raw pixels so we can rotate/flip them ourselves (Pi-style); some
+ * webviews reject the options object and throw, in which case we fall back to
+ * the plain call (browser applies EXIF per its default "from-image"). The
+ * `Image` fallback path already honors EXIF natively.
  */
 async function decodeImage(
   dataUrl: string,
@@ -146,7 +161,24 @@ async function decodeImage(
 
   if (typeof createImageBitmap === "function") {
     const blob = new Blob([parsed.bytes as BlobPart], { type: parsed.mime || "application/octet-stream" })
-    const bmp = await createImageBitmap(blob)
+    let bmp: ImageBitmap
+    let raw = false
+    try {
+      bmp = await createImageBitmap(blob, { imageOrientation: "none" })
+      raw = true
+    } catch {
+      bmp = await createImageBitmap(blob)
+    }
+    if (raw) {
+      const orientation = readExifOrientation(parsed.bytes)
+      if (orientation !== 1) {
+        const fixed = await applyExifTransform(bmp, orientation)
+        if (fixed) {
+          bmp.close()
+          bmp = fixed
+        }
+      }
+    }
     return { source: bmp, width: bmp.width, height: bmp.height }
   }
 
@@ -201,6 +233,26 @@ export function clearResizeCache(): void {
   resizeResultCache.clear()
 }
 
+/**
+ * Build a coordinate-mapping hint for the model when an image was resized,
+ * mirroring Pi's `formatDimensionNote`: the model sees the wire dimensions but
+ * may need to map pixel coordinates back to the original file (e.g. "click the
+ * red dot at 1200,3400" on a photo that was downscaled 2×).
+ */
+export function formatDimensionNote(result: ResizedImage): string | undefined {
+  const ow = result.originalWidth
+  const oh = result.originalHeight
+  const w = result.width
+  const h = result.height
+  if (!result.wasResized || !ow || !oh || !w || !h) return undefined
+  const scale = ow / w
+  if (scale === 1) return undefined
+  return (
+    `[Image: original ${ow}x${oh}, displayed at ${w}x${h}. ` +
+    `Multiply coordinates by ${scale.toFixed(2)} to map to original image.]`
+  )
+}
+
 /** Downscale one data-URL image to fit `maxDimension` and `maxBase64Length`. */
 export async function resizeDataUrl(
   dataUrl: string,
@@ -221,7 +273,15 @@ export async function resizeDataUrl(
     // Already within both limits — keep the original bytes untouched (no
     // re-encode quality loss) and let materializeInlineImages do the work.
     if (scale >= 1 && dataUrlBase64Length(dataUrl) <= maxB64) {
-      const passthrough = { dataUrl, mediaType: origMime }
+      const passthrough: ResizedImage = {
+        dataUrl,
+        mediaType: origMime,
+        originalWidth: width,
+        originalHeight: height,
+        width,
+        height,
+        wasResized: false,
+      }
       cacheSet(cacheKey, passthrough)
       return passthrough
     }
@@ -229,6 +289,7 @@ export async function resizeDataUrl(
     const alpha = hasAlphaMime(origMime)
     let result: ResizedImage | null = null
     if (isJpegMime(origMime)) {
+      // JPEG source: try decreasing quality at the target size, then shrink.
       for (const q of [0.85, 0.7, 0.5, 0.35]) {
         const out = encodeToDataUrl(source, w, h, "image/jpeg", false, q)
         if (dataUrlBase64Length(out) <= maxB64) {
@@ -237,15 +298,36 @@ export async function resizeDataUrl(
         }
       }
     } else {
+      // Alpha/other sources: try PNG first (preserves transparency), then the
+      // JPEG quality ladder at the same size — Pi-style, so a photo that barely
+      // misses the PNG budget doesn't get downsized before it gets compressed.
       const png = encodeToDataUrl(source, w, h, "image/png", alpha)
       if (dataUrlBase64Length(png) <= maxB64) {
         result = { dataUrl: png, mediaType: "image/png" }
+      } else {
+        for (const q of [0.85, 0.7, 0.5, 0.35]) {
+          const out = encodeToDataUrl(source, w, h, "image/jpeg", false, q)
+          if (dataUrlBase64Length(out) <= maxB64) {
+            result = { dataUrl: out, mediaType: "image/jpeg" }
+            break
+          }
+        }
       }
     }
     if (!result) result = shrinkUntilFits(source, w, h, maxB64, width, height)
 
-    cacheSet(cacheKey, result)
-    return result
+    // Width/height: shrink path reports its own wire size; the quality-ladder
+    // paths always produce `w`/`h`.
+    const final: ResizedImage = {
+      ...result,
+      originalWidth: width,
+      originalHeight: height,
+      width: result.width ?? w,
+      height: result.height ?? h,
+      wasResized: true,
+    }
+    cacheSet(cacheKey, final)
+    return final
   } finally {
     closeSource(source)
   }
@@ -265,7 +347,9 @@ function shrinkUntilFits(
     cw = Math.max(128, Math.round(cw * 0.7))
     ch = Math.max(128, Math.round(ch * 0.7))
     const out = encodeToDataUrl(source, cw, ch, "image/jpeg", false, 0.5)
-    if (dataUrlBase64Length(out) <= maxB64) return { dataUrl: out, mediaType: "image/jpeg" }
+    if (dataUrlBase64Length(out) <= maxB64) {
+      return { dataUrl: out, mediaType: "image/jpeg", width: cw, height: ch }
+    }
   }
   // Absolute last resort: fit a 256px box at q0.5. Clamp scale ≤ 1 so we never
   // upscale an already-tiny image.
@@ -275,6 +359,8 @@ function shrinkUntilFits(
   return {
     dataUrl: encodeToDataUrl(source, lw, lh, "image/jpeg", false, 0.5),
     mediaType: "image/jpeg",
+    width: lw,
+    height: lh,
   }
 }
 
@@ -306,13 +392,14 @@ function isImageFilePart(part: AnyPart): boolean {
  */
 export async function resizeInlineImages(
   msgs: ModelMessage[],
-  opts?: ResizeOptions & { engine?: ImageResizeEngine },
+  opts?: ResizeOptions & { engine?: ImageResizeEngine; dimensionNotes?: boolean },
 ): Promise<ModelMessage[]> {
   const engine = opts?.engine ?? canvasResizeEngine
   const effOpts: Required<ResizeOptions> = {
     maxDimension: opts?.maxDimension ?? RESIZE_MAX_DIMENSION,
     maxBase64Length: opts?.maxBase64Length ?? RESIZE_MAX_BASE64_LENGTH,
   }
+  const addNotes = opts?.dimensionNotes ?? false
   let changed = false
   const out = msgs.slice()
   for (let i = 0; i < msgs.length; i++) {
@@ -351,6 +438,17 @@ export async function resizeInlineImages(
           kind === "image"
             ? { ...part, image: resized.dataUrl, mediaType: resized.mediaType }
             : { ...part, data: resized.dataUrl, mediaType: resized.mediaType }
+      }
+      if (addNotes && resized.wasResized) {
+        const note = formatDimensionNote(resized)
+        if (note) {
+          // Insert the mapping hint right BEFORE the image part so the model
+          // reads it as describing the pixels that follow. Only when the
+          // payload actually shrank — passthrough images get no note.
+          content.splice(j, 0, { type: "text", text: note })
+          msgChanged = true
+          j++ // skip past the inserted note so we don't re-process it
+        }
       }
     }
     if (msgChanged) {

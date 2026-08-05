@@ -511,8 +511,10 @@ export function makeRunStream(deps: RunStreamDeps) {
       // Downscale oversized inline images (Pi-style 2000px / ~4.5 MB base64) so
       // the provider never chokes re-downloading multi-MB screenshots, then
       // materialize data: URLs → Uint8Array so openai-compatible providers
-      // (DashScope) never try to HTTP-download the image payload.
-      const resized = await resizeInlineImages(messages)
+      // (DashScope) never try to HTTP-download the image payload. dimensionNotes
+      // tells the model the original pixel size of anything that shrank, so
+      // coordinate-based follow-ups map back to the source file (Pi-style).
+      const resized = await resizeInlineImages(messages, { dimensionNotes: true })
       const wireMessages = materializeInlineImages(resized)
       // Privacy Filter — cloud provider + enabled ise giden mesajlardaki PII'yi
       let outboundMessages = wireMessages
@@ -674,7 +676,9 @@ export function makeRunStream(deps: RunStreamDeps) {
               // downscale screenshots to the Pi-style 2000px / ~4.5 MB limits.
               const withShots = [...base, ...imgs]
               const prunedShots = pruneStaleImages(withShots, { keepRecentUserTurns: 2 })
-              out.messages = materializeInlineImages(await resizeInlineImages(prunedShots.messages))
+              out.messages = materializeInlineImages(
+                await resizeInlineImages(prunedShots.messages, { dimensionNotes: true }),
+              )
             }
           }
           // Refresh the live estimate against the messages this step will send

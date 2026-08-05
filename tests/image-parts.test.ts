@@ -9,6 +9,7 @@ import {
   clearResizeCache,
   dataUrlBase64Length,
   isScreenshotUserTurn,
+  formatDimensionNote,
 } from "@/lib/image-parts"
 import type { ImageResizeEngine } from "@/lib/image-parts"
 
@@ -418,5 +419,172 @@ describe("resizeInlineImages", () => {
     const msgs: ModelMessage[] = [{ role: "user", content: [{ type: "image", image: BIG, mediaType: "image/png" }] }]
     await resizeInlineImages(msgs, { engine })
     expect(spy).toHaveBeenCalledWith(BIG, { maxDimension: 2000, maxBase64Length: 4_500_000 })
+  })
+
+  it("adds a dimension note before resized image parts when dimensionNotes=true", async () => {
+    const engine: ImageResizeEngine = {
+      async resize() {
+        return {
+          dataUrl: SHRUNK,
+          mediaType: "image/jpeg",
+          originalWidth: 4000,
+          originalHeight: 3000,
+          width: 2000,
+          height: 1500,
+          wasResized: true,
+        }
+      },
+    }
+    const msgs: ModelMessage[] = [
+      { role: "user", content: [{ type: "text", text: "resim" }, { type: "image", image: BIG, mediaType: "image/png" }] },
+    ]
+    const out = await resizeInlineImages(msgs, { engine, dimensionNotes: true })
+    const parts = out[0]!.content as Array<Record<string, unknown>>
+    // text + note + image
+    expect(parts).toHaveLength(3)
+    expect(parts[0]!.text).toBe("resim")
+    expect(String(parts[1]!.text)).toContain("[Image: original 4000x3000, displayed at 2000x1500")
+    expect(String(parts[1]!.text)).toContain("Multiply coordinates by 2.00")
+    expect(parts[2]!.type).toBe("image")
+    expect(parts[2]!.image).toBe(SHRUNK)
+  })
+
+  it("does not add dimension notes by default", async () => {
+    const engine: ImageResizeEngine = {
+      async resize() {
+        return {
+          dataUrl: SHRUNK,
+          mediaType: "image/jpeg",
+          originalWidth: 4000,
+          originalHeight: 3000,
+          width: 2000,
+          height: 1500,
+          wasResized: true,
+        }
+      },
+    }
+    const msgs: ModelMessage[] = [
+      { role: "user", content: [{ type: "text", text: "resim" }, { type: "image", image: BIG, mediaType: "image/png" }] },
+    ]
+    const out = await resizeInlineImages(msgs, { engine })
+    const parts = out[0]!.content as Array<Record<string, unknown>>
+    expect(parts).toHaveLength(2)
+    expect(parts[0]!.text).toBe("resim")
+    expect(parts[1]!.type).toBe("image")
+  })
+
+  it("does not add a note for passthrough images (wasResized=false)", async () => {
+    const engine: ImageResizeEngine = {
+      async resize(dataUrl) {
+        return { dataUrl, mediaType: "image/png", width: 100, height: 100, wasResized: false }
+      },
+    }
+    const msgs: ModelMessage[] = [{ role: "user", content: [{ type: "image", image: SMALL, mediaType: "image/png" }] }]
+    const out = await resizeInlineImages(msgs, { engine, dimensionNotes: true })
+    const parts = out[0]!.content as Array<Record<string, unknown>>
+    expect(parts).toHaveLength(1)
+    expect(parts[0]!.type).toBe("image")
+  })
+
+  it("adds notes for file parts whose mediaType is an image", async () => {
+    const engine: ImageResizeEngine = {
+      async resize() {
+        return {
+          dataUrl: SHRUNK,
+          mediaType: "image/jpeg",
+          originalWidth: 800,
+          originalHeight: 600,
+          width: 400,
+          height: 300,
+          wasResized: true,
+        }
+      },
+    }
+    const msgs: ModelMessage[] = [
+      { role: "user", content: [{ type: "file", data: BIG, mediaType: "image/png", filename: "a.png" }] },
+    ]
+    const out = await resizeInlineImages(msgs, { engine, dimensionNotes: true })
+    const parts = out[0]!.content as Array<Record<string, unknown>>
+    expect(parts).toHaveLength(2)
+    expect(String(parts[0]!.text)).toContain("Multiply coordinates by 2.00")
+    expect(parts[1]!.type).toBe("file")
+    expect(parts[1]!.data).toBe(SHRUNK)
+  })
+
+  it("idempotent with dimensionNotes — second pass over already-small images adds nothing", async () => {
+    const engine: ImageResizeEngine = {
+      async resize(dataUrl) {
+        if (dataUrl === BIG) {
+          return {
+            dataUrl: SHRUNK,
+            mediaType: "image/jpeg",
+            originalWidth: 2000,
+            originalHeight: 1000,
+            width: 1000,
+            height: 500,
+            wasResized: true,
+          }
+        }
+        return { dataUrl, mediaType: "image/jpeg", width: 1000, height: 500, wasResized: false }
+      },
+    }
+    const msgs: ModelMessage[] = [
+      { role: "user", content: [{ type: "image", image: BIG, mediaType: "image/png" }] },
+    ]
+    const first = await resizeInlineImages(msgs, { engine, dimensionNotes: true })
+    const parts1 = first[0]!.content as Array<Record<string, unknown>>
+    expect(parts1).toHaveLength(2)
+    // Second pass: the shrunk image is passthrough → no new note inserted.
+    const second = await resizeInlineImages(first, { engine, dimensionNotes: true })
+    const parts2 = second[0]!.content as Array<Record<string, unknown>>
+    expect(parts2).toHaveLength(2)
+    expect(parts2[0]!.type).toBe("text")
+    expect(parts2[1]!.type).toBe("image")
+  })
+})
+
+describe("formatDimensionNote", () => {
+  it("returns a scaled coordinate hint for resized images", () => {
+    const note = formatDimensionNote({
+      dataUrl: "data:image/jpeg;base64,x",
+      mediaType: "image/jpeg",
+      originalWidth: 4000,
+      originalHeight: 3000,
+      width: 2000,
+      height: 1500,
+      wasResized: true,
+    })
+    expect(note).toContain("[Image: original 4000x3000, displayed at 2000x1500")
+    expect(note).toContain("Multiply coordinates by 2.00")
+  })
+
+  it("returns undefined for passthrough images", () => {
+    const note = formatDimensionNote({
+      dataUrl: "data:image/png;base64,x",
+      mediaType: "image/png",
+      originalWidth: 100,
+      originalHeight: 100,
+      width: 100,
+      height: 100,
+      wasResized: false,
+    })
+    expect(note).toBeUndefined()
+  })
+
+  it("returns undefined when dimensions are missing", () => {
+    expect(formatDimensionNote({ dataUrl: "x", mediaType: "image/jpeg", wasResized: true })).toBeUndefined()
+  })
+
+  it("returns undefined when scale is 1 (no real shrink)", () => {
+    const note = formatDimensionNote({
+      dataUrl: "x",
+      mediaType: "image/jpeg",
+      originalWidth: 500,
+      originalHeight: 500,
+      width: 500,
+      height: 500,
+      wasResized: true,
+    })
+    expect(note).toBeUndefined()
   })
 })

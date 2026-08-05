@@ -24,6 +24,9 @@ export type MessageImage = {
   name?: string
   width?: number
   height?: number
+  /** Original MIME when the file was re-encoded (e.g. BMP → PNG). Lets the UI
+   *  tell the model the source was converted, mirroring Pi's conversion hints. */
+  convertedFrom?: string
 }
 
 export type MessageFile = {
