@@ -49,6 +49,7 @@ coverage/
 .codegraph/
 .codezal/
 .codex/
+.zcode/
 AGENTS.md
 CLAUDE.md
 
