@@ -2107,6 +2107,17 @@ export default function App() {
           raiseError("Code Map: önce bir workspace klasörü bağla (/workspace).")
           return
         }
+        // Race guard: share the boot-effect's in-flight set so a manual build
+        // never overlaps another manual or automatic codemap_build for the
+        // same workspace.
+        if (codeMapBuildingRef.current.has(ws)) {
+          pushMessage({
+            id: createId("message"),
+            role: "system",
+            content: "⏳ Code Map index zaten derleniyor — bitince burada duyurulacak.",
+          })
+          return
+        }
         const cur = useSettingsStore.getState().settings.tokenSavers ?? DEFAULT_TOKEN_SAVERS
         void useSettingsStore.getState().update({
           tokenSavers: { ...cur, codeMap: { ...cur.codeMap, enabled: true } },
@@ -2116,6 +2127,7 @@ export default function App() {
           role: "system",
           content: "⏳ Code Map index oluşturuluyor…",
         })
+        codeMapBuildingRef.current.add(ws)
         try {
           const stats = await invoke<{ files: number; symbols: number }>("codemap_build", {
             workspace: ws,
@@ -2127,6 +2139,8 @@ export default function App() {
           })
         } catch (e) {
           raiseError(`Code Map index başarısız: ${errorMessage(e)}`)
+        } finally {
+          codeMapBuildingRef.current.delete(ws)
         }
         return
       }

@@ -1116,7 +1116,6 @@ export function makeRunStream(deps: RunStreamDeps) {
         endedAt: Date.now(),
       })
       await useSessionsStore.getState().persistSession(sid).catch(() => {})
-      await useSessionsStore.getState().persistSession(sid).catch(() => {})
       if (streamStalled) {
         if (apiRetryCount < MAX_API_RETRIES) {
           retryDelay = stallRetryDelayMs(apiRetryCount + 1)

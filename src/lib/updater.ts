@@ -21,27 +21,41 @@ export async function checkForUpdateOnLaunch(): Promise<Update | null> {
   return checkForUpdate()
 }
 
+// Single-flight guard: concurrent callers (menu item + toast button) must not
+// start parallel downloads — a second call joins the in-flight one. Reset in
+// finally so a failed download can be retried.
+let inflightDownload: Promise<void> | null = null
+
 // sunucu Content-Length vermezse 0 olabilir (belirsiz ilerleme).
 export async function downloadAndRelaunch(
   update: Update,
   onProgress: (downloaded: number, total: number) => void,
 ): Promise<void> {
-  let downloaded = 0
-  let total = 0
-  await update.downloadAndInstall((e) => {
-    switch (e.event) {
-      case "Started":
-        total = e.data.contentLength ?? 0
-        onProgress(0, total)
-        break
-      case "Progress":
-        downloaded += e.data.chunkLength
-        onProgress(downloaded, total)
-        break
-      case "Finished":
-        onProgress(total, total)
-        break
-    }
-  })
-  await relaunch()
+  if (inflightDownload) return inflightDownload
+  const run = (async () => {
+    let downloaded = 0
+    let total = 0
+    await update.downloadAndInstall((e) => {
+      switch (e.event) {
+        case "Started":
+          total = e.data.contentLength ?? 0
+          onProgress(0, total)
+          break
+        case "Progress":
+          downloaded += e.data.chunkLength
+          onProgress(downloaded, total)
+          break
+        case "Finished":
+          onProgress(total, total)
+          break
+      }
+    })
+    await relaunch()
+  })()
+  inflightDownload = run
+  try {
+    await run
+  } finally {
+    inflightDownload = null
+  }
 }
