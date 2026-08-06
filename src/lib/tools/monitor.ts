@@ -3,12 +3,21 @@ import { invoke } from "@tauri-apps/api/core"
 import { shellInvocation, spawnProgram, stripLineEnding } from "../exec"
 import { createId } from "../id"
 
+// Nested quantifiers ((a+)+, (a*)*, (\s+){2,}…) can backtrack catastrophically
+// (ReDoS) and freeze the renderer. Detect the common shape and fall back to a
+// literal substring match. Long lines are capped too — backtracking cost grows
+// with input length even for mildly ambiguous patterns.
+const NESTED_QUANTIFIER = /\([^()]*[+*][^()]*\)[+*{]/
+const MAX_MATCH_LINE = 10000
+
 export function lineMatches(line: string, pattern: string | undefined): boolean {
   if (!pattern) return true
+  const text = line.length > MAX_MATCH_LINE ? line.slice(0, MAX_MATCH_LINE) : line
+  if (NESTED_QUANTIFIER.test(pattern)) return text.includes(pattern)
   try {
-    return new RegExp(pattern).test(line)
+    return new RegExp(pattern).test(text)
   } catch {
-    return line.includes(pattern)
+    return text.includes(pattern)
   }
 }
 

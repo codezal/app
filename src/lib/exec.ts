@@ -190,16 +190,29 @@ async function executeKillable(
       (child) => {
         if (settled) return // close/error zaten geldi
         timer = setTimeout(() => {
-          finish(() => {
-            if (onTimeout) {
+          if (onTimeout) {
+            finish(() => {
               onTimeout(cmd, child, [...out.lines])
               reject(new Error(`__detached__:${label}`))
-            } else {
-              void invoke("proc_kill_tree", { pid: child.pid }).catch(() => {})
-              void child.kill().catch(() => {})
-              reject(new Error(`Timeout (${timeoutMs}ms): ${label}`))
+            })
+            return
+          }
+          // Await the kill before rejecting (LOW exec.ts:198): fire-and-forget
+          // let a caller's retry race the still-alive process. If "close"
+          // arrives first, finish() is a no-op and the kill result is moot.
+          void (async () => {
+            try {
+              await invoke("proc_kill_tree", { pid: child.pid })
+            } catch {
+              // Intentionally ignored — child.kill() below is the fallback.
             }
-          })
+            try {
+              await child.kill()
+            } catch {
+              // Intentionally ignored.
+            }
+            finish(() => reject(new Error(`Timeout (${timeoutMs}ms): ${label}`)))
+          })()
         }, timeoutMs)
       },
       (e) => finish(() => reject(e instanceof Error ? e : new Error(String(e)))),

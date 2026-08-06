@@ -72,9 +72,7 @@ fn ensure_allowed(path: &str, roots: &[PathBuf]) -> Result<(), String> {
                 if let Ok(rel) = canon.strip_prefix(home) {
                     let first = rel.components().next();
                     if let Some(std::path::Component::Normal(seg)) = first {
-                        if seg.to_string_lossy().starts_with('.')
-                            && seg != ".codezal"
-                        {
+                        if seg.to_string_lossy().starts_with('.') && seg != ".codezal" {
                             return false;
                         }
                     }
@@ -188,6 +186,21 @@ pub fn fs_write_file_base64(
     std::fs::write(&path, bytes).map_err(|e| format!("{}: {}", path, e))
 }
 
+/// Rename/move used by the atomic-write path (temp file → target). Both ends
+/// must be write-allowed. std::fs::rename replaces an existing destination on
+/// both Unix and Windows (MoveFileEx + MOVEFILE_REPLACE_EXISTING).
+#[tauri::command]
+pub fn fs_rename(
+    from: String,
+    to: String,
+    state: tauri::State<WorkspaceRoots>,
+) -> Result<(), String> {
+    let roots = load_roots(&state)?;
+    ensure_allowed(&from, &roots)?;
+    ensure_allowed(&to, &roots)?;
+    std::fs::rename(&from, &to).map_err(|e| format!("{} -> {}: {}", from, to, e))
+}
+
 #[tauri::command]
 pub fn fs_exists(path: String, state: tauri::State<WorkspaceRoots>) -> Result<bool, String> {
     let roots = load_roots(&state)?;
@@ -263,7 +276,9 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> std::io::Result<()> {
 fn ensure_under_codezal(path: &str) -> Result<(), String> {
     let home_var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     let home = std::env::var(home_var).map_err(|_| format!("{} env yok", home_var))?;
-    let home_canon = Path::new(&home).canonicalize().unwrap_or_else(|_| PathBuf::from(&home));
+    let home_canon = Path::new(&home)
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(&home));
     let root = match Path::new(&home).join(".codezal").canonicalize() {
         Ok(r) => r,
         Err(_) => {

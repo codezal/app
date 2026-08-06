@@ -26,4 +26,20 @@ describe("lineMatches", () => {
     expect(lineMatches("elapsed_steps=42", "elapsed_steps=\\d+")).toBe(true)
     expect(lineMatches("elapsed_steps=", "elapsed_steps=\\d+")).toBe(false)
   })
+
+  it("nested-quantifier patterns fall back to literal match (ReDoS guard)", () => {
+    // (a+)+ is the classic catastrophic-backtracking shape — it must never be
+    // compiled as a regex here, only matched literally.
+    expect(lineMatches("x (a+)+ y", "(a+)+")).toBe(true)
+    expect(lineMatches("aaa", "(a+)+")).toBe(false)
+    expect(lineMatches("repeat (\\d+)* end", "(\\d+)*")).toBe(true)
+    // Safe quantifiers are unaffected.
+    expect(lineMatches("ab ab", "(ab)+")).toBe(true)
+  })
+
+  it("very long lines are capped before matching", () => {
+    const head = "a".repeat(20000)
+    expect(lineMatches(`${head}needle`, "needle")).toBe(false) // past the cap
+    expect(lineMatches(`${"a".repeat(100)}needle`, "needle")).toBe(true)
+  })
 })

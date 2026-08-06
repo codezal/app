@@ -117,18 +117,32 @@ async function isEnabled(workspace: string, def: FormatterDef): Promise<boolean>
   return ok
 }
 
-export async function runFormatters(workspace: string, rel: string): Promise<string> {
+// gateCommand: optional PreToolUse gate for the generated bash command.
+// Returns the (possibly hook-rewritten) command, or null to BLOCK/skip this
+// formatter. Without it, formatters would mutate files behind the hooks' back
+// (LOW index.ts:1434).
+export async function runFormatters(
+  workspace: string,
+  rel: string,
+  gateCommand?: (command: string) => Promise<string | null>,
+): Promise<string> {
   const defs = formattersForExt(extOf(rel))
   if (defs.length === 0) return ""
   const file = sq(rel)
   const surfaced: string[] = []
   for (const def of defs) {
     if (!(await isEnabled(workspace, def))) continue
+    let command = `${withFile(def.command, file)} 2>&1 || true`
+    if (gateCommand) {
+      const gated = await gateCommand(command)
+      if (gated === null) continue // Blocked by a PreToolUse hook / denial.
+      command = gated
+    }
     try {
       const { runBash } = await import("./shell")
       const out = await runBash(
         workspace,
-        `${withFile(def.command, file)} 2>&1 || true`,
+        command,
         // cwd: formatter commands use RELATIVE $FILE — a cached session cwd
         // deep in the tree would resolve them against the wrong directory (M9).
         { timeoutMs: 15000, cwd: workspace },

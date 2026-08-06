@@ -140,6 +140,7 @@ pub fn run() {
             fs::fs_read_file_base64,
             fs::fs_write_text_file,
             fs::fs_write_file_base64,
+            fs::fs_rename,
             fs::fs_exists,
             fs::fs_read_dir,
             fs::fs_stat_size,

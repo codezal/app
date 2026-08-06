@@ -7,7 +7,13 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   mkdir: vi.fn(),
   exists: vi.fn(),
   stat: vi.fn(),
+  rename: vi.fn(),
+  remove: vi.fn(),
   BaseDirectory: { AppData: 1 },
+}))
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
 }))
 
 import {
@@ -17,6 +23,8 @@ import {
   mkdir,
   exists,
   stat,
+  rename,
+  remove,
 } from "@tauri-apps/plugin-fs"
 import { listDir, readFile, readFileAbs, writeFile, editFile } from "@/lib/tools/fs"
 
@@ -26,6 +34,8 @@ const mockReadDir = vi.mocked(readDir)
 const mockMkdir = vi.mocked(mkdir)
 const mockExists = vi.mocked(exists)
 const mockStat = vi.mocked(stat)
+const mockRename = vi.mocked(rename)
+const mockRemove = vi.mocked(remove)
 
 const WS = "/workspace"
 
@@ -34,6 +44,8 @@ beforeEach(() => {
   mockWrite.mockResolvedValue(undefined)
   mockMkdir.mockResolvedValue(undefined)
   mockExists.mockResolvedValue(false)
+  mockRename.mockResolvedValue(undefined)
+  mockRemove.mockResolvedValue(undefined)
 })
 
 // ─── listDir ──────────────────────────────────────────────────────────────────
@@ -170,17 +182,35 @@ describe("readFile", () => {
     const r = await readFileAbs("/workspace/f.ts", undefined, undefined, 100_000)
     expect(r).toContain("End of file")
   })
+
+  it("CRLF content: no stray \\r leaks into the numbered output", async () => {
+    mockRead.mockResolvedValue("line one\r\nline two\r\n")
+    const r = await readFile(WS, "win.txt")
+    expect(r).not.toContain("\r")
+    expect(r).toContain("line one")
+    expect(r).toContain("line two")
+  })
 })
 
 // ─── writeFile ────────────────────────────────────────────────────────────────
 
 describe("writeFile", () => {
-  it("writes the content and returns a success message", async () => {
+  it("stages to a temp file then renames over the target (atomic)", async () => {
     const r = await writeFile(WS, "src/new.ts", "const x = 1")
-    expect(mockWrite).toHaveBeenCalledWith(
-      `${WS}/src/new.ts`,
-      "const x = 1",
-    )
+    expect(mockWrite).toHaveBeenCalledTimes(1)
+    const tmpPath = mockWrite.mock.calls[0]?.[0] as string
+    expect(tmpPath).toMatch(/src\/new\.ts\.tmp-/)
+    expect(mockWrite).toHaveBeenCalledWith(tmpPath, "const x = 1")
+    expect(mockRename).toHaveBeenCalledWith(tmpPath, `${WS}/src/new.ts`)
+    expect(r).toContain("src/new.ts")
+  })
+
+  it("falls back to a direct write when the rename fails", async () => {
+    mockRename.mockRejectedValue(new Error("EBUSY: target locked"))
+    const r = await writeFile(WS, "src/new.ts", "const x = 1")
+    expect(mockWrite).toHaveBeenCalledTimes(2) // temp + direct fallback
+    expect(mockWrite).toHaveBeenLastCalledWith(`${WS}/src/new.ts`, "const x = 1")
+    expect(mockRemove).toHaveBeenCalledTimes(1) // temp cleanup attempt
     expect(r).toContain("src/new.ts")
   })
 

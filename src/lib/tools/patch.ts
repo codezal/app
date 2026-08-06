@@ -281,8 +281,11 @@ export async function applyPatch(workspace: string, patch: string): Promise<Appl
       const eol = detectEol(cur)
       let content = toLf(cur)
       for (const hunk of op.hunks) {
-        content = applyHunk(content, hunk)
-        result.hunksApplied++
+        const next = applyHunk(content, hunk)
+        // No-op hunks (old === new, or empty add) return the content unchanged
+        // and must not inflate the applied count (LOW patch.ts:280).
+        if (next !== content) result.hunksApplied++
+        content = next
       }
       content = applyEol(content, eol)
       if (op.movePath) {

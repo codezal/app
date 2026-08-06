@@ -1,5 +1,13 @@
 //
-import { exists, readDir, readFile, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
+import {
+  exists,
+  readDir,
+  readFile,
+  readTextFile,
+  remove,
+  rename,
+  writeTextFile,
+} from "@tauri-apps/plugin-fs"
 import { invoke } from "@tauri-apps/api/core"
 import { normalizeNativeFsPath } from "./fs-path"
 
@@ -70,4 +78,44 @@ export async function writeTextFileSafe(abs: string, content: string): Promise<v
 // string (data: prefix'siz).
 export async function writeBinaryFileSafe(abs: string, base64: string): Promise<void> {
   await invoke("fs_write_file_base64", { path: normalizeNativeFsPath(abs), contents: base64 })
+}
+
+export async function renameSafe(absFrom: string, absTo: string): Promise<void> {
+  const from = normalizeNativeFsPath(absFrom)
+  const to = normalizeNativeFsPath(absTo)
+  try {
+    await rename(from, to)
+  } catch (e) {
+    if (!isScopeError(e)) throw e
+    await invoke("fs_rename", { from, to })
+  }
+}
+
+// Atomic write: content goes to a sibling temp file first, then a rename swaps
+// it over the target in one step (std::fs::rename replaces an existing file on
+// both macOS and Windows). A crash mid-write can therefore never leave a
+// truncated target behind. If the rename fails (e.g. the target is locked by
+// another process on Windows), fall back to a direct write so the caller is
+// never worse off than with a plain writeTextFileSafe.
+export async function writeTextFileAtomicSafe(abs: string, content: string): Promise<void> {
+  const path = normalizeNativeFsPath(abs)
+  const tmp = `${path}.tmp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  try {
+    await writeTextFileSafe(tmp, content)
+  } catch {
+    // Cannot even stage the temp file — retry as a direct write so the caller
+    // sees the real error against the target path.
+    await writeTextFileSafe(path, content)
+    return
+  }
+  try {
+    await renameSafe(tmp, path)
+  } catch {
+    try {
+      await remove(tmp)
+    } catch {
+      // Keep the staged temp file rather than losing the new content.
+    }
+    await writeTextFileSafe(path, content)
+  }
 }

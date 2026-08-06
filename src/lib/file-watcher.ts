@@ -27,15 +27,13 @@ function isGitMetaPath(path: string): boolean {
   )
 }
 
-let gitMetaTimer: ReturnType<typeof setTimeout> | undefined
-function signalGitChange(): void {
-  if (gitMetaTimer) clearTimeout(gitMetaTimer)
-  gitMetaTimer = setTimeout(() => emitGitChanged(), 150)
-}
-
 function shouldIgnore(path: string): boolean {
   const parts = path.replace(/\\/g, "/").split("/")
-  return parts.some((p) => IGNORE_DIRS.has(p))
+  // Only DIRECTORY segments: the last segment is the entry the event is about,
+  // and a FILE merely named "dist"/"build"/"target"/"out" must not be dropped
+  // (LOW file-watcher.ts:36). Events about the ignored dirs themselves (e.g.
+  // "dist created") pass through — harmless noise vs. losing real files.
+  return parts.slice(0, -1).some((p) => IGNORE_DIRS.has(p))
 }
 
 // Tauri WatchEventKind (discriminated union) → basit kind.
@@ -52,6 +50,13 @@ export async function watchWorkspace(
   workspace: string,
   cb: FileWatchCallback,
 ): Promise<UnwatchFn> {
+  // Per-watcher debounce timer: cleared when THIS watcher is torn down, so an
+  // unwatched workspace cannot fire a late emitGitChanged (LOW file-watcher.ts:30).
+  let gitMetaTimer: ReturnType<typeof setTimeout> | undefined
+  const signalGitChange = (): void => {
+    if (gitMetaTimer) clearTimeout(gitMetaTimer)
+    gitMetaTimer = setTimeout(() => emitGitChanged(), 150)
+  }
   const unwatch = await watchImmediate(
     workspace,
     (event) => {
@@ -68,7 +73,11 @@ export async function watchWorkspace(
     },
     { recursive: true },
   )
-  return unwatch
+  return () => {
+    if (gitMetaTimer) clearTimeout(gitMetaTimer)
+    gitMetaTimer = undefined
+    unwatch()
+  }
 }
 
 function parentOf(filePath: string): string {

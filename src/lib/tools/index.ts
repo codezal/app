@@ -214,9 +214,10 @@ async function appendFormatters(
   workspace: string,
   path: string,
   result: string,
+  gateCommand?: (command: string) => Promise<string | null>,
 ): Promise<string> {
   if (!autoFormatEnabled(workspace)) return result
-  const surfaced = await runFormatters(workspace, path)
+  const surfaced = await runFormatters(workspace, path, gateCommand)
   return surfaced ? `${result}\n\n${surfaced}` : result
 }
 
@@ -1447,7 +1448,18 @@ export function buildTools(
         )
         // Keep the Code Map index fresh after writes (fire-and-forget).
         invoke("codemap_reindex_file", { workspace, rel: path }).catch(() => {})
-        return appendFormatters(workspace, path, res)
+        // Formatter commands mutate files too — route them through the same
+        // PreToolUse/permission gate as the bash tool (LOW index.ts:1434).
+        return appendFormatters(workspace, path, res, async (cmd) => {
+          try {
+            const mod = (await gateFor("bash", { command: cmd })) as
+              | { command?: string }
+              | undefined
+            return typeof mod?.command === "string" ? mod.command : cmd
+          } catch {
+            return null // Hook block / plan mode / denial → skip formatting.
+          }
+        })
       },
     }),
 
@@ -1476,7 +1488,18 @@ export function buildTools(
         )
         // Keep the Code Map index fresh after edits (fire-and-forget).
         invoke("codemap_reindex_file", { workspace, rel: path }).catch(() => {})
-        return appendFormatters(workspace, path, res)
+        // Formatter commands mutate files too — route them through the same
+        // PreToolUse/permission gate as the bash tool (LOW index.ts:1434).
+        return appendFormatters(workspace, path, res, async (cmd) => {
+          try {
+            const mod = (await gateFor("bash", { command: cmd })) as
+              | { command?: string }
+              | undefined
+            return typeof mod?.command === "string" ? mod.command : cmd
+          } catch {
+            return null // Hook block / plan mode / denial → skip formatting.
+          }
+        })
       },
     }),
 

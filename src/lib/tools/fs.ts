@@ -8,7 +8,7 @@ import {
   isScopeError,
   readTextFileSafe as readTextSafe,
   readFileSafe as readBinarySafe,
-  writeTextFileSafe as writeTextSafe,
+  writeTextFileAtomicSafe as writeTextAtomicSafe,
   readDirSafe,
   existsSafe,
 } from "../fs-safe"
@@ -187,7 +187,9 @@ export async function readFileAbs(
     }
     throw e
   }
-  const allLines = content.split("\n")
+  // CRLF files: split on both line-ending styles so no stray "\r" leaks into
+  // line lengths, truncation math, or the numbered output (LOW fs.ts:190).
+  const allLines = content.split(/\r?\n/)
   const total = allLines.length
   const start = offset && offset > 0 ? offset - 1 : 0
 
@@ -252,6 +254,10 @@ export async function writeFileAbs(
   label?: string,
   onOld?: (oldContent: string) => void,
 ): Promise<string> {
+  // Atomic temp+rename write (LOW fs.ts:249): a crash mid-write can no longer
+  // leave a truncated target file behind. The `existed` probe below stays
+  // cosmetic-only (it picks the created/updated wording), so its TOCTOU window
+  // has no correctness impact.
   const existed = await existsSafe(abs)
   if (existed && onOld) {
     try {
@@ -271,7 +277,7 @@ export async function writeFileAbs(
   } catch {
     // Intentionally ignored.
   }
-  await writeTextSafe(abs, content)
+  await writeTextAtomicSafe(abs, content)
   return `File ${existed ? "updated" : "created"}: ${label ?? abs} (${content.length} char)`
 }
 
@@ -295,7 +301,7 @@ export async function editFileAbs(
   const ending: "\n" | "\r\n" = content.includes("\r\n") ? "\r\n" : "\n"
   const toEnding = (s: string) => s.replace(/\r\n/g, "\n").replace(/\n/g, ending)
   const next = replace(content, toEnding(oldString), toEnding(newString), replaceAll)
-  await writeTextSafe(abs, next)
+  await writeTextAtomicSafe(abs, next)
   return `Edited: ${label ?? abs}`
 }
 

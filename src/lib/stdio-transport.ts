@@ -100,14 +100,31 @@ export class StdioClientTransport implements Transport {
       this.onclose?.()
     })
 
+    // Spawn timeout (LOW stdio-transport.ts:68): a wedged spawn (broken binary,
+    // hung shell) must not leave the server stuck in "starting…" forever.
+    const SPAWN_TIMEOUT_MS = 30000
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`spawn timeout after ${SPAWN_TIMEOUT_MS}ms`)),
+        SPAWN_TIMEOUT_MS,
+      )
+    })
+    const spawnPromise = cmd.spawn()
     try {
-      this.child = await cmd.spawn()
+      this.child = await Promise.race([spawnPromise, timeout])
     } catch (e) {
       this.started = false
+      // If the spawn resolves AFTER the timeout fired, kill the orphan.
+      void spawnPromise
+        .then((child) => child.kill().catch(() => {}))
+        .catch(() => {})
       throw new Error(
         `MCP stdio spawn başarısız: ${errorMessage(e)}`,
         { cause: e },
       )
+    } finally {
+      clearTimeout(timer)
     }
   }
 

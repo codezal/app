@@ -423,7 +423,11 @@ function isBlockedHost(rawUrl: string): boolean {
     if (a === 192 && b === 168) return true // private
     if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
   }
-  if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true // IPv6 ULA/link-local
+  // IPv6 ULA/link-local — only for actual IPv6 literals. The old prefix check
+  // also blocked ordinary hostnames (fcbarcelona.com, fda.gov, fe80.com…).
+  if (h.includes(":")) {
+    return /^(fc|fd)/.test(h) || h.startsWith("fe80")
+  }
   return false
 }
 

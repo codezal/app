@@ -1,4 +1,5 @@
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
+import { withLock } from "../lock"
 
 export type NotebookCell = {
   cell_type: string
@@ -113,16 +114,21 @@ function newCellId(): string {
 }
 
 export async function editNotebook(abs: string, op: CellEditOp): Promise<string> {
-  const raw = await readTextFile(abs)
-  let nb: Notebook
-  try {
-    nb = JSON.parse(raw) as Notebook
-  } catch (e) {
-    return `Invalid .ipynb (JSON parse error): ${e instanceof Error ? e.message : String(e)}`
-  }
-  const next = applyCellEdit(nb, op, newCellId)
-  await writeTextFile(abs, JSON.stringify(next, null, 1) + "\n")
-  const verb =
-    op.editMode === "insert" ? "inserted" : op.editMode === "delete" ? "deleted" : "updated"
-  return `Notebook cell ${verb}: ${abs} (${next.cells.length} cells)`
+  // Serialize read-modify-write per file: two concurrent edits (parallel tool
+  // calls, multi-session) would otherwise lose one of the updates (LOW
+  // notebook.ts:115).
+  return withLock(`notebook:${abs}`, async () => {
+    const raw = await readTextFile(abs)
+    let nb: Notebook
+    try {
+      nb = JSON.parse(raw) as Notebook
+    } catch (e) {
+      return `Invalid .ipynb (JSON parse error): ${e instanceof Error ? e.message : String(e)}`
+    }
+    const next = applyCellEdit(nb, op, newCellId)
+    await writeTextFile(abs, JSON.stringify(next, null, 1) + "\n")
+    const verb =
+      op.editMode === "insert" ? "inserted" : op.editMode === "delete" ? "deleted" : "updated"
+    return `Notebook cell ${verb}: ${abs} (${next.cells.length} cells)`
+  })
 }

@@ -124,6 +124,23 @@ describe("applyPatch — Update File", () => {
     expect(written).not.toContain("old line")
   })
 
+  it("no-op hunks (old === new) are not counted as applied", async () => {
+    mockRead.mockResolvedValue("line1\nsame\nline3\n")
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/foo.ts",
+      "@@",
+      "-same",
+      "+same",
+      "@@",
+      "-line1",
+      "+line1-changed",
+      "*** End Patch",
+    ].join("\n")
+    const r = await applyPatch(WS, patch)
+    expect(r.hunksApplied).toBe(1) // only the second hunk changes content
+  })
+
   it("matches a CRLF file with LF hunks and preserves CRLF on write", async () => {
     mockRead.mockResolvedValue("line1\r\nold line\r\nline3\r\n")
     const patch = [
