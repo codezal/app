@@ -11,6 +11,9 @@ import {
   _registerPluginHook,
   _unregisterPluginHooks,
   _clearPluginHooks,
+  hookTrustKey,
+  isPluginHookTrusted,
+  setPluginHookTrusted,
 } from "@/lib/hooks"
 import type { HookConfig } from "@/store/types"
 
@@ -306,5 +309,68 @@ describe("plugin hooks", () => {
     _registerPluginHook(hook({ id: "h2", pluginId: "p" }))
     _clearPluginHooks()
     expect(listPluginHooks()).toEqual([])
+  })
+})
+
+// ─── Plugin hook trust — command fingerprint (LOW hooks.ts:29) ───────────────
+
+describe("plugin hook trust (command fingerprint)", () => {
+  // The module-level trusted set persists across tests — every test cleans up.
+  it("hookTrustKey: stable for same id+command, differs per command", () => {
+    expect(hookTrustKey("p:h", "echo ok")).toBe(hookTrustKey("p:h", "echo ok"))
+    expect(hookTrustKey("p:h", "echo ok")).not.toBe(hookTrustKey("p:h", "echo evil"))
+    // Key always contains the id::fingerprint separator — legacy id-only
+    // entries can never collide with the new format.
+    expect(hookTrustKey("p:h", "echo ok")).toMatch(/^p:h::[0-9a-z]+$/)
+  })
+
+  it("trust is granted per (id, command): a changed command is untrusted", () => {
+    setPluginHookTrusted("p:h", "echo v1", true)
+    expect(isPluginHookTrusted("p:h", "echo v1")).toBe(true)
+    // Same id, updated command → old grant must NOT carry over (fail closed).
+    expect(isPluginHookTrusted("p:h", "echo v2")).toBe(false)
+    setPluginHookTrusted("p:h", "echo v1", false)
+    expect(isPluginHookTrusted("p:h", "echo v1")).toBe(false)
+  })
+
+  it("runHooks: untrusted plugin hook is skipped, runs once trusted, and is skipped again after its command changes", async () => {
+    mockExec("", 0)
+    _registerPluginHook(hook({ id: "ph", pluginId: "tp", command: "echo v1" }))
+    // Callers (tools/index.ts gate/postHook) merge the plugin registry into
+    // the configured hooks list before calling runHooks.
+    const hooksList = () => listPluginHooks()
+
+    // Untrusted → skipped.
+    let r = await runHooks({
+      hooks: hooksList(),
+      event: "PreToolUse",
+      payload: { tool: "bash", input: {} },
+      workspace: "/ws",
+    })
+    expect(r.ranCount).toBe(0)
+
+    // Trust (id, command) → runs.
+    setPluginHookTrusted("tp:ph", "echo v1", true)
+    r = await runHooks({
+      hooks: hooksList(),
+      event: "PreToolUse",
+      payload: { tool: "bash", input: {} },
+      workspace: "/ws",
+    })
+    expect(r.ranCount).toBe(1)
+
+    // Plugin update changes the command → previous grant no longer matches.
+    _registerPluginHook(hook({ id: "ph", pluginId: "tp", command: "echo v2" }))
+    r = await runHooks({
+      hooks: hooksList(),
+      event: "PreToolUse",
+      payload: { tool: "bash", input: {} },
+      workspace: "/ws",
+    })
+    expect(r.ranCount).toBe(0)
+
+    setPluginHookTrusted("tp:ph", "echo v2", false)
+    setPluginHookTrusted("tp:ph", "echo v1", false)
+    _clearPluginHooks()
   })
 })

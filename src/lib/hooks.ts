@@ -26,13 +26,29 @@ function loadTrusted(): Set<string> {
 const trustedPluginHooks = loadTrusted()
 const warnedUntrusted = new Set<string>()
 
-export function isPluginHookTrusted(id: string): boolean {
-  return trustedPluginHooks.has(id)
+// djb2 — not cryptographic, just a compact stable fingerprint of the command.
+function djb2(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
+  return h.toString(36)
 }
 
-export function setPluginHookTrusted(id: string, trusted: boolean): void {
-  if (trusted) trustedPluginHooks.add(id)
-  else trustedPluginHooks.delete(id)
+// Trust is keyed by id + command fingerprint (LOW hooks.ts:29): when a plugin
+// update changes the hook's command, the old grant no longer matches and the
+// user must review the new command again. Legacy id-only entries never match
+// the new key format, so they fail closed too.
+export function hookTrustKey(id: string, command: string): string {
+  return `${id}::${djb2(command)}`
+}
+
+export function isPluginHookTrusted(id: string, command: string): boolean {
+  return trustedPluginHooks.has(hookTrustKey(id, command))
+}
+
+export function setPluginHookTrusted(id: string, command: string, trusted: boolean): void {
+  const key = hookTrustKey(id, command)
+  if (trusted) trustedPluginHooks.add(key)
+  else trustedPluginHooks.delete(key)
   warnedUntrusted.delete(id)
   try {
     if (typeof localStorage !== "undefined") {
@@ -137,8 +153,11 @@ export async function runHooks(args: {
   let modifiedInput: unknown
   let autoApprove = false
   let payload = args.payload
+  // Hooks actually executed — untrusted plugin hooks are skipped, so this can
+  // be lower than list.length (and callers rely on it as "ran N hooks").
+  let ranCount = 0
   for (const h of list) {
-    if (h.pluginId && !trustedPluginHooks.has(h.id)) {
+    if (h.pluginId && !isPluginHookTrusted(h.id, h.command)) {
       if (!warnedUntrusted.has(h.id)) {
         warnedUntrusted.add(h.id)
         console.warn(
@@ -147,6 +166,7 @@ export async function runHooks(args: {
       }
       continue
     }
+    ranCount++
     const r = await execHook(h, payload, args.workspace)
     if (args.event === "PreToolUse") {
       const decision = parseDecision(r.stdout)
@@ -162,7 +182,7 @@ export async function runHooks(args: {
           decision?.reason ??
           (r.stderr.trim() || `Hook '${h.id}' exit ${r.code}`)
         console.warn(`[hook] BLOCK ${h.event} matcher=${h.matcher ?? "*"} reason=${reason}`)
-        return { ranCount: list.indexOf(h) + 1, blocked: true, blockReason: reason }
+        return { ranCount, blocked: true, blockReason: reason }
       }
       if (decision?.input !== undefined) {
         modifiedInput = decision.input
@@ -173,7 +193,7 @@ export async function runHooks(args: {
       const decision = parseDecision(r.stdout)
       if (decision?.decision === "deny") {
         const reason = decision.reason ?? (r.stderr.trim() || `Hook '${h.id}' reddetti`)
-        return { ranCount: list.indexOf(h) + 1, blocked: true, blockReason: reason }
+        return { ranCount, blocked: true, blockReason: reason }
       }
       if (decision?.decision === "allow") autoApprove = true
     } else if (args.event === "UserPromptSubmit" && r.code === 0 && r.stdout.trim()) {
@@ -184,7 +204,7 @@ export async function runHooks(args: {
     }
   }
   return {
-    ranCount: list.length,
+    ranCount,
     blocked: false,
     extraContext: extraContext || undefined,
     modifiedInput,

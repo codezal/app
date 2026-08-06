@@ -154,7 +154,7 @@ function PluginHooksTrust() {
       <p className="mb-2.5 text-base leading-relaxed text-codezal-mute">{t("settings.drawer.pluginHooksHint")}</p>
       <div className="space-y-2.5">
         {pluginHooks.map((h) => {
-          const trusted = isPluginHookTrusted(h.id)
+          const trusted = isPluginHookTrusted(h.id, h.command)
           return (
             <div key={h.id} className="rounded-lg border border-codezal bg-codezal-panel-2 p-3">
               <div className="flex items-center gap-1.5">
@@ -172,7 +172,7 @@ function PluginHooksTrust() {
                     type="checkbox"
                     checked={trusted}
                     onChange={(e) => {
-                      setPluginHookTrusted(h.id, e.target.checked)
+                      setPluginHookTrusted(h.id, h.command, e.target.checked)
                       force((n) => n + 1)
                     }}
                   />
