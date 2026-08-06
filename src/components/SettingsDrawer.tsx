@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import {
   ArrowLeft,
   BarChart3,
+  Bot,
   Brain,
   Cog,
   Coins,
@@ -38,6 +39,7 @@ import { SkillsTab } from "./settings/SkillsTab"
 import { ModelsPage } from "./settings/ModelsPage"
 import { PrivacyTab } from "./settings/PrivacyTab"
 import { HistoryTab } from "./settings/HistoryTab"
+import { OrchestrationTab } from "./settings/OrchestrationTab"
 
 type Props = {
   onClose: () => void
@@ -60,6 +62,7 @@ type Tab =
   | "web"
   | "gecmis"
   | "tokens"
+  | "orkestrasyon"
   | "skills"
   | "eklentiler"
   | "hakkinda"
@@ -94,6 +97,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
     { id: "hafiza", label: t("settings.memory.title"), icon: Brain, section: 1 },
     { id: "gecmis", label: historyLabel, icon: Search, section: 1 },
     { id: "tokens", label: tokensLabel, icon: Coins, section: 1 },
+    { id: "orkestrasyon", label: t("settings.cliAgents.supervisorTitle"), icon: Bot, section: 1 },
     { id: "mcp", label: t("settings.tabs.mcp"), icon: Plug, section: 2 },
     { id: "hooks", label: t("settings.tabs.hooks"), icon: Webhook, section: 2 },
     { id: "web", label: t("settings.web.title"), icon: Globe, section: 2 },
@@ -200,6 +204,7 @@ export function SettingsPage({ onClose, reserveTrafficLights, initialTab }: Prop
               {tab === "hooks" && <HooksTab />}
               {tab === "web" && <WebSearchTab />}
               {tab === "tokens" && <TokenSavingTab />}
+              {tab === "orkestrasyon" && <OrchestrationTab />}
               {tab === "skills" && <SkillsTab />}
               {tab === "eklentiler" && <PluginsTab />}
               {tab === "hakkinda" && <AboutTab />}

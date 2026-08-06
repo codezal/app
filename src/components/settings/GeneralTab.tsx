@@ -8,7 +8,6 @@ import { Select } from "@/components/Select"
 import { LOCALES, type Locale } from "@/lib/i18n"
 import { useT } from "@/lib/i18n/useT"
 import { Section, Row, Toggle, NumberField } from "./primitives"
-import { AgentOrchestrationSection } from "./AgentOrchestrationSection"
 import { revealItemInDir } from "@tauri-apps/plugin-opener"
 import { confirm } from "@tauri-apps/plugin-dialog"
 import { toast } from "@/store/toast"
@@ -352,7 +351,6 @@ export function GeneralTab() {
         </Row>
         <ErrorLogRow />
       </Section>
-      <AgentOrchestrationSection />
     </div>
   )
 }
